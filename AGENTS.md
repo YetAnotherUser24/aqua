@@ -92,13 +92,17 @@ For detailed mathematical derivations and C++ code examples, consult [`docs/HOW_
 
 ### Firmware (PlatformIO)
 ```bash
-# Real hardware build
-pio run -d nodo-aerador -e esp32-s3-aerador
-pio run -d nodo-bomba -e esp32-bomba
+# Real hardware builds
+pio run -d nodo-aerador -e esp32-s3
+pio run -d nodo-bomba -e esp32dev
+pio run -d nodo-mezclador -e esp32-s3
+pio run -d nodo-sensor-od -e lora32
 
-# Virtual hardware build (software simulation)
-pio run -d nodo-aerador -e esp32-s3-aerador-virtual
-pio run -d nodo-bomba -e esp32-bomba-virtual
+# Virtual hardware builds (software simulation)
+pio run -d nodo-aerador -e esp32-s3-virtual
+pio run -d nodo-bomba -e esp32dev-virtual
+pio run -d nodo-mezclador -e esp32-s3-virtual
+pio run -d nodo-sensor-od -e virtual-s3
 ```
 
 ### Gateway & Backend Tests
@@ -113,3 +117,4 @@ cd /root/aqua/aqua-station/firmware/virtual_node
 python3 check_closed_loop.py
 python3 check_setpoints.py
 ```
+

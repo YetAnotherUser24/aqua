@@ -21,3 +21,4 @@ When designing, refactoring, or testing controllers in the AquaControl workspace
 4. **MQTT Command Contracts:**
    - Keep command field keys consistent across `recipes.py`, `PhaseForm.tsx`, and `cloud_worker.cpp`.
    - Send both `target_do` and `setpoint_mg_l` when configuring DO setpoints to maintain compatibility between firmware and web UI inspector.
+

@@ -85,25 +85,42 @@ Si está colaborando en este proyecto como ingeniero o agente de IA, consulte:
 
 ---
 
-## 5. Compilación y Ejecución Rápida
+## 5. Lanzador Unificado y Comandos Rápidos
 
-### Firmware (PlatformIO)
+El proyecto incluye la herramienta CLI unificada [`aqua.py`](aqua.py) en la raíz del repositorio:
+
+```bash
+# Estado general del banco y mapeo de entornos
+./aqua.py status
+
+# Ejecutar el stack de desarrollo local completo (Broker, BD, Gateway, Virtual Nodes y Web UI)
+./aqua.py dev
+
+# Lanzar el puente de nodos virtuales (simula los 4 ESP32 contra un broker MQTT)
+./aqua.py virtual --hz 5
+
+# Ejecutar las suites de pruebas (390 pruebas de gateway y validaciones en bucle cerrado)
+./aqua.py test
+./aqua.py test --gateway
+
+# Compilación de firmware vía PlatformIO (para hardware real o virtual)
+./aqua.py build aerador --virtual
+./aqua.py build bomba
+./aqua.py build all --virtual
+```
+
+### Compilación Manual con PlatformIO
 ```bash
 # Compilación para hardware físico
-pio run -d nodo-aerador -e esp32-s3-aerador
-pio run -d nodo-bomba -e esp32-bomba
+pio run -d nodo-aerador -e esp32-s3
+pio run -d nodo-bomba -e esp32dev
+pio run -d nodo-mezclador -e esp32-s3
+pio run -d nodo-sensor-od -e lora32
 
 # Compilación para entorno virtual
-pio run -d nodo-aerador -e esp32-s3-aerador-virtual
-pio run -d nodo-bomba -e esp32-bomba-virtual
+pio run -d nodo-aerador -e esp32-s3-virtual
+pio run -d nodo-bomba -e esp32dev-virtual
+pio run -d nodo-mezclador -e esp32-s3-virtual
+pio run -d nodo-sensor-od -e virtual-s3
 ```
 
-### Gateway y Pruebas Unitarias
-```bash
-cd aqua-station/gateway
-pytest
-
-# Validación del lazo cerrado virtual
-cd ../firmware/virtual_node
-python3 check_closed_loop.py
-```

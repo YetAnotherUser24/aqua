@@ -114,7 +114,7 @@ roles:
     # a running mixer showed ~56 s of downtime per minute. 5 Hz is the fidelity target for
     # the node that samples at it -- the aerator, which batches twenty-five readings into an
     # envelope -- not for a motor controller reporting one state per 3 s.
-    expected_rate_hz: {experiment: 0.2, idle: 0.05}
+    expected_rate_hz: {experiment: 0.3333, idle: 0.05}
     fields:
       - {name: drv_rpm,          type: float, unit: "rpm",   precision: 1, legacy_source: actual_rpm}
       - {name: drv_rpm_target,   type: float, unit: "rpm",   precision: 1, legacy_source: target_rpm}

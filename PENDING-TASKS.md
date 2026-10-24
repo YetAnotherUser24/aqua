@@ -56,9 +56,11 @@ for §A; the rest against the real gateway on `:8000`.
 
 ### Verified green (final)
 
-- gateway suite **335 passed** (was 324; +11 across three new files)
+- gateway suite **390 passed** (100% green across all 25 test suites)
 - firmware conformance **129 checks, 0 failures**
 - web `tsc --noEmit` clean, `next build` clean
+- monorepo consolidated and pushed to `https://github.com/YetAnotherUser24/aqua`
+- all pre-existing node refactors and firmware fixes folded and committed cleanly
 
 ### Gaps recorded, not closed (§G2)
 

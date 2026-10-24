@@ -89,3 +89,4 @@ Integrar el protocolo de ensayo en `aqua-station/gateway/aqua_gateway/orchestrat
    - Tiempo de subida ($t_r$).
    - Error en régimen permanente ($e_{ss} \le \pm 0.1\text{ mg/L}$).
    - Esfuerzo de control y suavidad en corriente $I_q$ y RPM.
+

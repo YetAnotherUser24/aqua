@@ -288,13 +288,14 @@ async def test_native_export_keeps_every_row_at_native_rate(tmp_path: Path) -> N
     root = tmp_path / "telemetry"
     registry = _Registry()
     day = "2026-10-10"
+    t0_ms = int(datetime(2026, 10, 10, 12, 0, tzinfo=UTC).timestamp() * 1000)
 
     # od_sensor at 1 Hz: 5 rows.
     sensor_fields = {f.name: "0" for f in registry.roles["od_sensor"].fields}
     sensor_rows = []
     for i in range(5):
         row = dict(sensor_fields)
-        row["t_dev_ms"] = str(1_792_000_000_000 + i * 1000)
+        row["t_dev_ms"] = str(t0_ms + i * 1000)
         row["od_do_mg_l"] = f"{5.0 + i * 0.1:.2f}"
         sensor_rows.append(row)
 
@@ -303,7 +304,7 @@ async def test_native_export_keeps_every_row_at_native_rate(tmp_path: Path) -> N
     aero_rows = []
     for i in range(25):
         row = dict(aero_fields)
-        row["t_dev_ms"] = str(1_792_000_000_000 + i * 200)
+        row["t_dev_ms"] = str(t0_ms + i * 200)
         row["drv_rpm"] = str(200 + i)
         aero_rows.append(row)
 
@@ -400,8 +401,9 @@ async def test_native_export_reports_missing_roles(tmp_path: Path) -> None:
     root = tmp_path / "telemetry"
     registry = _Registry()
     day = "2026-10-10"
+    t0_ms = int(datetime(2026, 10, 10, 12, 0, tzinfo=UTC).timestamp() * 1000)
     fields = {f.name: "0" for f in registry.roles["od_sensor"].fields}
-    rows = [{**fields, "t_dev_ms": "1792000000000", "od_do_mg_l": "6.0"}]
+    rows = [{**fields, "t_dev_ms": str(t0_ms), "od_do_mg_l": "6.0"}]
     _write_archive(root, "od_sensor", day, rows)
 
     report = await build_flat_export(
