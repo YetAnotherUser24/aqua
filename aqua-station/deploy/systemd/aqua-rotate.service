@@ -1,0 +1,57 @@
+# =============================================================================
+# aqua-rotate.service
+# =============================================================================
+# Install to: /etc/systemd/system/aqua-rotate.service
+# Timer:      aqua-rotate.timer   (runs at 00:05 and 00:35 local)
+#
+# =============================================================================
+# WHY THIS EXISTS
+# =============================================================================
+# At midnight America/Lima the open CSV for each role is closed, checksummed and
+# gzipped, so the day becomes flushable. Retention then runs against the manifest.
+#
+# Two passes, deliberately:
+#   00:05  close + compress yesterday's file, record it in the manifest
+#   00:35  apply retention now that the new file is recorded
+#
+# Splitting them means retention can never race the rotation that would have made a
+# file eligible. Retaining on the calendar alone — without the manifest agreeing —
+# is the mistake this ordering exists to prevent.
+#
+# This MUST use the project timezone, not the host's. The board shipped on
+# Europe/London while the system is defined in America/Lima; a mismatch would split
+# days at the wrong point and corrupt every per-day aggregate. retention also
+# computes its own dates in America/Lima, so it does not depend on the host being
+# right either.
+# =============================================================================
+
+[Unit]
+Description=AquaControl archive rotation, compression and retention
+Documentation=file:///opt/aqua-station/docs/DATA-FORMAT.md
+After=aqua-gateway.service
+PartOf=aqua-gateway.service
+
+[Service]
+Type=oneshot
+User=aqua
+Group=aqua
+EnvironmentFile=/etc/aqua/gateway.env
+WorkingDirectory=/opt/aqua-station/gateway
+
+ExecStart=/opt/aqua-station/gateway/.venv/bin/python -m aqua_gateway.archive.rotate
+
+# Rotation coordinates with the running gateway through the manifest rather than
+# moving files underneath the writer.
+TimeoutStartSec=20min
+# Never kill mid-gzip: a half-written .gz is worse than no .gz, because it looks
+# like a valid archive file and would be flushed and then verified as corrupt.
+KillMode=process
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aqua-rotate
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/data/telemetry /var/lib/aqua-gateway

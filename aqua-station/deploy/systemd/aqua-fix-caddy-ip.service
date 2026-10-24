@@ -1,0 +1,26 @@
+[Unit]
+# Re-materialise Caddy's LAN bind whenever the address changes.
+#
+# The failure this prevents: `bind` is a literal address written once at install
+# time, so after the first DHCP lease change Caddy cannot bind and stops, while
+# every other unit stays healthy — the dashboard is down and nothing looks
+# broken. `deploy/check.sh --fix-ip` repairs it by hand; this does it on a timer.
+#
+# Ordered after the network so an address exists, and after caddy so the initial
+# start has already happened before any rewrite.
+Description=Re-materialise Caddy's LAN bind for the station's current address
+Documentation=file:/opt/aqua-station/deploy/check.sh
+After=network-online.target caddy.service
+Wants=network-online.target
+ConditionPathExists=/etc/caddy/Caddyfile
+
+[Service]
+Type=oneshot
+ExecStart=/opt/aqua-station/deploy/systemd/aqua-fix-caddy-ip.sh
+# It must not be killed mid-rewrite: a half-written Caddyfile is a dashboard
+# outage. The script validates before installing, so the window is tiny, but it
+# is still a window.
+TimeoutStartSec=30
+# Deliberately root: it rewrites /etc/caddy/Caddyfile and drives systemctl. The
+# script itself is tiny and auditable.
+User=root

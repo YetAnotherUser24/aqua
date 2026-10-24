@@ -1,0 +1,75 @@
+[project]
+name = "aqua-gateway"
+version = "0.1.0"
+description = "MQTT ingest, archive, rollups, events and API for the AquaControl RPi station"
+requires-python = ">=3.11"
+license = { text = "Proprietary" }
+
+dependencies = [
+    # MQTT. `aiomqtt` wraps paho-mqtt with an asyncio-friendly context manager,
+    # which fits the single-event-loop design and keeps reconnect logic simple.
+    "aiomqtt>=2.3,<3",
+    # HTTP API + SSE. FastAPI over Starlette for the schema-driven request models;
+    # uvicorn as the ASGI server.
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.32",
+    # Schema registry is declarative YAML — data, not code.
+    "PyYAML>=6.0",
+    # Postgres driver. asyncpg is markedly lighter and faster than psycopg2 for
+    # this workload; the pool is small and long-lived.
+    "asyncpg>=0.30",
+    # Supabase Storage is S3-compatible; boto3 is the least surprising client and
+    # handles multipart uploads for larger experiment bundles.
+    "boto3>=1.35",
+    # Settings from environment with validation, so a typo fails at boot rather
+    # than at 03:00 when the flush runs.
+    "pydantic-settings>=2.6",
+    # Timezone handling. The Pi was previously on Europe/London while the project
+    # is America/Lima; retention and rotation must not depend on host timezone.
+    "tzdata>=2024.2",
+    # I2C bus driver for HAT sensors (INA226 voltage/current monitors and DS3231 RTC).
+    "smbus2>=0.4",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3",
+    "pytest-asyncio>=0.24",
+    "ruff>=0.7",
+    "mypy>=1.13",
+    "types-PyYAML",
+]
+
+[project.scripts]
+aqua-gateway = "aqua_gateway.main:cli"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["aqua_gateway"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC", "S", "RET", "ARG", "PTH", "RUF"]
+ignore = [
+    "S101",  # assert is fine in tests
+    "RUF001", # en-dash / degree signs appear in unit strings legitimately
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+# Test modules import `conftest` helpers by name, so the tests directory must be
+# importable; "." also puts the `aqua_gateway` package on the path without requiring
+# an install.
+pythonpath = [".", "tests"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = true
+warn_unreachable = true

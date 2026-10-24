@@ -1,0 +1,162 @@
+# =============================================================================
+# Caddy — the single LAN-facing entry point
+# =============================================================================
+# Install to: /etc/caddy/Caddyfile
+#
+# Caddy does five jobs in one static Go binary, which is why it was chosen over
+# nginx for a 905 MB box:
+#
+#   1. TLS, using its own internal CA for LAN hostnames (no external cert needed)
+#   2. Serve the dashboard's static export - the browser does all rendering, so no
+#      Node process is required on the Pi at all
+#   3. Reverse-proxy /api/* to the gateway
+#   4. Stream /events (SSE) without buffering
+#   5. Serve experiment bundles, with byte-range support for large downloads
+#
+# The dashboard is served on the SAME ORIGIN as the API. That is deliberate: every
+# fetch in the existing UI uses a relative /api/... path, so static export costs
+# zero UI code changes. CORS is therefore never exercised in production.
+# =============================================================================
+
+{
+	# The LAN hostname. Caddy issues a certificate from its internal CA and offers
+	# to install the root into the local trust store on first run.
+	#
+	#   aqua-station.local      - mDNS name, works from most OSes
+	#   aqua-station            - if you add it to your DNS or /etc/hosts
+	#
+	# If you would rather not trust a local CA, replace with "http://aqua-station"
+	# and accept plaintext on the LAN. The LAN carries no credentials beyond the
+	# dashboard itself, so this is a reasonable trade for a bench deployment.
+	email admin@aqua-station.local
+
+	# Keep the Pi from being overwhelmed by a misbehaving client.
+	servers {
+		protocols h1 h2
+	}
+
+	log {
+		# Logs go to journald, which deploy/journald/ pins to RAM.
+		output stderr
+		format json
+		level WARN
+	}
+}
+
+# -----------------------------------------------------------------------------
+# The dashboard and its API, served as one origin.
+#
+#   * the browser does all rendering, so no Node process runs on the Pi
+#   * `/api/*` is reverse-proxied to the gateway on loopback
+#   * `/api/stream` disables Caddy's buffering, without which SSE stalls
+#   * relative `/api/...` URLs keep working, which is why the static export cost
+#     zero UI code changes and CORS is never exercised in production
+#
+# Both listeners below serve exactly this, so the two entry points cannot drift.
+# -----------------------------------------------------------------------------
+(aqua-dashboard) {
+	# -- dashboard: static export -------------------------------------------
+	root * /srv/aqua-web
+	encode zstd gzip
+	file_server
+
+	# -- API -----------------------------------------------------------------
+	# Everything under /api goes to the gateway on loopback.
+	handle /api/* {
+		reverse_proxy 127.0.0.1:8000 {
+			header_up X-Real-IP {remote_host}
+		}
+	}
+
+	# -- SSE: live stream ----------------------------------------------------
+	# This route must come BEFORE the generic /api handler so it matches first.
+	#
+	# flush_interval -1 disables Caddy's response buffering. Without it, Caddy
+	# accumulates the stream and the dashboard appears frozen - the exact failure
+	# that makes people give up and go back to polling.
+	handle /api/stream* {
+		reverse_proxy 127.0.0.1:8000 {
+			flush_interval -1
+			# SSE connections are long-lived by design; do not impose a short
+			# transport timeout on them.
+			transport http {
+				read_timeout 0
+				write_timeout 0
+			}
+			header_up Connection {>Connection}
+		}
+	}
+
+	# -- experiment bundles --------------------------------------------------
+	# Byte-range serving matters here: a multi-hundred-MB bundle resumed after a
+	# dropped WiFi connection should not restart from zero.
+	handle /downloads/* {
+		root * /srv/aqua-downloads
+		file_server {
+			precompressed gzip
+		}
+	}
+
+	# -- health ---------------------------------------------------------------
+	handle /healthz {
+		reverse_proxy 127.0.0.1:8000
+	}
+
+	# SPA fallback: the dashboard is a single client-rendered route, so any
+	# unmatched path returns the shell rather than a 404.
+	handle {
+		try_files {path} /index.html
+		file_server
+	}
+}
+
+# -----------------------------------------------------------------------------
+# LAN: Caddy's own internal CA.
+#
+# Browsers must trust that CA to use this name, since no public CA issues for
+# `.local`. docs/DEPLOYMENT.md carries the one-time per-device install. The
+# Tailscale name below needs none of that, and is the better default.
+# -----------------------------------------------------------------------------
+aqua-station.local {
+	# `bind` is load-bearing here, not tidiness. Without it Caddy listens on 0.0.0.0:443,
+	# which includes the tailnet address — and `tailscale serve` then cannot take :443 on
+	# that interface. The failure is a bind error that stops Caddy entirely, taking the
+	# dashboard down, so the two listeners are kept on separate addresses deliberately.
+	#
+	# The address is filled at install time from this host's own LAN interface (see
+	# `configure_caddy` in deploy/install.sh). It used to be a literal, which meant the
+	# installed config carried whatever IP the machine that *authored* it happened to have:
+	# Caddy then refused to start with `bind: cannot assign requested address` on a host
+	# with a different address, and the dashboard was down with no aqua service at fault.
+	# DHCP makes that a matter of time on any network, so it cannot be a literal.
+	bind @LAN_IP@
+	import aqua-dashboard
+}
+
+# -----------------------------------------------------------------------------
+# Loopback only: the upstream `tailscale serve` proxies to.
+#
+# Plaintext because it never leaves the machine, and bound to 127.0.0.1 so it is
+# not reachable from the LAN -- it adds no plaintext path an operator could be
+# lured onto. Tailscale terminates TLS in front of it with a publicly-trusted
+# certificate for the tailnet name, which every device already trusts:
+#
+#     sudo tailscale serve --bg 8080
+#     -> https://aqua-station.tail5179c9.ts.net/
+#
+# Tailscale renews that certificate itself, so there is nothing to install and
+# nothing to expire on the Pi.
+# -----------------------------------------------------------------------------
+:8080 {
+	# Deliberately a bare `:8080`, with no hostname. A site address is a *host matcher*,
+	# not just a port: `http://127.0.0.1:8080` answers only requests whose Host header is
+	# literally `127.0.0.1`. `tailscale serve` forwards the original Host
+	# (`aqua-station.tail5179c9.ts.net`), which would match no site at all — and Caddy
+	# then replies with an empty 200, so the dashboard renders blank with no error
+	# anywhere. Matching any host and pinning the *listener* to loopback with `bind`
+	# gives both: the Tailscale proxy works, and nothing lands on the LAN. The `bind` is
+	# load-bearing — without it this listener would be on every interface in plaintext,
+	# Command Console included.
+	bind 127.0.0.1
+	import aqua-dashboard
+}

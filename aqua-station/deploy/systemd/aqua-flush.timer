@@ -1,0 +1,31 @@
+# =============================================================================
+# aqua-flush.timer
+# =============================================================================
+# Install to: /etc/systemd/system/aqua-flush.timer
+# Partner:    aqua-flush.service
+#
+# Runs at 03:00 LOCAL time. deploy/install.sh sets the host timezone to
+# America/Lima and this unit depends on that: leaving the host on Europe/London
+# would fire the flush at 22:00 Lima, mid-experiment-day, and would misfile every
+# archive file by five hours.
+#
+# Persistent=true matters here. If the Pi was off at 03:00, the flush runs on the
+# next boot instead of being skipped. A skipped flush delays retention
+# eligibility — it never causes data loss, because retention is flush-aware — but
+# it does grow the local backlog, and a growing backlog is the signal worth
+# keeping short.
+# =============================================================================
+
+[Unit]
+Description=Daily AquaControl archive flush (03:00 America/Lima)
+Documentation=file:///opt/aqua-station/docs/RUNBOOK.md
+
+[Timer]
+OnCalendar=*-*-* 03:00:00
+# Spread the load off the exact minute; the Pi is also doing the rotation pass.
+RandomizedDelaySec=10min
+Persistent=true
+Unit=aqua-flush.service
+
+[Install]
+WantedBy=timers.target

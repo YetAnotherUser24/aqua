@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / web build
+node_modules/
+web/.next/
+web/out/
+web/next-env.d.ts
+
+# Secrets — never commit
+.env
+.env.local
+.env.*.local
+/etc/aqua/
+*.pem
+*.key
+
+# Runtime state
+*.db
+*.db-wal
+*.db-shm
+/data/
+manifest.db*
+
+# Logs
+*.log
+logs/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/*
+!.vscode/settings.json.example
+.idea/
+*.swp
+firmware/virtual_node/virtual_node

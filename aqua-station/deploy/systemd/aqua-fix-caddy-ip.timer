@@ -1,0 +1,16 @@
+[Unit]
+Description=Periodically re-materialise Caddy's LAN bind if the address changed
+
+[Timer]
+# One minute after boot, then every 5 minutes. The script exits immediately when
+# the address is unchanged, so a frequent tick costs nothing and catches a lease
+# change within minutes instead of at the next reboot.
+OnBootSec=1min
+OnUnitActiveSec=5min
+# The address is a property of the network, not of uptime, so a missed run while
+# the board was off must fire when it comes back.
+Persistent=true
+Unit=aqua-fix-caddy-ip.service
+
+[Install]
+WantedBy=timers.target

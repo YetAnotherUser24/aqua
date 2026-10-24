@@ -1,0 +1,2671 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>AquaSCADA Lab — Consola de Investigación & Control de Oxigenación IoT</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- KaTeX for crisp mathematical formulas -->
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.js"></script>
+  <!-- Google Fonts: Inter & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <!-- Lucide Icons CDN -->
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            scada: {
+              // Estilo Grafana Pro / Linear Dark / ISA-101
+              canvas: '#080a0f',      // Fondo neutro obsidiana de laboratorio
+              surface: '#0f131c',     // Tarjetas estructurales
+              elevated: '#171d2b',    // Elementos interactivos elevados
+              well: '#0a0d14',        // Fondo de visualizadores de gráficas y pantallas
+              border: '#1c2436',      // Micro-bordes sutiles
+              borderHover: '#2a3752',
+              borderFocus: '#38bdf8',
+            },
+            telemetry: {
+              do: '#38bdf8',          // Cerulean Blue (Oxígeno Disuelto mg/L)
+              motor: '#f59e0b',       // Amber Industrial (ODrive S1 Aerador RPM)
+              mixer: '#14b8a6',       // Teal de precisión (T-200 Lazo Cerrado PI)
+              pump: '#a855f7',        // Violeta Químico (Bomba Sulfito Na2SO3)
+              temp: '#60a5fa',        // Sky Blue (Temperatura °C)
+              success: '#10b981',     // Emerald Muted (Enlace Nominal)
+              warning: '#f59e0b',     // Amber
+              danger: '#ef4444'       // Crimson (E-Stop)
+            }
+          },
+          fontFamily: {
+            sans: ['Inter', 'ui-sans-serif', 'system-ui', '-apple-system', 'BlinkMacSystemFont', 'Segoe UI', 'Roboto', 'sans-serif'],
+            mono: ['JetBrains Mono', 'ui-monospace', 'SFMono-Regular', 'Menlo', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: #080a0f; }
+    ::-webkit-scrollbar-thumb { background: #1c2436; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #38bdf8; }
+    .tab-btn.active {
+      background-color: #171d2b;
+      border-color: #38bdf8;
+      color: #f8fafc;
+      font-weight: 600;
+    }
+  </style>
+</head>
+<body class="bg-scada-canvas text-slate-100 min-h-screen flex flex-col font-sans selection:bg-sky-500/30 selection:text-sky-200">
+
+  <!-- ========================================================================= -->
+  <!-- 1. UNIVERSAL BENCH HUD & SAFETY HEADER                                    -->
+  <!-- ========================================================================= -->
+  <header class="sticky top-0 z-50 bg-scada-surface/95 backdrop-blur border-b border-scada-border px-4 lg:px-6 py-2">
+    <div class="max-w-[1720px] mx-auto flex flex-wrap items-center justify-between gap-3">
+      
+      <!-- Brand & Bench Identity -->
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-scada-elevated border border-scada-border flex items-center justify-center text-sky-400">
+          <i data-lucide="gauge" class="w-4 h-4"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="font-extrabold tracking-tight text-white text-sm">AquaSCADA<span class="text-sky-400">Lab</span></span>
+            <span class="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-scada-elevated border border-scada-border text-slate-300 font-semibold">Tesis 87.5 L</span>
+            <span id="orchestratorBadge" class="text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800 flex items-center gap-1.5 font-mono">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              <span id="orchestratorText">EXP ACTIVO</span>
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-400">Lazo Cerrado de Aireación & Ensayos de Transferencia kLa • Acuicultura</p>
+        </div>
+      </div>
+
+      <!-- 4-Node Health Matrix (Direct Hardware Connectivity) -->
+      <div class="hidden xl:flex items-center gap-2 bg-scada-well px-3 py-1.5 rounded-xl border border-scada-border text-xs">
+        <!-- Node 1: Sensor OD -->
+        <div class="flex items-center gap-2 pr-3 border-r border-scada-border" title="Aqualabo OPTOD Modbus RS485 • ESP32">
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <div>
+            <div class="font-semibold text-slate-200 text-[11px]">Sensor OD</div>
+            <div class="text-[9px] text-slate-400 font-mono">1.0s • 4.12V</div>
+          </div>
+        </div>
+
+        <!-- Node 2: ODrive S1 Aerador -->
+        <div class="flex items-center gap-2 pr-3 border-r border-scada-border" title="Motor M8325s + ODrive S1 UART • ESP32">
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <div>
+            <div class="font-semibold text-slate-200 text-[11px]">Aireador ODrive</div>
+            <div class="text-[9px] text-slate-400 font-mono">24.2V • 34°C</div>
+          </div>
+        </div>
+
+        <!-- Node 3: Mezclador ESC T200 (PI Controller) -->
+        <div class="flex items-center gap-2 pr-3 border-r border-scada-border" title="ESC T-200 Lazo Cerrado PI (100 Hz Tacómetro) • ESP32-S3">
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <div>
+            <div class="font-semibold text-slate-200 text-[11px]">Mezclador T200 (PI)</div>
+            <div class="text-[9px] text-teal-400 font-mono">PI ACTIVO • 1200 RPM</div>
+          </div>
+        </div>
+
+        <!-- Node 4: Bomba Dosificadora -->
+        <div class="flex items-center gap-2" title="Bomba Peristáltica 12V Na2SO3 + AS5600 12-bit • ESP32">
+          <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+          <div>
+            <div class="font-semibold text-purple-300 text-[11px]">Bomba Sulfito</div>
+            <div class="text-[9px] text-slate-400 font-mono">Listo • Planta 1</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Controls: Master Clock, State, Ensayo, SD & E-STOP -->
+      <div class="flex items-center gap-2.5 flex-wrap">
+        <!-- Master Clock -->
+        <div class="hidden sm:flex flex-col text-right pr-2">
+          <div class="flex items-center justify-end gap-1.5 text-xs text-slate-300 font-mono font-medium">
+            <i data-lucide="clock" class="w-3.5 h-3.5 text-sky-400"></i>
+            <span id="rtcClock">18:25:10.120</span>
+          </div>
+          <span class="text-[9px] text-slate-500 font-mono">LIMA GMT-5 • RTC SYNC</span>
+        </div>
+
+        <!-- BOTÓN MAESTRO: INICIAR / PAUSAR ENSAYO -->
+        <button id="btnHeaderExpMaster" onclick="toggleExperimentMaster()" class="flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3 py-1.5 rounded-xl border border-emerald-500 transition-all active:scale-95 shadow-sm" title="Iniciar o pausar el ensayo experimental">
+          <i data-lucide="play" id="headerExpMasterIcon" class="w-3.5 h-3.5 fill-white"></i>
+          <span id="headerExpMasterText">Iniciar Ensayo</span>
+        </button>
+
+        <!-- BOTÓN MAESTRO: DETENER / FIN DE ENSAYO -->
+        <button id="btnHeaderExpStop" onclick="stopExperiment()" class="flex items-center gap-1.5 bg-rose-950/80 hover:bg-rose-900/80 text-rose-300 font-bold text-xs px-3 py-1.5 rounded-xl border border-rose-800 transition-all active:scale-95 shadow-sm" title="Detener y finalizar el ensayo actual (apaga actuadores con seguridad a 0 RPM)">
+          <i data-lucide="square" id="headerExpStopIcon" class="w-3.5 h-3.5 fill-rose-300"></i>
+          <span id="headerExpStopText">Detener Ensayo</span>
+        </button>
+
+        <!-- BOTÓN MAESTRO: LOGGEO MANUAL EN SD (ODRIVE 5Hz / SENSOR 1Hz) -->
+        <button id="btnHeaderSdMaster" onclick="toggleSdLogging()" class="flex items-center gap-1.5 bg-purple-950/80 hover:bg-purple-900/80 text-purple-300 font-mono text-xs px-2.5 py-1.5 rounded-xl border border-purple-700 transition-all active:scale-95 shadow-sm" title="Activar/Desactivar manualmente la grabación en MicroSD (5.0 Hz ODrive / 1.0 Hz Sensor)">
+          <i data-lucide="hard-drive" id="headerSdIcon" class="w-3.5 h-3.5 text-purple-400"></i>
+          <span id="headerSdText">SD: GRABANDO</span>
+        </button>
+
+        <!-- State Selector Dropdown -->
+        <div class="relative">
+          <select id="stateSelect" class="bg-scada-well text-slate-200 text-xs border border-scada-border rounded-lg px-2.5 py-1.5 font-medium focus:outline-none focus:border-sky-500 cursor-pointer">
+            <option value="ACTIVE_EXPERIMENT" selected>Modo: Experimento Activo (1s / 0.2s)</option>
+            <option value="IDLE">Modo: Reposo (IDLE 20s)</option>
+            <option value="MANUAL_OVERRIDE">Modo: Anulación Manual (Override)</option>
+          </select>
+        </div>
+
+        <!-- MASTER EMERGENCY STOP BUTTON (E-STOP) -->
+        <button id="btnEStop" onclick="toggleEStop()" class="flex items-center gap-2 bg-rose-600 hover:bg-rose-500 text-white font-extrabold text-xs px-3.5 py-2 rounded-xl border border-rose-500 transition-all active:scale-95 tracking-wide shadow-sm" title="Desarma inmediatamente todos los motores y la bomba peristáltica">
+          <i data-lucide="octagon-alert" class="w-4 h-4 fill-white"></i>
+          <span>PARADA DE EMERGENCIA</span>
+        </button>
+      </div>
+
+    </div>
+  </header>
+
+  <!-- LATCHED E-STOP ALERT BANNER (HIDDEN BY DEFAULT) -->
+  <div id="estopBanner" class="hidden bg-rose-950/90 border-b border-rose-500 px-4 py-2.5 flex items-center justify-between text-xs text-rose-200">
+    <div class="flex items-center gap-2 font-bold max-w-[1720px] mx-auto w-full justify-between">
+      <div class="flex items-center gap-2">
+        <i data-lucide="alert-triangle" class="w-5 h-5 text-rose-400"></i>
+        <span>¡ENCLAVAMIENTO DE SEGURIDAD ACTIVADO! Todos los actuadores desarmados a 0 RPM / 0 Duty. Bus desacoplado.</span>
+      </div>
+      <button onclick="resetEStop()" class="bg-rose-800 hover:bg-rose-700 text-white px-3 py-1 rounded font-mono uppercase text-[11px] border border-rose-400">
+        Reanudar Sistema (Clear Latch)
+      </button>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- 2. HIGH-DENSITY KPI & SCIENTIFIC INSTRUMENT RIBBON                         -->
+  <!-- ========================================================================= -->
+  <section class="border-b border-scada-border bg-scada-surface/40 px-4 lg:px-6 py-2.5">
+    <div class="max-w-[1720px] mx-auto grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+      
+      <!-- KPI 1: DISSOLVED OXYGEN (PRIMARY HERO) -->
+      <div class="bg-scada-well p-3 rounded-xl border border-sky-500/30 flex flex-col justify-between">
+        <div class="flex items-center justify-between text-slate-400 text-xs">
+          <span class="font-bold uppercase tracking-wider text-sky-400 flex items-center gap-1">
+            <i data-lucide="droplets" class="w-3.5 h-3.5"></i> Oxígeno (DO)
+          </span>
+          <span class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800">ÓPTIMO</span>
+        </div>
+        <div class="my-1.5 flex items-baseline justify-between">
+          <div>
+            <span id="kpiDoValue" class="text-3xl lg:text-4xl font-extrabold font-mono text-white tracking-tight">6.84</span>
+            <span class="text-xs font-semibold text-sky-400 ml-0.5">mg/L</span>
+          </div>
+          <!-- Instant Derivative d[DO]/dt -->
+          <div class="text-right">
+            <span class="text-[10px] font-mono text-emerald-400 block font-semibold">+0.18/min</span>
+            <span class="text-[9px] text-slate-500 font-mono">d[DO]/dt</span>
+          </div>
+        </div>
+        <div class="w-full bg-scada-elevated h-1.5 rounded-full overflow-hidden flex">
+          <div class="bg-rose-500 h-full" style="width: 35%" title="Crítico < 3.5 mg/L"></div>
+          <div class="bg-amber-500 h-full" style="width: 20%" title="Alerta < 5.5 mg/L"></div>
+          <div class="bg-emerald-500 h-full" style="width: 45%" title="Óptimo > 5.5 mg/L"></div>
+        </div>
+      </div>
+
+      <!-- KPI 2: SATURATION % -->
+      <div class="bg-scada-well p-3 rounded-xl border border-scada-border flex flex-col justify-between">
+        <div class="flex items-center justify-between text-slate-400 text-xs">
+          <span class="font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-1">
+            <i data-lucide="percent" class="w-3.5 h-3.5 text-teal-400"></i> Saturación
+          </span>
+          <span class="text-[9px] text-slate-500 font-mono">APHA Eq.</span>
+        </div>
+        <div class="my-1.5">
+          <span id="kpiSatValue" class="text-2xl lg:text-3xl font-extrabold font-mono text-white">95.7</span>
+          <span class="text-xs text-slate-400 ml-0.5">% Sat</span>
+        </div>
+        <div class="text-[10px] text-slate-400 font-mono flex justify-between">
+          <span>Solubilidad C*: 7.15 mg/L</span>
+        </div>
+      </div>
+
+      <!-- KPI 3: WATER TEMPERATURE -->
+      <div class="bg-scada-well p-3 rounded-xl border border-scada-border flex flex-col justify-between">
+        <div class="flex items-center justify-between text-slate-400 text-xs">
+          <span class="font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-1">
+            <i data-lucide="thermometer" class="w-3.5 h-3.5 text-sky-400"></i> Temp. Agua
+          </span>
+          <span class="text-[9px] text-slate-500 font-mono">OPTOD</span>
+        </div>
+        <div class="my-1.5">
+          <span id="kpiTempValue" class="text-2xl lg:text-3xl font-extrabold font-mono text-white">24.08</span>
+          <span class="text-xs text-slate-400 ml-0.5">°C</span>
+        </div>
+        <div class="text-[10px] text-slate-400 font-mono flex justify-between">
+          <span>RTC Temp: 24.8°C</span>
+        </div>
+      </div>
+
+      <!-- KPI 4: ODRIVE AERATOR SPEED & RPM -->
+      <div class="bg-scada-well p-3 rounded-xl border border-scada-border flex flex-col justify-between">
+        <div class="flex items-center justify-between text-slate-400 text-xs">
+          <span class="font-semibold uppercase tracking-wider text-amber-400 flex items-center gap-1">
+            <i data-lucide="fan" class="w-3.5 h-3.5"></i> Aireador ODrive
+          </span>
+          <span id="kpiMotorStatus" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-400 border border-amber-800">EN MARCHA</span>
+        </div>
+        <div class="my-1.5 flex items-baseline justify-between">
+          <div>
+            <span id="kpiMotorRpm" class="text-2xl lg:text-3xl font-extrabold font-mono text-white">210</span>
+            <span class="text-xs text-amber-400 ml-0.5">RPM</span>
+          </div>
+          <span id="kpiMotorSpeedPct" class="text-xs font-mono text-slate-400">35.0%</span>
+        </div>
+        <div class="text-[10px] text-slate-400 font-mono flex justify-between">
+          <span>Potencia: <strong id="kpiMotorPower" class="text-slate-200 font-mono">38.4 W</strong></span>
+          <span>Torque: 0.18 N·m</span>
+        </div>
+      </div>
+
+      <!-- KPI 5: ESTIMACIÓN EN VIVO DE KLa (TRANSFERENCIA O2) -->
+      <div class="bg-scada-well p-3 rounded-xl border border-emerald-500/30 flex flex-col justify-between cursor-pointer hover:border-emerald-500/60 transition" onclick="openKlaExplanationModal()" title="Haz clic para ver la fórmula y el ajuste de mínimos cuadrados">
+        <div class="flex items-center justify-between text-slate-400 text-xs">
+          <span class="font-semibold uppercase tracking-wider text-emerald-400 flex items-center gap-1">
+            <i data-lucide="activity" class="w-3.5 h-3.5"></i> Estimación kLa
+          </span>
+          <span class="text-[9px] font-mono text-emerald-400 px-1 py-0.2 rounded bg-emerald-950/80 border border-emerald-800">R² = 0.988</span>
+        </div>
+        <div class="my-1.5 flex items-baseline justify-between">
+          <div>
+            <span id="kpiKlaValue" class="text-2xl lg:text-3xl font-extrabold font-mono text-emerald-300">4.82</span>
+            <span class="text-xs font-semibold text-emerald-400 ml-0.5">h⁻¹</span>
+          </div>
+          <span class="text-[10px] font-mono text-slate-400">0.00134 s⁻¹</span>
+        </div>
+        <div class="text-[10px] text-slate-400 font-mono flex justify-between">
+          <span>kLa₂₀ (a 20°C): <strong class="text-slate-200">4.38 h⁻¹</strong></span>
+          <span class="text-sky-400 text-[9px] hover:underline">Ver Modelo ➔</span>
+        </div>
+      </div>
+
+      <!-- KPI 6: EXPERIMENT TIMER -->
+      <div class="bg-scada-well p-3 rounded-xl border border-scada-border flex flex-col justify-between">
+        <div class="flex items-center justify-between text-slate-400 text-xs">
+          <span class="font-semibold uppercase tracking-wider text-slate-300 flex items-center gap-1">
+            <i data-lucide="timer" class="w-3.5 h-3.5 text-sky-400"></i> Tiempo Relativo (t-t₀)
+          </span>
+          <span class="text-[9px] font-mono text-emerald-400" id="kpiExpStatusBadge">● EXP ACTIVO</span>
+        </div>
+        <div class="my-1.5 flex items-baseline justify-between">
+          <span id="experimentTimer" class="text-2xl lg:text-3xl font-extrabold font-mono text-sky-300">00:04:18</span>
+          <div class="flex items-center gap-1">
+            <button onclick="toggleExperimentMaster()" id="kpiQuickExpBtn" class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800 hover:bg-emerald-900 transition" title="Pausar o iniciar ensayo">PAUSAR</button>
+            <button onclick="stopExperiment()" id="kpiQuickStopBtn" class="text-[10px] font-mono px-2 py-0.5 rounded bg-rose-950/80 text-rose-400 border border-rose-800 hover:bg-rose-900 transition" title="Detener y finalizar ensayo">PARAR</button>
+          </div>
+        </div>
+        <div class="text-[10px] text-slate-400 font-mono flex justify-between items-center">
+          <span id="experimentFilename" class="text-slate-300">EXP_02_STEP.CSV</span>
+          <span id="kpiSdLoggingBadge" class="text-purple-400 cursor-pointer hover:underline text-[9px]" onclick="toggleSdLogging()" title="Click para alternar loggeo SD">● 5Hz/1Hz SD REC</span>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- ========================================================================= -->
+  <!-- 3. MAIN WORKBENCH: DUAL PANE (OBSERVATORY + ACTUATOR/RECIPE DECK)         -->
+  <!-- ========================================================================= -->
+  <main class="flex-1 p-4 lg:p-6 max-w-[1720px] w-full mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6">
+    
+    <!-- ======================================================================= -->
+    <!-- LEFT PANE (8 COLS / ~65%): THE REAL-TIME SCIENTIFIC OBSERVATORY         -->
+    <!-- ======================================================================= -->
+    <div class="lg:col-span-8 flex flex-col gap-4">
+      
+      <!-- Telemetry Chart Card -->
+      <div class="bg-scada-surface rounded-2xl border border-scada-border p-4 shadow-sm flex flex-col gap-3">
+        
+        <!-- Chart Header & Mode Controls -->
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-scada-border pb-3">
+          <div class="flex items-center gap-2">
+            <div class="p-2 rounded-lg bg-scada-elevated border border-scada-border text-sky-400">
+              <i data-lucide="line-chart" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                Dinámica de Oxigenación & Ajuste de Transferencia kLa
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-scada-well text-slate-300 border border-scada-border">1.0 Hz Sensor</span>
+              </h2>
+              <p class="text-[11px] text-slate-400">Azul: Concentración DO (mg/L) • Ámbar: Velocidad ODrive (RPM) • Verde punteado: Curva teórica ajustada kLa</p>
+            </div>
+          </div>
+
+          <!-- Actions: Eje de tiempo & Botón de Hitos -->
+          <div class="flex items-center gap-2">
+            <!-- Selector de Ventana Temporal (Horizontes Amplios & Personalizado) -->
+            <div class="flex items-center bg-scada-well rounded-lg p-0.5 border border-scada-border text-xs font-mono">
+              <span class="text-[10px] text-slate-500 px-1.5 uppercase font-semibold">Ventana:</span>
+              <button onclick="setTimeWindow(600)" id="btnWin_600" class="px-2 py-0.5 rounded text-slate-400 hover:text-white transition" title="Ver últimos 10 minutos">10m</button>
+              <button onclick="setTimeWindow(3600)" id="btnWin_3600" class="px-2 py-0.5 rounded bg-scada-elevated text-sky-400 font-bold border border-scada-border transition" title="Ver última 1 hora">1h</button>
+              <button onclick="setTimeWindow(86400)" id="btnWin_86400" class="px-2 py-0.5 rounded text-slate-400 hover:text-white transition" title="Ver últimas 24 horas">24h</button>
+              <button onclick="setTimeWindow(604800)" id="btnWin_604800" class="px-2 py-0.5 rounded text-slate-400 hover:text-white transition" title="Ver última semana (7 días)">7d</button>
+              <button onclick="setTimeWindow(9999999)" id="btnWin_all" class="px-2 py-0.5 rounded text-slate-400 hover:text-white transition" title="Ver todo el ensayo">Todo</button>
+              <button onclick="openCustomWindowModal()" id="btnWin_custom" class="px-1.5 py-0.5 rounded text-slate-400 hover:text-sky-300 transition" title="Configurar tiempo personalizado">⚙️ Personalizado</button>
+            </div>
+
+            <!-- Selector de Formato de Eje Temporal -->
+            <div class="flex items-center bg-scada-well rounded-lg p-0.5 border border-scada-border text-xs font-mono">
+              <button id="btnTimeRelative" onclick="setTimeAxisMode('relative')" class="px-2.5 py-1 rounded bg-scada-elevated text-sky-400 font-bold border border-scada-border transition" title="Tiempo transcurrido (+MM:SS)">t - t₀ (Relativo)</button>
+              <button id="btnTimeClock" onclick="setTimeAxisMode('clock')" class="px-2.5 py-1 rounded text-slate-400 hover:text-white transition" title="Hora real RTC (HH:MM:SS)">Hora Reloj (GMT-5)</button>
+            </div>
+
+            <!-- BOTÓN CLARO: AÑADIR HITO EN LA GRÁFICA -->
+            <button onclick="openMilestoneModal()" class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold bg-scada-elevated hover:bg-slate-700 text-sky-300 border border-sky-500/40 transition shadow-sm active:scale-95" title="Inserta una marca temporal y evento documentado en la curva">
+              <i data-lucide="bookmark-plus" class="w-3.5 h-3.5 text-sky-400"></i>
+              <span>Añadir Hito en Gráfica</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- The Canvas Chart Element (Ampliado sin franja inferior para máxima visibilidad) -->
+        <div class="relative w-full h-[470px] bg-scada-well rounded-xl p-2.5 border border-scada-border shadow-inner">
+          <canvas id="scadaLiveChart"></canvas>
+        </div>
+
+      </div>
+
+      <!-- =================================================================== -->
+      <!-- GRÁFICA SECUNDARIA: INSPECTOR MULTIVARIABLE LIBRE                   -->
+      <!-- =================================================================== -->
+      <div class="bg-scada-surface rounded-2xl border border-scada-border p-4 shadow-sm flex flex-col gap-3">
+        <!-- Encabezado de la Gráfica Secundaria con Configuración de Ejes y Presets -->
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-scada-border pb-3">
+          <div class="flex items-center gap-2">
+            <div class="p-2 rounded-lg bg-scada-elevated border border-scada-border text-emerald-400">
+              <i data-lucide="layers" class="w-4 h-4"></i>
+            </div>
+            <div>
+              <h2 class="text-sm font-bold text-white flex items-center gap-2">
+                Inspector Multivariable Libre (Gráfica Secundaria)
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-300 border border-emerald-800">Sincronizado</span>
+              </h2>
+              <p class="text-[11px] text-slate-400">Tensión y Corriente en ejes opuestos • DO medido en mg/L • Ejes dinámicos sin etiquetas fantasma</p>
+            </div>
+          </div>
+
+          <!-- Acciones: Botón de Configurar Ejes y Presets -->
+          <div class="flex items-center gap-2 flex-wrap font-mono text-[10px]">
+            <button onclick="toggleAxisConfigModal()" class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-scada-elevated hover:bg-slate-700 text-sky-300 border border-sky-500/40 transition" title="Ajustar límites de escala y asignación de ejes izquierdo/derecho">
+              <i data-lucide="sliders" class="w-3.5 h-3.5 text-sky-400"></i>
+              <span>Configurar Ejes</span>
+            </button>
+
+            <span class="text-slate-500">Presets:</span>
+            <button onclick="setSecondaryPreset('power_current')" class="px-2 py-1 rounded bg-scada-elevated hover:bg-slate-700 text-amber-300 border border-amber-500/30 transition">⚡ Potencia & Corriente</button>
+            <button onclick="setSecondaryPreset('voltage_current')" class="px-2 py-1 rounded bg-scada-elevated hover:bg-slate-700 text-emerald-300 border border-emerald-500/30 transition">🔋 Tensión (Izq) vs Corriente (Der)</button>
+            <button onclick="setSecondaryPreset('motors')" class="px-2 py-1 rounded bg-scada-elevated hover:bg-slate-700 text-teal-300 border border-teal-500/30 transition">🔄 Motores (ODrive + Mezclador)</button>
+            <button onclick="setSecondaryPreset('water_quality')" class="px-2 py-1 rounded bg-scada-elevated hover:bg-slate-700 text-sky-300 border border-sky-500/30 transition">💧 DO (mg/L) & Temp (°C)</button>
+            <button onclick="setSecondaryPreset('error_control')" class="px-2 py-1 rounded bg-scada-elevated hover:bg-slate-700 text-rose-300 border border-rose-500/30 transition">🎯 Error Control e(t)</button>
+          </div>
+        </div>
+
+        <!-- Panel Desplegable de Configuración de Ejes (Sliders / Límites Min-Max) -->
+        <div id="axisConfigPanel" class="hidden p-3 bg-scada-well rounded-xl border border-sky-500/40 text-xs font-mono space-y-3">
+          <div class="flex items-center justify-between border-b border-scada-border pb-1.5">
+            <span class="font-bold text-white flex items-center gap-1.5 text-xs">
+              <i data-lucide="sliders" class="w-3.5 h-3.5 text-sky-400"></i> Calibración & Escalas de Ejes Y (Izquierdo / Derecho)
+            </span>
+            <button onclick="toggleAxisConfigModal()" class="text-slate-400 hover:text-white text-xs px-1.5 py-0.5 rounded bg-scada-elevated border border-scada-border">✕ Cerrar</button>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 text-[11px]">
+            <!-- Eje Izquierdo -->
+            <div class="p-2.5 rounded bg-scada-surface border border-scada-border space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-sky-300">Eje Y Izquierdo (Left Axis)</span>
+                <label class="flex items-center gap-1 text-[10px] text-slate-400 cursor-pointer">
+                  <input type="checkbox" id="axisLeftAuto" checked onchange="toggleAxisAutoScale('left', this.checked)">
+                  <span>Auto-Escala</span>
+                </label>
+              </div>
+              <div id="axisLeftManualBox" class="flex gap-2 hidden">
+                <div>
+                  <span class="text-[9px] text-slate-500 block">Mín:</span>
+                  <input type="number" id="axisLeftMin" value="0" class="w-16 bg-scada-well text-slate-100 text-[10px] border border-scada-border rounded px-1.5 py-0.5 font-mono">
+                </div>
+                <div>
+                  <span class="text-[9px] text-slate-500 block">Máx:</span>
+                  <input type="number" id="axisLeftMax" value="600" class="w-16 bg-scada-well text-slate-100 text-[10px] border border-scada-border rounded px-1.5 py-0.5 font-mono">
+                </div>
+              </div>
+              <div class="text-[9px] text-slate-500 font-mono">Variables por defecto: Potencia (W), Tensión Bus (V), Velocidad ODrive (RPM), Oxígeno Disuelto DO (mg/L).</div>
+            </div>
+
+            <!-- Eje Derecho -->
+            <div class="p-2.5 rounded bg-scada-surface border border-scada-border space-y-2">
+              <div class="flex items-center justify-between">
+                <span class="font-bold text-amber-300">Eje Y Derecho (Right Axis)</span>
+                <label class="flex items-center gap-1 text-[10px] text-slate-400 cursor-pointer">
+                  <input type="checkbox" id="axisRightAuto" checked onchange="toggleAxisAutoScale('right', this.checked)">
+                  <span>Auto-Escala</span>
+                </label>
+              </div>
+              <div id="axisRightManualBox" class="flex gap-2 hidden">
+                <div>
+                  <span class="text-[9px] text-slate-500 block">Mín:</span>
+                  <input type="number" id="axisRightMin" value="0" class="w-16 bg-scada-well text-slate-100 text-[10px] border border-scada-border rounded px-1.5 py-0.5 font-mono">
+                </div>
+                <div>
+                  <span class="text-[9px] text-slate-500 block">Máx:</span>
+                  <input type="number" id="axisRightMax" value="15" class="w-16 bg-scada-well text-slate-100 text-[10px] border border-scada-border rounded px-1.5 py-0.5 font-mono">
+                </div>
+              </div>
+              <div class="text-[9px] text-slate-500 font-mono">Variables por defecto: Corriente Bus (A), Mezclador PI (RPM), Temperatura Agua (°C), Bomba (mL), Error e(t).</div>
+            </div>
+          </div>
+
+          <div class="flex justify-end gap-2 pt-1 border-t border-scada-border">
+            <button onclick="applyAxisScales()" class="px-3 py-1 bg-sky-600 hover:bg-sky-500 text-white rounded font-bold text-xs transition">Aplicar Escalas a Gráfica</button>
+          </div>
+        </div>
+
+        <!-- Selector de Variables (Pills con Checkbox que sirven de leyenda autoritativa) -->
+        <div class="flex flex-wrap items-center gap-2 text-xs font-mono bg-scada-well p-2.5 rounded-xl border border-scada-border">
+          <span class="text-[10px] text-slate-400 font-bold uppercase mr-1">Variables Activas:</span>
+
+          <!-- Variable 1: Potencia ODrive (W) [Eje Izq] -->
+          <label class="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-scada-elevated border border-orange-500/40 text-orange-300 cursor-pointer hover:border-orange-400 text-[11px]">
+            <input type="checkbox" id="chk_var_power" checked onchange="toggleSecondaryVar('power', this.checked)" class="accent-orange-500">
+            <span>Potencia ODrive (W) <span class="text-[9px] text-slate-500">[Izq]</span></span>
+          </label>
+
+          <!-- Variable 2: Corriente Bus (A) [Eje Der - Opuesto a Tensión] -->
+          <label class="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-scada-elevated border border-amber-500/40 text-amber-300 cursor-pointer hover:border-amber-400 text-[11px]">
+            <input type="checkbox" id="chk_var_current" checked onchange="toggleSecondaryVar('current', this.checked)" class="accent-amber-400">
+            <span>Corriente Bus (A) <span class="text-[9px] text-slate-500">[Der]</span></span>
+          </label>
+
+          <!-- Variable 3: Tensión Bus (V) [Eje Izq - Opuesto a Corriente] -->
+          <label class="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-scada-elevated border border-emerald-500/40 text-emerald-400 cursor-pointer hover:border-emerald-400 text-[11px]">
+            <input type="checkbox" id="chk_var_voltage" onchange="toggleSecondaryVar('voltage', this.checked)" class="accent-emerald-400">
+            <span>Tensión Bus (V) <span class="text-[9px] text-slate-500">[Izq]</span></span>
+          </label>
+
+          <!-- Variable 4: Velocidad ODrive (RPM) [Eje Izq - Opuesto a Mezclador] -->
+          <label class="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-scada-elevated border border-amber-500/40 text-amber-300 cursor-pointer hover:border-amber-400 text-[11px]">
+            <input type="checkbox" id="chk_var_odriveRpm" onchange="toggleSecondaryVar('odriveRpm', this.checked)" class="accent-amber-500">
+            <span>Velocidad ODrive (RPM) <span class="text-[9px] text-slate-500">[Izq]</span></span>
+          </label>
+
+          <!-- Variable 5: Mezclador PI (RPM) [Eje Der - Opuesto a ODrive] -->
+          <label class="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-scada-elevated border border-teal-500/40 text-teal-300 cursor-pointer hover:border-teal-400 text-[11px]">
+            <input type="checkbox" id="chk_var_mixerRpm" onchange="toggleSecondaryVar('mixerRpm', this.checked)" class="accent-teal-400">
+            <span>Mezclador PI (RPM) <span class="text-[9px] text-slate-500">[Der]</span></span>
+          </label>
+
+          <!-- Variable 6: Oxígeno Disuelto DO (mg/L) [Eje Izq - Opuesto a Temp] (¡En mg/L, no en %!) -->
+          <label class="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-scada-elevated border border-sky-500/40 text-sky-300 cursor-pointer hover:border-sky-400 text-[11px]">
+            <input type="checkbox" id="chk_var_do" onchange="toggleSecondaryVar('do', this.checked)" class="accent-sky-400">
+            <span>Oxígeno Disuelto (mg/L) <span class="text-[9px] text-slate-500">[Izq]</span></span>
+          </label>
+
+          <!-- Variable 7: Temperatura Agua (°C) [Eje Der - Opuesto a DO] -->
+          <label class="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-scada-elevated border border-blue-500/40 text-blue-300 cursor-pointer hover:border-blue-400 text-[11px]">
+            <input type="checkbox" id="chk_var_temp" onchange="toggleSecondaryVar('temp', this.checked)" class="accent-blue-400">
+            <span>Temperatura Agua (°C) <span class="text-[9px] text-slate-500">[Der]</span></span>
+          </label>
+
+          <!-- Variable 8: Volumen Bomba (mL) [Eje Der] -->
+          <label class="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-scada-elevated border border-purple-500/40 text-purple-300 cursor-pointer hover:border-purple-400 text-[11px]">
+            <input type="checkbox" id="chk_var_pumpVol" onchange="toggleSecondaryVar('pumpVol', this.checked)" class="accent-purple-400">
+            <span>Volumen Bomba (mL) <span class="text-[9px] text-slate-500">[Der]</span></span>
+          </label>
+
+          <!-- Variable 9: Error e(t) (mg/L) [Eje Der] -->
+          <label class="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-scada-elevated border border-rose-500/40 text-rose-300 cursor-pointer hover:border-rose-400 text-[11px]">
+            <input type="checkbox" id="chk_var_error" onchange="toggleSecondaryVar('error', this.checked)" class="accent-rose-400">
+            <span>Error e(t) = SP - DO (mg/L) <span class="text-[9px] text-slate-500">[Der]</span></span>
+          </label>
+        </div>
+
+        <!-- Canvas de la Gráfica Secundaria (Sin leyendas internas redundantes) -->
+        <div class="relative w-full h-[260px] bg-scada-well rounded-xl p-2 border border-scada-border">
+          <canvas id="scadaSecondaryChart"></canvas>
+        </div>
+      </div>
+      <!-- Synchronized Experiment Event Feed & Alarm Summary -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        
+        <!-- Timeline Event Log (Hitos documentados en la gráfica) -->
+        <div class="bg-scada-surface rounded-2xl border border-scada-border p-4 flex flex-col justify-between">
+          <div class="flex items-center justify-between border-b border-scada-border pb-2 mb-2">
+            <span class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+              <i data-lucide="history" class="w-3.5 h-3.5 text-sky-400"></i> Bitácora de Hitos en el Ensayo
+            </span>
+            <span class="text-[10px] font-mono text-slate-400">Eventos en la Gráfica</span>
+          </div>
+          <div id="eventLogContainer" class="space-y-2 text-xs font-mono max-h-36 overflow-y-auto pr-1">
+            <div class="p-2 rounded bg-scada-well border border-scada-border flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="px-1.5 py-0.5 rounded bg-purple-950/80 text-purple-300 border border-purple-800 text-[10px]">t=00:45</span>
+                <span class="text-slate-300">Inyección 12.5 mL Na₂SO₃ (Planta 1)</span>
+              </div>
+              <span class="text-[10px] text-slate-500">RTC 17:25:12</span>
+            </div>
+            <div class="p-2 rounded bg-scada-well border border-scada-border flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <span class="px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-300 border border-amber-800 text-[10px]">t=01:30</span>
+                <span class="text-slate-300">Escalón ODrive 0 → 210 RPM (Planta 2)</span>
+              </div>
+              <span class="text-[10px] text-slate-500">RTC 17:25:57</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Quick Alarm & Interlock Status -->
+        <div class="bg-scada-surface rounded-2xl border border-scada-border p-4 flex flex-col justify-between">
+          <div class="flex items-center justify-between border-b border-scada-border pb-2 mb-2">
+            <span class="text-xs font-bold text-white uppercase tracking-wider flex items-center gap-1.5">
+              <i data-lucide="shield-check" class="w-3.5 h-3.5 text-emerald-400"></i> Enclavamientos & Seguridad
+            </span>
+            <span class="text-[10px] font-mono text-emerald-400">Normal (0 Fallas)</span>
+          </div>
+          <div class="space-y-1.5 text-xs">
+            <div class="flex items-center justify-between text-slate-300">
+              <span>Watchdog de Comunicación:</span>
+              <span class="font-mono text-emerald-400">Activo (Heartbeat 15s)</span>
+            </div>
+            <div class="flex items-center justify-between text-slate-300">
+              <span>Límite de Desoxigenación:</span>
+              <span class="font-mono text-sky-400">Seguro (&gt; 3.0 mg/L)</span>
+            </div>
+            <div class="flex items-center justify-between text-slate-300">
+              <span>Temperatura Inversor FET:</span>
+              <span class="font-mono text-slate-300">34.8 °C (Límite 75°C)</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+    <!-- ======================================================================= -->
+    <!-- RIGHT PANE (4 COLS / ~35%): MULTI-NODE CONTROL DECK & RECIPE STUDIO     -->
+    <!-- ======================================================================= -->
+    <div class="lg:col-span-4 flex flex-col gap-4">
+      
+      <!-- Tabbed Control Console Card -->
+      <div class="bg-scada-surface rounded-2xl border border-scada-border p-4 shadow-sm flex flex-col gap-4">
+        
+        <!-- Navigation Tab Headers: 4 TABS BIEN DEFINIDAS -->
+        <div class="grid grid-cols-4 gap-1 p-1 bg-scada-well rounded-xl border border-scada-border text-xs">
+          <button onclick="switchTab('tabRecipe')" id="tabBtnRecipe" class="tab-btn active py-2 rounded-lg text-center transition">
+            Ensayo
+          </button>
+          <!-- PESTAÑA UNIFICADA DE ACTUADORES: ODrive, T-200 (PI) y Bomba -->
+          <button onclick="switchTab('tabActuators')" id="tabBtnActuators" class="tab-btn py-2 rounded-lg text-slate-400 hover:text-white transition">
+            Actuadores
+          </button>
+          <button onclick="switchTab('tabSensor')" id="tabBtnSensor" class="tab-btn py-2 rounded-lg text-slate-400 hover:text-white transition">
+            Sensor
+          </button>
+          <button onclick="switchTab('tabDiagnostics')" id="tabBtnDiagnostics" class="tab-btn py-2 rounded-lg text-slate-400 hover:text-white transition">
+            Diagnóstico
+          </button>
+        </div>
+
+        <!-- =================================================================== -->
+        <!-- TAB 1: STUDIO DE EXPERIMENTOS — FASES POR PROTOCOLO CON MODO        -->
+        <!-- =================================================================== -->
+        <div id="tabRecipe" class="space-y-3">
+
+          <!-- Cabecera del protocolo y selector -->
+          <div class="p-3 bg-scada-well rounded-xl border border-scada-border space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-white flex items-center gap-1.5">
+                <i data-lucide="flask-conical" class="w-4 h-4 text-sky-400"></i> Protocolo Experimental
+              </span>
+              <span class="text-[10px] font-mono uppercase px-2 py-0.5 rounded bg-scada-elevated text-slate-300 border border-scada-border">Capítulo V</span>
+            </div>
+            <div>
+              <label class="text-[11px] text-slate-400 font-medium block mb-1">Caso de Ensayo:</label>
+              <select id="recipeSelect" onchange="changeRecipe(this.value)" class="w-full bg-scada-elevated text-slate-100 text-xs border border-scada-border rounded-lg p-2 font-medium focus:outline-none focus:border-sky-500">
+                <option value="planta_2_step">Protocolo B — Planta 2: Escalón de Aireación (kLa)</option>
+                <option value="planta_1_deox">Protocolo A — Planta 1: Desoxigenación Química (Na₂SO₃)</option>
+                <option value="closed_loop">Protocolo C: Control en Lazo Cerrado (PID / On-Off)</option>
+              </select>
+            </div>
+            <!-- Guía Rápida de Modos de Operación -->
+            <div class="p-2.5 rounded-lg bg-scada-canvas border border-scada-border space-y-1.5 text-[10px] font-mono">
+              <div class="flex items-center gap-2">
+                <span class="px-1.5 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800 font-bold">AUTO</span>
+                <span class="text-slate-300">100% Autónomo:</span>
+                <span class="text-slate-400">Aplica consignas y avanza de fase solo por umbrales físicos.</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="px-1.5 py-0.5 rounded bg-sky-950/80 text-sky-400 border border-sky-800 font-bold">HÍBRIDO</span>
+                <span class="text-slate-300">Supervisado:</span>
+                <span class="text-slate-400">Aplica consignas; al cumplir condición requiere visto bueno del operador.</span>
+              </div>
+              <div class="flex items-center gap-2">
+                <span class="px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-400 border border-amber-800 font-bold">MANUAL</span>
+                <span class="text-slate-300">Control Directo:</span>
+                <span class="text-slate-400">El operador dispara cada actuador con botón y decide cuándo avanzar.</span>
+              </div>
+            </div>
+          </div>
+
+          <!-- ================================================================= -->
+          <!--  CONTENEDOR DE FASES — renderizado dinámicamente por changeRecipe  -->
+          <!-- ================================================================= -->
+          <div id="phaseContainer" class="space-y-2.5 max-h-[520px] overflow-y-auto pr-0.5"></div>
+
+          <!-- Acciones globales del ensayo -->
+          <div class="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            <!-- Botón Iniciar / Pausar Ensayo -->
+            <button onclick="toggleExperimentMaster()" id="btnExpToggle" class="py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-sm active:scale-95">
+              <i data-lucide="play" id="btnExpToggleIcon" class="w-3.5 h-3.5 fill-white"></i>
+              <span id="btnExpToggleText">Iniciar Ensayo</span>
+            </button>
+
+            <!-- Botón Detener / Fin de Ensayo -->
+            <button onclick="stopExperiment()" id="btnExpStop" class="py-2.5 bg-rose-950/80 hover:bg-rose-900 text-rose-300 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border border-rose-800 transition shadow-sm active:scale-95" title="Detener y finalizar el ensayo actual (apaga actuadores con seguridad a 0 RPM)">
+              <i data-lucide="square" id="btnExpStopIcon" class="w-3.5 h-3.5 fill-rose-300"></i>
+              <span id="btnExpStopText">Detener Ensayo</span>
+            </button>
+
+            <!-- Botón Loggeo Manual en SD (ODrive + Sensor) -->
+            <button onclick="toggleSdLogging()" id="btnSdManualToggle" class="py-2.5 bg-purple-950/80 hover:bg-purple-900/80 text-purple-300 rounded-xl font-mono text-xs flex items-center justify-center gap-1.5 border border-purple-700 transition active:scale-95" title="Activa o desactiva la grabación en MicroSD (5Hz ODrive / 1Hz Sensor)">
+              <i data-lucide="hard-drive" id="btnSdManualIcon" class="w-3.5 h-3.5 text-purple-400"></i>
+              <span id="btnSdManualText">SD: ACTIVO</span>
+            </button>
+
+            <!-- Menú de Descarga Multitasa (1 Hz vs 5 Hz) -->
+            <div class="relative">
+              <button onclick="toggleDownloadDropdown()" class="w-full py-2.5 bg-scada-elevated hover:bg-slate-700 text-slate-200 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border border-scada-border transition active:scale-95">
+                <i data-lucide="download" class="w-3.5 h-3.5 text-sky-400"></i> Descargar <i data-lucide="chevron-down" class="w-3 h-3 text-slate-400"></i>
+              </button>
+              <div id="downloadDropdownMenu" class="hidden absolute right-0 bottom-full mb-1 w-64 bg-scada-surface border border-scada-border rounded-xl shadow-2xl p-2 space-y-1.5 z-30 font-mono text-xs">
+                <div class="px-1 text-[10px] text-slate-400 font-bold uppercase border-b border-scada-border pb-1">Formatos de Exportación:</div>
+                <button onclick="downloadCsv(1)" class="w-full text-left px-2 py-1.5 rounded hover:bg-scada-elevated text-slate-200 flex items-center justify-between transition">
+                  <div>
+                    <span class="font-bold text-emerald-400 block">CSV Web (1.0 Hz)</span>
+                    <span class="text-[9px] text-slate-400">DO Sensor + Telemetría estándar</span>
+                  </div>
+                  <i data-lucide="file-spreadsheet" class="w-3.5 h-3.5 text-emerald-400"></i>
+                </button>
+                <button onclick="downloadCsv(5)" class="w-full text-left px-2 py-1.5 rounded hover:bg-scada-elevated text-slate-200 flex items-center justify-between transition">
+                  <div>
+                    <span class="font-bold text-sky-400 block">Log MicroSD (5.0 Hz / 200ms)</span>
+                    <span class="text-[9px] text-slate-400">Transitorios ODrive + Sensor</span>
+                  </div>
+                  <i data-lucide="cpu" class="w-3.5 h-3.5 text-sky-400"></i>
+                </button>
+                <button onclick="downloadKlaDataset()" class="w-full text-left px-2 py-1.5 rounded hover:bg-scada-elevated text-slate-200 flex items-center justify-between transition">
+                  <div>
+                    <span class="font-bold text-amber-400 block">Dataset kLa [ln(C*-C)]</span>
+                    <span class="text-[9px] text-slate-400">C* = 7.15 mg/L • ASCE 2-06</span>
+                  </div>
+                  <i data-lucide="binary" class="w-3.5 h-3.5 text-amber-400"></i>
+                </button>
+                <button onclick="openHistoryModal()" class="w-full text-left px-2 py-1 rounded hover:bg-scada-elevated text-slate-300 border-t border-slate-800 flex items-center justify-between pt-1.5 transition">
+                  <span class="text-[11px]">Historial de Ensayos</span>
+                  <i data-lucide="history" class="w-3.5 h-3.5 text-slate-400"></i>
+                </button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Opciones globales colapsables -->
+          <div class="border border-scada-border rounded-xl bg-scada-canvas overflow-hidden">
+            <button onclick="toggleAdvancedSettings()" class="w-full px-3 py-2 flex items-center justify-between text-xs text-slate-300 font-medium hover:bg-scada-elevated transition">
+              <span class="flex items-center gap-1.5">
+                <i data-lucide="sliders-horizontal" class="w-3.5 h-3.5 text-sky-400"></i> Opciones Globales del Ensayo
+              </span>
+              <i data-lucide="chevron-down" id="advSettingsIcon" class="w-3.5 h-3.5 text-slate-400 transition-transform"></i>
+            </button>
+            <div id="advSettingsContent" class="hidden p-3 border-t border-scada-border space-y-2.5 text-[11px]">
+              <div class="flex items-center justify-between">
+                <div>
+                  <span class="text-slate-200 font-medium block">Grabar en MicroSD del Sensor</span>
+                  <span class="text-slate-500 text-[10px]">CSV a 1.0 s sin pérdida de red</span>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" id="toggleSdRecord" checked class="sr-only peer">
+                  <div class="w-7 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+                </label>
+              </div>
+              <div class="flex items-center justify-between">
+                <div>
+                  <span class="text-slate-200 font-medium block">Transmisión Rápida (5 Hz)</span>
+                  <span class="text-slate-500 text-[10px]">Corriente, potencia y RPM ODrive</span>
+                </div>
+                <label class="relative inline-flex items-center cursor-pointer">
+                  <input type="checkbox" id="toggleHighFreq" checked class="sr-only peer">
+                  <div class="w-7 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[\'\'] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-500"></div>
+                </label>
+              </div>
+              <div class="pt-1 border-t border-slate-800">
+                <label class="text-[10px] text-slate-400 block mb-1">Nombre del Archivo Destino:</label>
+                <input type="text" id="recipeFilenameInput" value="EXP_02_STEP.CSV" class="w-full bg-scada-well text-slate-200 text-xs border border-scada-border rounded p-1.5 font-mono">
+              </div>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- =================================================================== -->
+        <!-- TAB 2: PESTAÑA UNIFICADA DE ACTUADORES (ODRIVE, MEZCLADOR PI, BOMBA)-->
+        <!-- =================================================================== -->
+        <div id="tabActuators" class="hidden space-y-3">
+          
+          <div class="text-[11px] text-slate-400 px-1 flex items-center justify-between">
+            <span>Control de los 3 Efectores Físicos del Banco:</span>
+            <span class="font-mono text-emerald-400">3 Nodos Listos</span>
+          </div>
+
+          <!-- Actuador 1: Aireador Principal (ODrive S1 + Motor M8325s) -->
+          <div class="p-3 bg-scada-well rounded-xl border border-scada-border space-y-2.5">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <div class="p-1 rounded bg-amber-950/60 border border-amber-800 text-amber-400">
+                  <i data-lucide="fan" class="w-3.5 h-3.5"></i>
+                </div>
+                <div>
+                  <span class="text-xs font-bold text-white block">Aireador ODrive S1 (M8325s)</span>
+                  <span class="text-[9px] text-slate-400 font-mono">Planta 2 • 0 a 600 RPM</span>
+                </div>
+              </div>
+              <label class="relative inline-flex items-center cursor-pointer">
+                <input type="checkbox" id="odriveToggle" checked onchange="toggleMotorPower(this.checked)" class="sr-only peer">
+                <div class="w-8 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-amber-500"></div>
+              </label>
+            </div>
+
+            <!-- Slider RPM -->
+            <div>
+              <div class="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+                <span>Consigna: <strong id="sliderRpmText" class="text-amber-400">210 RPM</strong></span>
+                <span id="odrivePowerText" class="text-slate-300">38.4 W</span>
+              </div>
+              <input type="range" id="odriveRpmSlider" min="0" max="600" value="210" step="10" oninput="updateMotorRpm(this.value)" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-amber-500">
+            </div>
+
+            <!-- Preset buttons -->
+            <div class="flex gap-1.5 font-mono text-[10px]">
+              <button onclick="setRpmPreset(0)" class="flex-1 py-1 rounded bg-scada-elevated hover:bg-slate-700 border border-scada-border text-slate-300">0</button>
+              <button onclick="setRpmPreset(150)" class="flex-1 py-1 rounded bg-scada-elevated hover:bg-slate-700 border border-scada-border text-slate-300">150</button>
+              <button onclick="setRpmPreset(300)" class="flex-1 py-1 rounded bg-scada-elevated hover:bg-slate-700 border border-scada-border text-slate-300">300</button>
+              <button onclick="setRpmPreset(450)" class="flex-1 py-1 rounded bg-scada-elevated hover:bg-slate-700 border border-scada-border text-slate-300">450</button>
+              <button onclick="setRpmPreset(600)" class="flex-1 py-1 rounded bg-scada-elevated hover:bg-slate-700 border border-scada-border text-slate-300">600</button>
+            </div>
+          </div>
+
+          <!-- Actuador 2: Mezclador Hidrodinámico Auxiliar (ESC T-200 CON CONTROLADOR PI) -->
+          <div class="p-3 bg-scada-well rounded-xl border border-scada-border space-y-2.5">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <div class="p-1 rounded bg-teal-950/60 border border-teal-800 text-teal-400">
+                  <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+                </div>
+                <div>
+                  <span class="text-xs font-bold text-white block">Mezclador T-200 (Controlador PI)</span>
+                  <span class="text-[9px] text-teal-400 font-mono">100 Hz Tacómetro FG • Kp=0.0027, Ki=0.0064</span>
+                </div>
+              </div>
+              <span id="mixerPiBadge" class="text-[9px] font-mono text-teal-300 px-1.5 py-0.5 rounded bg-teal-950/80 border border-teal-800">PI CLOSED-LOOP</span>
+            </div>
+
+            <!-- Consigna en Velocidad RPM (NO PWM) -->
+            <div>
+              <div class="flex justify-between text-[11px] font-mono text-slate-400 mb-1">
+                <span>Consigna: <strong id="mixerTargetRpmText" class="text-teal-400">1200 RPM</strong></span>
+                <span>Medido: <strong id="mixerMeasuredRpmText" class="text-slate-200">1196 RPM</strong></span>
+              </div>
+              <input type="range" id="mixerRpmSlider" min="0" max="3000" value="1200" step="50" oninput="updateMixerSpeed(this.value)" class="w-full h-1.5 bg-slate-800 rounded-lg appearance-none cursor-pointer accent-teal-500">
+            </div>
+
+            <!-- Presets de Velocidad para el Mezclador -->
+            <div class="flex gap-1.5 font-mono text-[10px]">
+              <button onclick="setMixerPreset(0)" class="flex-1 py-1 rounded bg-scada-elevated hover:bg-slate-700 border border-scada-border text-slate-300">0</button>
+              <button onclick="setMixerPreset(600)" class="flex-1 py-1 rounded bg-scada-elevated hover:bg-slate-700 border border-scada-border text-slate-300">600</button>
+              <button onclick="setMixerPreset(1200)" class="flex-1 py-1 rounded bg-scada-elevated hover:bg-slate-700 border border-scada-border text-slate-300">1200</button>
+              <button onclick="setMixerPreset(1800)" class="flex-1 py-1 rounded bg-scada-elevated hover:bg-slate-700 border border-scada-border text-slate-300">1800</button>
+              <button onclick="setMixerPreset(2500)" class="flex-1 py-1 rounded bg-scada-elevated hover:bg-slate-700 border border-scada-border text-slate-300">2500</button>
+            </div>
+          </div>
+
+          <!-- Actuador 3: Bomba Dosificadora Química (Planta 1 - Na2SO3) -->
+          <div class="p-3 bg-scada-well rounded-xl border border-scada-border space-y-2.5">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2">
+                <div class="p-1 rounded bg-purple-950/60 border border-purple-800 text-purple-400">
+                  <i data-lucide="syringe" class="w-3.5 h-3.5"></i>
+                </div>
+                <div>
+                  <span class="text-xs font-bold text-white block">Bomba Dosificadora Na₂SO₃</span>
+                  <span class="text-[9px] text-slate-400 font-mono">Planta 1 • AS5600 12-bit</span>
+                </div>
+              </div>
+              <span class="text-[9px] font-mono text-purple-300 px-1.5 py-0.5 rounded bg-purple-950 border border-purple-800">Calibrado</span>
+            </div>
+
+            <div class="flex gap-2">
+              <div class="flex-1">
+                <label class="text-[10px] text-slate-400 font-mono block mb-1">Volumen a Inyectar (mL):</label>
+                <input type="number" id="doseVolumeInput" value="5.0" step="0.5" min="0.5" max="50" class="w-full bg-scada-elevated text-slate-100 text-xs border border-scada-border rounded-lg p-2 font-mono">
+              </div>
+              <div class="flex items-end">
+                <button onclick="triggerDose()" class="py-2 px-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-bold text-xs flex items-center gap-1 transition">
+                  <i data-lucide="play" class="w-3.5 h-3.5 fill-white"></i> Dosificar
+                </button>
+              </div>
+            </div>
+            <div class="flex justify-between items-center text-[10px] text-slate-400 pt-1 border-t border-scada-border">
+              <span>Purgado de tubería química:</span>
+              <button onclick="alert('Línea purgada (1.5 mL descartados)')" class="text-sky-400 hover:underline">Purgar Tubería</button>
+            </div>
+          </div>
+
+        </div>
+
+        <!-- =================================================================== -->
+        <!-- TAB 3: SENSOR OD & CALIBRACIÓN                                      -->
+        <!-- =================================================================== -->
+        <div id="tabSensor" class="hidden space-y-4">
+          <div class="p-3 bg-scada-well rounded-xl border border-scada-border space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-xs font-bold text-white flex items-center gap-1.5">
+                <i data-lucide="radio" class="w-4 h-4 text-sky-400"></i> Frecuencia de Adquisición
+              </span>
+              <span class="text-[10px] font-mono text-emerald-400">SD OK</span>
+            </div>
+
+            <div>
+              <label class="text-[11px] text-slate-400 font-medium block mb-1">Intervalo Modbus RS485:</label>
+              <div class="grid grid-cols-4 gap-1.5 font-mono text-xs">
+                <button onclick="setSampleRate(1, this)" class="sample-btn py-1.5 rounded bg-scada-elevated text-sky-400 border border-sky-500/40 font-bold">1s</button>
+                <button onclick="setSampleRate(2, this)" class="sample-btn py-1.5 rounded bg-slate-800 text-slate-400 border border-scada-border">2s</button>
+                <button onclick="setSampleRate(5, this)" class="sample-btn py-1.5 rounded bg-slate-800 text-slate-400 border border-scada-border">5s</button>
+                <button onclick="setSampleRate(15, this)" class="sample-btn py-1.5 rounded bg-slate-800 text-slate-400 border border-scada-border">15s</button>
+              </div>
+            </div>
+
+            <div class="pt-2 border-t border-scada-border">
+              <span class="text-xs font-bold text-slate-300 block mb-2">Calibración de Campo (2 Puntos):</span>
+              <div class="grid grid-cols-2 gap-2">
+                <button onclick="alert('Calibrando Cero (0.0 mg/L) con solución de sulfito de sodio...')" class="py-2 px-2 bg-scada-elevated hover:bg-slate-700 text-slate-300 rounded border border-scada-border text-xs font-medium text-center">
+                  1. Cero (0.0 mg/L)
+                </button>
+                <button onclick="alert('Calibrando 100% saturación en aire húmedo (7.15 mg/L en condiciones locales de banco)...')" class="py-2 px-2 bg-scada-elevated hover:bg-slate-700 text-slate-300 rounded border border-scada-border text-xs font-medium text-center">
+                  2. 100% Aire Sat (7.15 mg/L)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- =================================================================== -->
+        <!-- TAB 4: DIAGNOSTICS & TELEMETRY REGISTERS                            -->
+        <!-- =================================================================== -->
+        <div id="tabDiagnostics" class="hidden space-y-3 font-mono text-xs">
+          <div class="p-3 bg-scada-well rounded-xl border border-scada-border space-y-2">
+            <span class="text-xs font-bold text-slate-200 block mb-1">Bus Eléctrico ODrive:</span>
+            <div class="flex justify-between text-slate-400 py-1 border-b border-scada-border">
+              <span>Tensión Bus DC:</span>
+              <span class="text-white font-bold">24.18 V</span>
+            </div>
+            <div class="flex justify-between text-slate-400 py-1 border-b border-scada-border">
+              <span>Corriente Medida:</span>
+              <span class="text-white font-bold">1.62 A</span>
+            </div>
+            <div class="flex justify-between text-slate-400 py-1 border-b border-scada-border">
+              <span>Temperatura MOSFETs:</span>
+              <span class="text-amber-400 font-bold">34.8 °C</span>
+            </div>
+            <div class="flex justify-between text-slate-400 py-1">
+              <span>Modo de Control:</span>
+              <span class="text-emerald-400 font-bold">AXIS_CLOSED_LOOP</span>
+            </div>
+          </div>
+
+          <div class="p-3 bg-scada-well rounded-xl border border-scada-border space-y-2">
+            <span class="text-xs font-bold text-slate-200 block mb-1">Batería & RTC Sensor:</span>
+            <div class="flex justify-between text-slate-400 py-1 border-b border-scada-border">
+              <span>Voltaje Batería:</span>
+              <span class="text-emerald-400 font-bold">4.18 V (96%)</span>
+            </div>
+            <div class="flex justify-between text-slate-400 py-1">
+              <span>Frecuencia Real:</span>
+              <span class="text-sky-300 font-bold">0.998 Hz</span>
+            </div>
+          </div>
+        </div>
+
+      </div>
+
+    </div>
+
+  </main>
+
+  <!-- MODAL: VENTANA TEMPORAL PERSONALIZADA -->
+  <div id="customWindowModal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-4 font-mono">
+    <div class="bg-scada-surface border border-scada-border rounded-2xl max-w-sm w-full p-5 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-scada-border pb-2.5">
+        <span class="text-white font-bold text-xs flex items-center gap-1.5">
+          <i data-lucide="timer" class="w-4 h-4 text-sky-400"></i> Ventana Temporal Personalizada
+        </span>
+        <button onclick="closeCustomWindowModal()" class="text-slate-400 hover:text-white text-xs">✕</button>
+      </div>
+      <p class="text-[11px] text-slate-400">Define el horizonte de tiempo que abarcará el eje horizontal de las gráficas:</p>
+      <div class="flex items-center gap-2">
+        <input type="number" id="customWindowVal" value="15" min="1" max="1000" class="w-24 bg-scada-well text-slate-100 text-xs border border-scada-border rounded p-2 text-right focus:outline-none focus:border-sky-500 font-mono">
+        <select id="customWindowUnit" class="bg-scada-well text-slate-100 text-xs border border-scada-border rounded p-2 focus:outline-none focus:border-sky-500 font-mono">
+          <option value="s">Segundos (s)</option>
+          <option value="m" selected>Minutos (min)</option>
+          <option value="h">Horas (h)</option>
+          <option value="d">Días (días)</option>
+        </select>
+      </div>
+      <div class="flex justify-end gap-2 pt-2 border-t border-scada-border">
+        <button onclick="closeCustomWindowModal()" class="px-3 py-1.5 rounded bg-scada-elevated text-slate-300 text-xs hover:bg-slate-700">Cancelar</button>
+        <button onclick="applyCustomWindow()" class="px-4 py-1.5 rounded bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs transition">Aplicar Ventana</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL 1: AÑADIR HITO DOCUMENTADO EN LA GRÁFICA                           -->
+  <!-- ========================================================================= -->
+  <div id="milestoneModal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-scada-surface border border-scada-border rounded-2xl max-w-md w-full p-5 space-y-4 shadow-xl">
+      <div class="flex items-center justify-between border-b border-scada-border pb-3">
+        <div class="flex items-center gap-2 text-white font-bold text-sm">
+          <i data-lucide="bookmark-plus" class="w-4 h-4 text-sky-400"></i>
+          <span>Añadir Hito en la Curva Experimental</span>
+        </div>
+        <button onclick="closeMilestoneModal()" class="text-slate-400 hover:text-white">✕</button>
+      </div>
+
+      <p class="text-xs text-slate-400">
+        Inserta una marca temporal en el segundo actual (<span id="modalCurrentT" class="font-mono text-sky-300">t=00:00</span>) para documentar un evento en los datos de la tesis:
+      </p>
+
+      <div class="space-y-2">
+        <label class="text-xs text-slate-300 font-medium block">Tipo de Evento:</label>
+        <select id="milestoneType" class="w-full bg-scada-well border border-scada-border rounded-lg p-2 text-xs text-white">
+          <option value="sulfite">Inyección de Sulfito Na₂SO₃ (Desoxigenación Planta 1)</option>
+          <option value="step">Cambio de Escalón en Aireador (Planta 2)</option>
+          <option value="winkler">Toma de Muestra Manual (Titulación Winkler)</option>
+          <option value="note">Anotación / Observación del Operador</option>
+        </select>
+      </div>
+
+      <div class="space-y-2">
+        <label class="text-xs text-slate-300 font-medium block">Detalle o Parámetro:</label>
+        <input type="text" id="milestoneDetail" value="10.0 mL Na₂SO₃ vertidos" class="w-full bg-scada-well border border-scada-border rounded-lg p-2 text-xs text-white font-mono">
+      </div>
+
+      <div class="flex justify-end gap-2 pt-2 border-t border-scada-border">
+        <button onclick="closeMilestoneModal()" class="px-3 py-1.5 rounded-lg text-xs text-slate-300 hover:bg-slate-800">Cancelar</button>
+        <button onclick="confirmMilestone()" class="px-4 py-1.5 rounded-lg text-xs font-bold bg-sky-600 hover:bg-sky-500 text-white flex items-center gap-1.5">
+          <i data-lucide="check" class="w-3.5 h-3.5"></i> Insertar en Gráfica
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL 2: EXPLICACIÓN Y MODELO METROLÓGICO DE ESTIMACIÓN DE KLa          -->
+  <!-- ========================================================================= -->
+  <div id="klaExplanationModal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-scada-surface border border-scada-border rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl overflow-y-auto max-h-[90vh]">
+      <div class="flex items-center justify-between border-b border-scada-border pb-3">
+        <div class="flex items-center gap-2 text-white font-bold text-sm">
+          <i data-lucide="activity" class="w-5 h-5 text-emerald-400"></i>
+          <span>Modelo de Estimación del Coeficiente de Transferencia (kLa)</span>
+        </div>
+        <button onclick="closeKlaExplanationModal()" class="text-slate-400 hover:text-white">✕</button>
+      </div>
+
+      <div class="text-xs text-slate-300 space-y-3">
+        <div class="p-3 bg-scada-well rounded-xl border border-scada-border space-y-2">
+          <span class="text-emerald-400 font-bold block text-sm">1. Ecuación Diferencial de Transferencia (Doble Película / ASCE):</span>
+          <p class="text-slate-300 font-mono text-[11px] bg-scada-canvas p-2 rounded border border-slate-800">
+            dC/dt = kLa · (C* - C) - R
+          </p>
+          <p class="text-[11px] text-slate-400">
+            Donde <strong>C(t)</strong> es la concentración de oxígeno disuelto (mg/L), <strong>C*</strong> es la solubilidad de saturación real en el banco (7.15 mg/L), <strong>kLa</strong> es el coeficiente volumétrico (h⁻¹), y <strong>R</strong> es la tasa de consumo químico o respiración biológica (0 en reoxigenación pura).
+          </p>
+        </div>
+
+        <div class="p-3 bg-scada-well rounded-xl border border-scada-border space-y-2">
+          <span class="text-sky-400 font-bold block text-sm">2. Solución Integrada & Regresión Lineal del Déficit Logarítmico:</span>
+          <p class="text-slate-300 font-mono text-[11px] bg-scada-canvas p-2 rounded border border-slate-800">
+            ln[ (C* - C₀) / (C* - C(t)) ] = kLa · (t - t₀)
+          </p>
+          <p class="text-[11px] text-slate-400">
+            Graficando <strong>Y = ln(C* - C(t))</strong> frente a <strong>X = (t - t₀)</strong>, la pendiente de la recta por mínimos cuadrados ordinarios es exactamente <strong>-kLa</strong>. La ventana estándar de análisis corta los datos entre el 20% y el 80% del salto para eliminar el retraso dinámico de la membrana del sensor (probe lag).
+          </p>
+        </div>
+
+        <div class="p-3 bg-scada-well rounded-xl border border-scada-border space-y-2">
+          <span class="text-amber-400 font-bold block text-sm">3. Corrección por Temperatura a 20°C Estándar (kLa₂₀):</span>
+          <p class="text-slate-300 font-mono text-[11px] bg-scada-canvas p-2 rounded border border-slate-800">
+            kLa₂₀ = kLa_T / θ^(T - 20)   (donde θ = 1.024 para agua dulce limpia)
+          </p>
+          <div class="text-[11px] text-slate-300 flex justify-between pt-1">
+            <span>kLa a 24.08°C: <strong class="text-emerald-400 font-mono">4.82 h⁻¹</strong></span>
+            <span>kLa₂₀ normalizado: <strong class="text-white font-mono">4.38 h⁻¹</strong></span>
+            <span>R² Ajuste: <strong class="text-sky-400 font-mono">0.988</strong></span>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex justify-end pt-2 border-t border-scada-border">
+        <button onclick="closeKlaExplanationModal()" class="px-4 py-2 bg-scada-elevated hover:bg-slate-700 text-white rounded-lg text-xs font-semibold">Entendido</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- MODAL 3: HISTORIAL DE ENSAYOS & DESCARGA DE ARCHIVOS                      -->
+  <!-- ========================================================================= -->
+  <div id="historyModal" class="fixed inset-0 z-50 bg-black/60 backdrop-blur-sm hidden flex items-center justify-center p-4">
+    <div class="bg-scada-surface border border-scada-border rounded-2xl max-w-lg w-full p-5 space-y-4 shadow-2xl">
+      <div class="flex items-center justify-between border-b border-scada-border pb-3">
+        <div class="flex items-center gap-2 text-white font-bold text-sm">
+          <i data-lucide="history" class="w-4 h-4 text-amber-400"></i>
+          <span>Historial de Ensayos Registrados</span>
+        </div>
+        <button onclick="closeHistoryModal()" class="text-slate-400 hover:text-white">✕</button>
+      </div>
+
+      <div class="space-y-2 text-xs font-mono max-h-60 overflow-y-auto pr-1">
+        <div class="p-2.5 rounded-xl bg-scada-well border border-scada-border flex items-center justify-between">
+          <div>
+            <div class="text-white font-bold">EXP_02_STEP.CSV (Actual)</div>
+            <div class="text-slate-400 text-[10px]">210 RPM • 4m 18s • kLa=4.82 h⁻¹ • 258 filas</div>
+          </div>
+          <button onclick="downloadActiveCsv()" class="p-1.5 rounded bg-scada-elevated hover:bg-slate-700 text-sky-400 border border-scada-border">
+            <i data-lucide="download" class="w-4 h-4"></i>
+          </button>
+        </div>
+
+        <div class="p-2.5 rounded-xl bg-scada-well border border-scada-border flex items-center justify-between">
+          <div>
+            <div class="text-white font-bold">EXP_01_DEOX.CSV</div>
+            <div class="text-slate-400 text-[10px]">Sulfito 12.5 mL • 15m 30s • 930 filas</div>
+          </div>
+          <button onclick="alert('Descargando EXP_01_DEOX.CSV...')" class="p-1.5 rounded bg-scada-elevated hover:bg-slate-700 text-sky-400 border border-scada-border">
+            <i data-lucide="download" class="w-4 h-4"></i>
+          </button>
+        </div>
+      </div>
+
+      <div class="flex justify-end pt-2 border-t border-scada-border">
+        <button onclick="closeHistoryModal()" class="px-4 py-1.5 bg-scada-elevated text-white rounded-lg text-xs">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ========================================================================= -->
+  <!-- 4. FOOTER STATUS BAR                                                      -->
+  <!-- ========================================================================= -->
+  <footer class="mt-auto border-t border-scada-border bg-scada-surface/80 py-2 px-6 text-xs text-slate-400 font-mono flex flex-wrap items-center justify-between gap-4">
+    <div class="flex items-center gap-3">
+      <span class="flex items-center gap-1.5 text-emerald-400">
+        <span class="w-2 h-2 rounded-full bg-emerald-400"></span> Conectado a Vercel / Supabase RLS
+      </span>
+      <span>•</span>
+      <span>Base de datos: <strong class="text-slate-300">PostgreSQL (GMT-5 Lima)</strong></span>
+    </div>
+    <div class="flex items-center gap-4 text-[11px] text-slate-500">
+      <span>AquaControl v2.2 SCADA Lab</span>
+      <span>•</span>
+      <span>Arquitectura de Tesis IoT</span>
+    </div>
+  </footer>
+
+  <!-- ========================================================================= -->
+  <!-- SCRIPT: INTERACTIVE CONTROLLER & LIVE SIMULATION ENGINE                    -->
+  <!-- ========================================================================= -->
+  <script>
+    lucide.createIcons();
+
+    // Tab Navigation
+    function switchTab(tabId) {
+      ['tabRecipe', 'tabActuators', 'tabSensor', 'tabDiagnostics'].forEach(t => {
+        document.getElementById(t).classList.add('hidden');
+      });
+      document.getElementById(tabId).classList.remove('hidden');
+
+      ['tabBtnRecipe', 'tabBtnActuators', 'tabBtnSensor', 'tabBtnDiagnostics'].forEach(b => {
+        document.getElementById(b).classList.remove('active');
+        document.getElementById(b).classList.remove('bg-scada-elevated', 'text-white');
+        document.getElementById(b).classList.add('text-slate-400');
+      });
+
+      const activeBtnMap = {
+        'tabRecipe': 'tabBtnRecipe',
+        'tabActuators': 'tabBtnActuators',
+        'tabSensor': 'tabBtnSensor',
+        'tabDiagnostics': 'tabBtnDiagnostics'
+      };
+      const activeBtn = document.getElementById(activeBtnMap[tabId]);
+      activeBtn.classList.add('active', 'bg-scada-elevated', 'text-white');
+      activeBtn.classList.remove('text-slate-400');
+    }
+
+    // Toggle Menu Desplegable de Configuración Avanzada
+    function toggleAdvancedSettings() {
+      const content = document.getElementById('advSettingsContent');
+      const icon = document.getElementById('advSettingsIcon');
+      if (content.classList.contains('hidden')) {
+        content.classList.remove('hidden');
+        icon.style.transform = 'rotate(180deg)';
+      } else {
+        content.classList.add('hidden');
+        icon.style.transform = 'rotate(0deg)';
+      }
+    }
+
+    // Toggle Dropdown de Descarga de Archivos
+    function toggleDownloadDropdown() {
+      const menu = document.getElementById('downloadDropdownMenu');
+      menu.classList.toggle('hidden');
+    }
+
+    // ===================================================================
+    // CONFIGURACIÓN DE GRÁFICAS SCADA & GESTIÓN DE TIEMPO REAL
+    // ===================================================================
+    const ctx = document.getElementById('scadaLiveChart').getContext('2d');
+    const ctxSec = document.getElementById('scadaSecondaryChart').getContext('2d');
+
+    let chartTimeMode = 'relative'; // 'relative' (+MM:SS) o 'clock' (HH:MM:SS)
+    let timeWindowSeconds = 3600; // 600 (10m), 3600 (1h), 86400 (24h), 604800 (7d), 9999999 (todo), o personalizado
+    let elapsedSec = 258;
+    let currentDo = 5.20;
+    const C_STAR_REAL = 7.15; // Concentración de saturación real en condiciones de banco (7.15 mg/L)
+    let targetRpm = 210;
+    let isMotorRunning = true;
+    let mixerTargetRpm = 0;
+    let mixerMeasuredRpm = 0;
+
+    // Estado del Experimento y Grabación en SD: 'running' | 'paused' | 'stopped'
+    let experimentState = 'running';
+    let isExperimentRunning = true;
+    let isSdLoggingActive = true;
+
+    // Buffer de hitos/eventos documentados en la curva experimental
+    const milestonesList = [
+      { relSec: 45, label: 'Inyección Na₂SO₃', detail: '12.5 mL Na₂SO₃ (Planta 1)', type: 'sulfite', do: 3.85 },
+      { relSec: 90, label: 'Escalón ODrive', detail: '0 → 210 RPM (Planta 2)', type: 'step', do: 3.20 }
+    ];
+
+    // Buffer histórico de series de tiempo sincronizadas (hasta 10000 muestras)
+    const dataHistory = [];
+    let currentVisibleData = [];
+
+    // Funciones del Controlador de Ensayo y Loggeo SD
+    function updateExpStateUI() {
+      const headerBtn = document.getElementById('btnHeaderExpMaster');
+      const headerIcon = document.getElementById('headerExpMasterIcon');
+      const headerText = document.getElementById('headerExpMasterText');
+      const headerStopBtn = document.getElementById('btnHeaderExpStop');
+
+      const badge = document.getElementById('orchestratorBadge');
+      const badgeText = document.getElementById('orchestratorText');
+      const kpiStatus = document.getElementById('kpiExpStatusBadge');
+      const kpiQuickBtn = document.getElementById('kpiQuickExpBtn');
+      const kpiQuickStop = document.getElementById('kpiQuickStopBtn');
+
+      const tabBtn = document.getElementById('btnExpToggle');
+      const tabIcon = document.getElementById('btnExpToggleIcon');
+      const tabText = document.getElementById('btnExpToggleText');
+      const tabStopBtn = document.getElementById('btnExpStop');
+
+      if (experimentState === 'running') {
+        if (headerBtn) {
+          headerBtn.className = 'flex items-center gap-1.5 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs px-3 py-1.5 rounded-xl border border-amber-500 transition-all active:scale-95 shadow-sm';
+          if (headerIcon) headerIcon.setAttribute('data-lucide', 'pause');
+          if (headerText) headerText.innerText = 'Pausar Ensayo';
+        }
+        if (headerStopBtn) {
+          headerStopBtn.disabled = false;
+          headerStopBtn.className = 'flex items-center gap-1.5 bg-rose-950/80 hover:bg-rose-900 text-rose-300 font-bold text-xs px-3 py-1.5 rounded-xl border border-rose-800 transition-all active:scale-95 shadow-sm cursor-pointer opacity-100';
+        }
+        if (badge) {
+          badge.className = 'text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800 flex items-center gap-1.5 font-mono';
+          if (badgeText) badgeText.innerText = 'EXP ACTIVO';
+        }
+        if (kpiStatus) {
+          kpiStatus.innerText = '● EXP EN CURSO';
+          kpiStatus.className = 'text-[9px] font-mono text-emerald-400';
+        }
+        if (kpiQuickBtn) {
+          kpiQuickBtn.innerText = 'PAUSAR';
+          kpiQuickBtn.className = 'text-[10px] font-mono px-2 py-0.5 rounded bg-amber-950/80 text-amber-400 border border-amber-800 hover:bg-amber-900 transition';
+        }
+        if (kpiQuickStop) kpiQuickStop.disabled = false;
+        if (tabBtn) {
+          tabBtn.className = 'py-2.5 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-sm active:scale-95';
+          if (tabIcon) tabIcon.setAttribute('data-lucide', 'pause');
+          if (tabText) tabText.innerText = 'Pausar Ensayo';
+        }
+        if (tabStopBtn) {
+          tabStopBtn.disabled = false;
+          tabStopBtn.className = 'py-2.5 bg-rose-950/80 hover:bg-rose-900 text-rose-300 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border border-rose-800 transition shadow-sm active:scale-95 cursor-pointer opacity-100';
+        }
+      } else if (experimentState === 'paused') {
+        if (headerBtn) {
+          headerBtn.className = 'flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3 py-1.5 rounded-xl border border-emerald-500 transition-all active:scale-95 shadow-sm';
+          if (headerIcon) headerIcon.setAttribute('data-lucide', 'play');
+          if (headerText) headerText.innerText = 'Reanudar Ensayo';
+        }
+        if (headerStopBtn) {
+          headerStopBtn.disabled = false;
+          headerStopBtn.className = 'flex items-center gap-1.5 bg-rose-950/80 hover:bg-rose-900 text-rose-300 font-bold text-xs px-3 py-1.5 rounded-xl border border-rose-800 transition-all active:scale-95 shadow-sm cursor-pointer opacity-100';
+        }
+        if (badge) {
+          badge.className = 'text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-amber-950/80 text-amber-400 border border-amber-800 flex items-center gap-1.5 font-mono';
+          if (badgeText) badgeText.innerText = 'PAUSADO';
+        }
+        if (kpiStatus) {
+          kpiStatus.innerText = '⏸ PAUSADO';
+          kpiStatus.className = 'text-[9px] font-mono text-amber-400';
+        }
+        if (kpiQuickBtn) {
+          kpiQuickBtn.innerText = 'REANUDAR';
+          kpiQuickBtn.className = 'text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800 hover:bg-emerald-900 transition';
+        }
+        if (kpiQuickStop) kpiQuickStop.disabled = false;
+        if (tabBtn) {
+          tabBtn.className = 'py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-sm active:scale-95';
+          if (tabIcon) tabIcon.setAttribute('data-lucide', 'play');
+          if (tabText) tabText.innerText = 'Reanudar Ensayo';
+        }
+        if (tabStopBtn) {
+          tabStopBtn.disabled = false;
+          tabStopBtn.className = 'py-2.5 bg-rose-950/80 hover:bg-rose-900 text-rose-300 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border border-rose-800 transition shadow-sm active:scale-95 cursor-pointer opacity-100';
+        }
+      } else {
+        // STOPPED / FINALIZADO
+        if (headerBtn) {
+          headerBtn.className = 'flex items-center gap-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs px-3 py-1.5 rounded-xl border border-emerald-500 transition-all active:scale-95 shadow-sm';
+          if (headerIcon) headerIcon.setAttribute('data-lucide', 'play');
+          if (headerText) headerText.innerText = 'Iniciar Ensayo';
+        }
+        if (headerStopBtn) {
+          headerStopBtn.disabled = true;
+          headerStopBtn.className = 'flex items-center gap-1.5 bg-slate-800 text-slate-500 font-bold text-xs px-3 py-1.5 rounded-xl border border-slate-700 cursor-not-allowed opacity-50';
+        }
+        if (badge) {
+          badge.className = 'text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-slate-800 text-slate-300 border border-slate-700 flex items-center gap-1.5 font-mono';
+          if (badgeText) badgeText.innerText = 'FINALIZADO';
+        }
+        if (kpiStatus) {
+          kpiStatus.innerText = '⏹ FINALIZADO';
+          kpiStatus.className = 'text-[9px] font-mono text-slate-400';
+        }
+        if (kpiQuickBtn) {
+          kpiQuickBtn.innerText = 'INICIAR';
+          kpiQuickBtn.className = 'text-[10px] font-mono px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800 hover:bg-emerald-900 transition';
+        }
+        if (kpiQuickStop) kpiQuickStop.disabled = true;
+        if (tabBtn) {
+          tabBtn.className = 'py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 transition shadow-sm active:scale-95';
+          if (tabIcon) tabIcon.setAttribute('data-lucide', 'play');
+          if (tabText) tabText.innerText = 'Iniciar Ensayo';
+        }
+        if (tabStopBtn) {
+          tabStopBtn.disabled = true;
+          tabStopBtn.className = 'py-2.5 bg-slate-800 text-slate-500 rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 border border-slate-700 cursor-not-allowed opacity-50';
+        }
+      }
+      lucide.createIcons();
+    }
+
+    function toggleExperimentMaster() {
+      if (experimentState === 'running') {
+        experimentState = 'paused';
+        isExperimentRunning = false;
+        addEventLog('Ensayo experimental PAUSADO por el operador', 'amber');
+      } else if (experimentState === 'paused') {
+        experimentState = 'running';
+        isExperimentRunning = true;
+        addEventLog('Ensayo experimental REANUDADO por el operador', 'emerald');
+      } else {
+        // Estado stopped -> Iniciar nuevo ensayo
+        experimentState = 'running';
+        isExperimentRunning = true;
+        addEventLog('Nuevo ensayo experimental INICIADO por el operador', 'emerald');
+      }
+      updateExpStateUI();
+    }
+
+    function stopExperiment() {
+      if (experimentState === 'stopped') return;
+
+      experimentState = 'stopped';
+      isExperimentRunning = false;
+
+      // Parada y desarmado seguro de actuadores
+      isMotorRunning = false;
+      targetRpm = 0;
+      updateMotorRpm(0);
+      const odriveToggle = document.getElementById('odriveToggle');
+      if (odriveToggle) odriveToggle.checked = false;
+      toggleMotorPower(false);
+
+      // Desactivar Mezclador PI
+      updateMixerSpeed(0);
+      const mixerSlider = document.getElementById('mixerRpmSlider');
+      if (mixerSlider) mixerSlider.value = 0;
+
+      const currentTimer = document.getElementById('experimentTimer') ? document.getElementById('experimentTimer').innerText : '00:00:00';
+      addEventLog(`⏹ Ensayo FINALIZADO por el operador a los t=${currentTimer}. Actuadores desacoplados a 0 RPM con seguridad.`, 'rose');
+      updateExpStateUI();
+    }
+
+    function updateSdLoggingUI() {
+      const headerBtn = document.getElementById('btnHeaderSdMaster');
+      const headerText = document.getElementById('headerSdText');
+      const tabBtn = document.getElementById('btnSdManualToggle');
+      const tabText = document.getElementById('btnSdManualText');
+      const kpiBadge = document.getElementById('kpiSdLoggingBadge');
+
+      if (isSdLoggingActive) {
+        if (headerBtn) headerBtn.className = 'flex items-center gap-1.5 bg-purple-950/80 hover:bg-purple-900/80 text-purple-300 font-mono text-xs px-2.5 py-1.5 rounded-xl border border-purple-700 transition-all active:scale-95 shadow-sm';
+        if (headerText) headerText.innerText = 'SD: GRABANDO';
+        if (tabBtn) tabBtn.className = 'py-2.5 bg-purple-950/80 hover:bg-purple-900/80 text-purple-300 rounded-xl font-mono text-xs flex items-center justify-center gap-1.5 border border-purple-700 transition active:scale-95';
+        if (tabText) tabText.innerText = 'SD: ACTIVO (5Hz/1Hz)';
+        if (kpiBadge) {
+          kpiBadge.innerText = '● 5Hz/1Hz SD REC';
+          kpiBadge.className = 'text-purple-400 cursor-pointer hover:underline text-[9px]';
+        }
+      } else {
+        if (headerBtn) headerBtn.className = 'flex items-center gap-1.5 bg-slate-800 hover:bg-slate-700 text-slate-400 font-mono text-xs px-2.5 py-1.5 rounded-xl border border-slate-700 transition-all active:scale-95 shadow-sm';
+        if (headerText) headerText.innerText = 'SD: PAUSADO';
+        if (tabBtn) tabBtn.className = 'py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-400 rounded-xl font-mono text-xs flex items-center justify-center gap-1.5 border border-slate-700 transition active:scale-95';
+        if (tabText) tabText.innerText = 'SD: DETENIDO';
+        if (kpiBadge) {
+          kpiBadge.innerText = '○ SD PAUSADA';
+          kpiBadge.className = 'text-slate-500 cursor-pointer hover:underline text-[9px]';
+        }
+      }
+      lucide.createIcons();
+    }
+
+    function toggleSdLogging() {
+      isSdLoggingActive = !isSdLoggingActive;
+      updateSdLoggingUI();
+      addEventLog(isSdLoggingActive ? 'Loggeo manual en MicroSD ACTIVADO (ODrive S1 a 5.0 Hz, Sensor a 1.0 Hz)' : 'Loggeo manual en MicroSD DETENIDO por el operador', isSdLoggingActive ? 'purple' : 'amber');
+    }
+
+    // Exportación real de CSV con soporte Multitasa (1.0 Hz y 5.0 Hz)
+    function downloadCsv(freq) {
+      const filename = freq === 5 ? 'EXP_02_ODRIVE_5Hz_MICROSD.CSV' : 'EXP_02_STEP_1Hz_WEB.CSV';
+      let csv = "Timestamp_ISO,Elapsed_Sec,DO_mg_L,ODrive_RPM,Mixer_RPM,Current_A,Voltage_V,Power_W,WaterTemp_C,Pump_mL,ControlError_mg_L\n";
+      dataHistory.forEach(d => {
+        if (freq === 1) {
+          const iso = new Date(d.epochMs).toISOString();
+          csv += `${iso},${d.relSec},${d.do},${d.odriveRpm},${d.mixerRpm},${d.current},${d.voltage},${d.power},${d.temp},${d.pumpVol},${d.error}\n`;
+        } else {
+          // 5.0 Hz: Registra cada 200 ms con dinámicas eléctricas de alta resolución
+          for (let s = 0; s < 5; s++) {
+            const subMs = d.epochMs + (s * 200);
+            const iso = new Date(subMs).toISOString();
+            const subRel = Number((d.relSec + (s * 0.2)).toFixed(2));
+            const subCurr = Number((d.current + (Math.random() * 0.04 - 0.02)).toFixed(2));
+            const subPwr = Number((d.power + (Math.random() * 0.8 - 0.4)).toFixed(1));
+            const subRpm = Math.round(d.odriveRpm + (Math.random() * 2 - 1));
+            csv += `${iso},${subRel},${d.do},${subRpm},${d.mixerRpm},${subCurr},${d.voltage},${subPwr},${d.temp},${d.pumpVol},${d.error}\n`;
+          }
+        }
+      });
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      document.getElementById('downloadDropdownMenu').classList.add('hidden');
+      addEventLog(`Archivo descargado: ${filename} (${freq === 5 ? '5.0 Hz Alta Resolución SD' : '1.0 Hz Sincronizado Web'})`, 'emerald');
+    }
+
+    function downloadKlaDataset() {
+      const C_star = C_STAR_REAL;
+      let csv = "t_sec,DO_mg_L,C_star_mg_L,Deficit_mg_L,ln_Deficit\n";
+      dataHistory.forEach(d => {
+        const deficit = Math.max(0.01, C_star - d.do);
+        const lnDeficit = Math.log(deficit).toFixed(4);
+        csv += `${d.relSec},${d.do},${C_star},${deficit.toFixed(3)},${lnDeficit}\n`;
+      });
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = 'DATASET_KLA_ASCE_7_15mgL.CSV';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      document.getElementById('downloadDropdownMenu').classList.add('hidden');
+      addEventLog('Archivo descargado: DATASET_KLA_ASCE_7_15mgL.CSV (C*=7.15 mg/L)', 'sky');
+    }
+
+    function formatTimeLabel(epochMs, relSec) {
+      if (chartTimeMode === 'relative') {
+        const absS = Math.abs(relSec);
+        const h = Math.floor(absS / 3600);
+        const m = Math.floor((absS % 3600) / 60).toString().padStart(2, '0');
+        const s = (absS % 60).toString().padStart(2, '0');
+        const sign = relSec < 0 ? '-' : '+';
+        return h > 0 ? `${sign}${h}:${m}:${s}` : `${sign}${m}:${s}`;
+      } else {
+        const d = new Date(epochMs);
+        const hh = d.getHours().toString().padStart(2, '0');
+        const mm = d.getMinutes().toString().padStart(2, '0');
+        const ss = d.getSeconds().toString().padStart(2, '0');
+        return `${hh}:${mm}:${ss}`;
+      }
+    }
+
+    // Configuración del Intervalo de Tiempo a Visualizar (Time Span)
+    function setTimeWindow(sec, isCustom = false) {
+      timeWindowSeconds = sec;
+      const standardKeys = [600, 3600, 86400, 604800, 'all'];
+      standardKeys.forEach(k => {
+        const btn = document.getElementById(k === 'all' ? 'btnWin_all' : `btnWin_${k}`);
+        if (!btn) return;
+        const isSelected = !isCustom && ((k === 'all' && sec >= 9000000) || (k === sec));
+        if (isSelected) {
+          btn.className = 'px-2 py-0.5 rounded bg-scada-elevated text-sky-400 font-bold border border-scada-border transition';
+        } else {
+          btn.className = 'px-2 py-0.5 rounded text-slate-400 hover:text-white transition';
+        }
+      });
+
+      const customBtn = document.getElementById('btnWin_custom');
+      if (customBtn) {
+        if (isCustom) {
+          customBtn.className = 'px-1.5 py-0.5 rounded bg-scada-elevated text-sky-400 font-bold border border-scada-border transition';
+        } else {
+          customBtn.className = 'px-1.5 py-0.5 rounded text-slate-400 hover:text-sky-300 transition';
+        }
+      }
+
+      let labelStr = '';
+      if (sec >= 9000000) labelStr = 'Todo el ensayo';
+      else if (sec >= 86400) labelStr = `${(sec / 86400).toFixed(1)} días`;
+      else if (sec >= 3600) labelStr = `${(sec / 3600).toFixed(1)} horas`;
+      else if (sec >= 60) labelStr = `${Math.round(sec / 60)} min`;
+      else labelStr = `${sec} s`;
+
+      updateChartsDisplay();
+      addEventLog(`Ventana temporal configurada: ${labelStr}`, 'sky');
+    }
+
+    function openCustomWindowModal() {
+      document.getElementById('customWindowModal').classList.remove('hidden');
+    }
+
+    function closeCustomWindowModal() {
+      document.getElementById('customWindowModal').classList.add('hidden');
+    }
+
+    function applyCustomWindow() {
+      const val = parseFloat(document.getElementById('customWindowVal').value) || 10;
+      const unit = document.getElementById('customWindowUnit').value;
+      let multiplier = 60;
+      if (unit === 's') multiplier = 1;
+      else if (unit === 'm') multiplier = 60;
+      else if (unit === 'h') multiplier = 3600;
+      else if (unit === 'd') multiplier = 86400;
+
+      const totalSec = Math.max(5, Math.round(val * multiplier));
+      setTimeWindow(totalSec, true);
+      closeCustomWindowModal();
+    }
+
+    function setTimeAxisMode(mode) {
+      chartTimeMode = mode;
+      const btnRel = document.getElementById('btnTimeRelative');
+      const btnClk = document.getElementById('btnTimeClock');
+      if (mode === 'relative') {
+        btnRel.className = 'px-2.5 py-1 rounded bg-scada-elevated text-sky-400 font-bold border border-scada-border transition';
+        btnClk.className = 'px-2.5 py-1 rounded text-slate-400 hover:text-white transition';
+      } else {
+        btnClk.className = 'px-2.5 py-1 rounded bg-scada-elevated text-sky-400 font-bold border border-scada-border transition';
+        btnRel.className = 'px-2.5 py-1 rounded text-slate-400 hover:text-white transition';
+      }
+      updateChartsDisplay();
+      addEventLog(`Eje de tiempo cambiado a: ${mode === 'relative' ? 'Relativo (+MM:SS)' : 'Hora Reloj RTC (GMT-5)'}`, 'sky');
+    }
+
+    // Inicializar 258 puntos basales realistas desde t=0 hasta t=258 (C* = 7.15 mg/L)
+    const baseEpoch = Date.now() - (258 * 1000);
+    let simDo = 6.95;
+    for (let i = 0; i <= 258; i++) {
+      const tEpoch = baseEpoch + (i * 1000);
+      const relS = i;
+
+      let rpm = 0;
+      let mix = 0;
+      let pmp = 0;
+
+      if (i < 45) {
+        // Fase 1: Pre-condicionamiento / Mezcla inicial cerca de saturación (7.15 mg/L)
+        simDo = 6.95 + (Math.sin(i / 8) * 0.04);
+        mix = 1200;
+      } else if (i < 90) {
+        // Fase 2: Inyección de sulfito en t=45 y desoxigenación rápida
+        pmp = 12.5;
+        mix = 1200;
+        const decayProgress = (i - 45) / 45;
+        simDo = 6.95 - (decayProgress * 3.75) + (Math.random() * 0.03 - 0.015);
+      } else {
+        // Fase 3: Escalón ODrive a 210 RPM en t=90 y reoxigenación ASCE hacia C* = 7.15 mg/L
+        rpm = 210;
+        mix = 0;
+        pmp = 12.5;
+        const tStep = i - 90;
+        const kla_sim = 0.00134; // s^-1 (~4.82 h^-1)
+        simDo = C_STAR_REAL - ((C_STAR_REAL - 3.20) * Math.exp(-kla_sim * tStep)) + (Math.random() * 0.03 - 0.015);
+      }
+
+      simDo = Math.max(2.1, Math.min(C_STAR_REAL, simDo));
+      const pwr = Number(((rpm / 600) * 110 + (Math.random() * 1.5 - 0.75)).toFixed(1));
+      const curr = Number((pwr > 0 ? (pwr / 24) + (Math.random() * 0.06 - 0.03) : 0).toFixed(2));
+      const volt = Number((24.12 + (Math.random() * 0.1 - 0.05)).toFixed(2));
+      const tmp = Number((24.08 + (Math.random() * 0.02 - 0.01)).toFixed(2));
+      const err = Number((6.00 - simDo).toFixed(2));
+
+      dataHistory.push({
+        epochMs: tEpoch,
+        relSec: relS,
+        do: Number(simDo.toFixed(2)),
+        rpm: rpm,
+        odriveRpm: rpm,
+        power: pwr,
+        current: curr,
+        voltage: volt,
+        mixerRpm: mix,
+        temp: tmp,
+        pumpVol: pmp,
+        error: err
+      });
+    }
+    currentDo = simDo;
+
+    // --- CONFIGURACIÓN GLOBAL DE TIPOGRAFÍA DE GRÁFICAS (Inter 100% Coherente con Tailwind UI) ---
+    Chart.defaults.font.family = "'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+
+    // --- GRÁFICA PRINCIPAL: Dinámica de DO y ODrive + Hitos como Puntos ---
+    const scadaChart = new Chart(ctx, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          {
+            label: 'Oxígeno Disuelto (mg/L)',
+            data: [],
+            borderColor: '#38bdf8',
+            backgroundColor: 'rgba(56, 189, 248, 0.08)',
+            fill: true,
+            yAxisID: 'yDO',
+            tension: 0.3,
+            borderWidth: 2,
+            pointRadius: 0, // Ocultar puntos en variables normales (línea continua)
+            pointHoverRadius: 5, // Mostrar solo al pasar el cursor
+            pointHitRadius: 8
+          },
+          {
+            label: 'Velocidad ODrive (RPM)',
+            data: [],
+            borderColor: '#f59e0b',
+            borderDash: [3, 3],
+            stepped: true,
+            yAxisID: 'yRPM',
+            borderWidth: 1.5,
+            pointRadius: 0, // Ocultar puntos en variables normales
+            pointHoverRadius: 5,
+            pointHitRadius: 8
+          },
+          // CAPA DE EVENTOS / HITOS: Visible como puntos limpios y discretos en la curva
+          {
+            label: 'Hitos del Ensayo',
+            data: [],
+            borderColor: '#ffffff',
+            backgroundColor: '#c084fc',
+            pointBackgroundColor: '#c084fc',
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 1.5,
+            showLine: false, // Solo puntos de dispersión sobre la curva
+            pointRadius: 4, // Pequeño y no invasivo (no obstruye la vista)
+            pointHoverRadius: 6.5,
+            pointHitRadius: 10,
+            pointStyle: 'circle', // Círculo sutil en lugar de triángulo voluminoso
+            yAxisID: 'yDO',
+            order: 0
+          }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 150 },
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: {
+            grid: { color: 'rgba(28, 36, 54, 0.6)' },
+            ticks: {
+              color: '#64748b',
+              font: { family: 'Inter', size: 10 },
+              autoSkip: true,
+              maxTicksLimit: 8,
+              maxRotation: 0
+            }
+          },
+          yDO: {
+            type: 'linear',
+            position: 'left',
+            min: 2,
+            max: 8,
+            title: { display: true, text: 'DO (mg/L)', color: '#38bdf8', font: { family: 'Inter', size: 11, weight: 'bold' } },
+            grid: { color: 'rgba(28, 36, 54, 0.4)' },
+            ticks: { color: '#94a3b8', font: { family: 'Inter', size: 10 } }
+          },
+          yRPM: {
+            type: 'linear',
+            position: 'right',
+            min: 0,
+            max: 600,
+            title: { display: true, text: 'Velocidad (RPM)', color: '#f59e0b', font: { family: 'Inter', size: 11, weight: 'bold' } },
+            grid: { display: false },
+            ticks: { color: '#f59e0b', font: { family: 'Inter', size: 10 } }
+          }
+        },
+        plugins: {
+          legend: {
+            labels: { color: '#cbd5e1', font: { family: 'Inter', size: 11 }, boxWidth: 12 }
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                if (context.datasetIndex === 2) {
+                  const pt = currentVisibleData[context.dataIndex];
+                  if (pt) {
+                    const m = milestonesList.find(item => item.relSec === pt.relSec);
+                    if (m) {
+                      return `📍 Hito: ${m.label} — ${m.detail} (${m.do.toFixed(2)} mg/L)`;
+                    }
+                  }
+                  return `📍 Hito documentado (${context.parsed.y} mg/L)`;
+                }
+                return `${context.dataset.label}: ${context.parsed.y}`;
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // --- GRÁFICA SECUNDARIA: Inspector Multivariable Libre ---
+    // REGLA DE EJES OPUESTOS:
+    // - ODrive RPM en yLeft, Mezclador PI RPM en yRight
+    // - DO (mg/L) en yLeft, Temperatura Agua (°C) en yRight
+    // - Tensión Bus (V) en yLeft, Corriente Bus (A) en yRight
+    // - Puntos normales ocultos (pointRadius: 0, pointHoverRadius: 5)
+    const secondaryChart = new Chart(ctxSec, {
+      type: 'line',
+      data: {
+        labels: [],
+        datasets: [
+          // Eje Izquierdo (yLeft): Potencia, Tensión, ODrive RPM, Oxígeno Disuelto DO
+          { id: 'power', unitLabel: 'Potencia (W)', label: 'Potencia ODrive (W)', data: [], borderColor: '#fb923c', backgroundColor: 'rgba(251,146,60,0.06)', borderWidth: 2, pointRadius: 0, pointHoverRadius: 5, pointHitRadius: 8, tension: 0.2, yAxisID: 'yLeft', hidden: false },
+          { id: 'voltage', unitLabel: 'Tensión (V)', label: 'Tensión Bus (V)', data: [], borderColor: '#10b981', borderWidth: 1.8, pointRadius: 0, pointHoverRadius: 5, pointHitRadius: 8, tension: 0.1, yAxisID: 'yLeft', hidden: true },
+          { id: 'odriveRpm', unitLabel: 'ODrive (RPM)', label: 'Velocidad ODrive (RPM)', data: [], borderColor: '#f59e0b', borderDash: [2, 2], borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 5, pointHitRadius: 8, tension: 0.2, yAxisID: 'yLeft', hidden: true },
+          { id: 'do', unitLabel: 'DO (mg/L)', label: 'Oxígeno Disuelto (mg/L)', data: [], borderColor: '#38bdf8', borderWidth: 2, pointRadius: 0, pointHoverRadius: 5, pointHitRadius: 8, tension: 0.3, yAxisID: 'yLeft', hidden: true },
+
+          // Eje Derecho (yRight): Corriente (opuesto a Tensión), Mezclador (opuesto a ODrive), Temp (opuesto a DO), Bomba, Error e(t)
+          { id: 'current', unitLabel: 'Corriente (A)', label: 'Corriente Bus (A)', data: [], borderColor: '#facc15', borderDash: [4, 3], borderWidth: 1.8, pointRadius: 0, pointHoverRadius: 5, pointHitRadius: 8, tension: 0.2, yAxisID: 'yRight', hidden: false },
+          { id: 'mixerRpm', unitLabel: 'Mezclador (RPM)', label: 'Mezclador PI (RPM)', data: [], borderColor: '#14b8a6', borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 5, pointHitRadius: 8, tension: 0.2, yAxisID: 'yRight', hidden: true },
+          { id: 'temp', unitLabel: 'Temp (°C)', label: 'Temperatura Agua (°C)', data: [], borderColor: '#60a5fa', borderWidth: 1.5, pointRadius: 0, pointHoverRadius: 5, pointHitRadius: 8, tension: 0.2, yAxisID: 'yRight', hidden: true },
+          { id: 'pumpVol', unitLabel: 'Bomba (mL)', label: 'Volumen Na₂SO₃ (mL)', data: [], borderColor: '#a855f7', borderWidth: 2, pointRadius: 0, pointHoverRadius: 5, pointHitRadius: 8, stepped: true, yAxisID: 'yRight', hidden: true },
+          { id: 'error', unitLabel: 'Error e(t) (mg/L)', label: 'Error e(t) = SP - DO (mg/L)', data: [], borderColor: '#f43f5e', borderDash: [3, 2], borderWidth: 2, pointRadius: 0, pointHoverRadius: 5, pointHitRadius: 8, tension: 0.2, yAxisID: 'yRight', hidden: true }
+        ]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: { duration: 150 },
+        interaction: { mode: 'index', intersect: false },
+        scales: {
+          x: {
+            grid: { color: 'rgba(28, 36, 54, 0.6)' },
+            ticks: {
+              color: '#64748b',
+              font: { family: 'Inter', size: 10 },
+              autoSkip: true,
+              maxTicksLimit: 8,
+              maxRotation: 0
+            }
+          },
+          yLeft: {
+            type: 'linear',
+            position: 'left',
+            display: true,
+            grid: { color: 'rgba(28, 36, 54, 0.4)' },
+            ticks: { color: '#cbd5e1', font: { family: 'Inter', size: 10 } },
+            title: { display: true, text: 'Potencia (W)', color: '#cbd5e1', font: { family: 'Inter', size: 10, weight: 'bold' } }
+          },
+          yRight: {
+            type: 'linear',
+            position: 'right',
+            display: true,
+            grid: { display: false },
+            ticks: { color: '#facc15', font: { family: 'Inter', size: 10 } },
+            title: { display: true, text: 'Corriente (A)', color: '#facc15', font: { family: 'Inter', size: 10, weight: 'bold' } }
+          }
+        },
+        plugins: {
+          legend: {
+            display: false // Los pills interactivos superiores actúan como leyenda autoritativa
+          }
+        }
+      }
+    });
+    window.secondaryChart = secondaryChart;
+
+    // Actualiza títulos y visibilidad de ejes en la gráfica secundaria dinámicamente
+    function updateSecondaryAxisTitles() {
+      if (!window.secondaryChart) return;
+      const visible = secondaryChart.data.datasets.filter(ds => !ds.hidden);
+      const leftVis = visible.filter(ds => ds.yAxisID === 'yLeft');
+      const rightVis = visible.filter(ds => ds.yAxisID === 'yRight');
+
+      // Eje Izquierdo
+      if (leftVis.length === 0) {
+        secondaryChart.options.scales.yLeft.display = false;
+      } else {
+        secondaryChart.options.scales.yLeft.display = true;
+        secondaryChart.options.scales.yLeft.title.display = true;
+        secondaryChart.options.scales.yLeft.title.text = leftVis.map(ds => ds.unitLabel).join(' • ');
+      }
+
+      // Eje Derecho
+      if (rightVis.length === 0) {
+        secondaryChart.options.scales.yRight.display = false;
+      } else {
+        secondaryChart.options.scales.yRight.display = true;
+        secondaryChart.options.scales.yRight.title.display = true;
+        secondaryChart.options.scales.yRight.title.text = rightVis.map(ds => ds.unitLabel).join(' • ');
+      }
+    }
+
+    // Refrescar ambas gráficas aplicando el slice de ventana temporal configurado
+    function updateChartsDisplay() {
+      const sliceCount = timeWindowSeconds >= 9000000 ? dataHistory.length : Math.min(dataHistory.length, timeWindowSeconds);
+      const visibleData = dataHistory.slice(-sliceCount);
+      currentVisibleData = visibleData;
+      const labels = visibleData.map(d => formatTimeLabel(d.epochMs, d.relSec));
+
+      // Gráfica Principal: DO, RPM de ODrive y capa de Hitos
+      scadaChart.data.labels = labels;
+      scadaChart.data.datasets[0].data = visibleData.map(d => d.do);
+      scadaChart.data.datasets[1].data = visibleData.map(d => d.rpm);
+      
+      // Mapear hitos: coincidencia exacta por segundo para evitar puntos triplicados
+      scadaChart.data.datasets[2].data = visibleData.map(d => {
+        const m = milestonesList.find(item => item.relSec === d.relSec);
+        return m ? d.do : null;
+      });
+      scadaChart.update('none');
+
+      // Gráfica Secundaria
+      if (window.secondaryChart) {
+        secondaryChart.data.labels = labels;
+        secondaryChart.data.datasets.forEach(ds => {
+          ds.data = visibleData.map(d => d[ds.id]);
+        });
+        updateSecondaryAxisTitles();
+        secondaryChart.update('none');
+      }
+    }
+
+    function toggleSecondaryVar(varKey, isChecked) {
+      const ds = secondaryChart.data.datasets.find(d => d.id === varKey);
+      if (ds) {
+        ds.hidden = !isChecked;
+        updateSecondaryAxisTitles();
+        secondaryChart.update('none');
+      }
+    }
+
+    function setSecondaryPreset(preset) {
+      const configs = {
+        'power_current': ['power', 'current'],      // Potencia (Izq) vs Corriente (Der)
+        'voltage_current': ['voltage', 'current'],  // Tensión (Izq) vs Corriente (Der) - Opuestos
+        'motors': ['odriveRpm', 'mixerRpm'],        // ODrive (Izq) vs Mezclador (Der) - Opuestos
+        'water_quality': ['do', 'temp'],            // DO (Izq) vs Temp (Der) - Opuestos
+        'error_control': ['error', 'power']
+      };
+      const activeList = configs[preset] || ['power', 'current'];
+      const allKeys = ['power', 'voltage', 'odriveRpm', 'mixerRpm', 'current', 'do', 'temp', 'pumpVol', 'error'];
+      allKeys.forEach(k => {
+        const chk = document.getElementById(`chk_var_${k}`);
+        const isActive = activeList.includes(k);
+        if (chk) chk.checked = isActive;
+        const ds = secondaryChart.data.datasets.find(d => d.id === k);
+        if (ds) ds.hidden = !isActive;
+      });
+      updateSecondaryAxisTitles();
+      secondaryChart.update('none');
+      addEventLog(`Preset de gráfica secundaria: ${preset}`, 'emerald');
+    }
+
+    // Modal / Panel de Configuración de Ejes
+    function toggleAxisConfigModal() {
+      const panel = document.getElementById('axisConfigPanel');
+      if (panel) panel.classList.toggle('hidden');
+    }
+
+    function toggleAxisAutoScale(side, isAuto) {
+      const box = document.getElementById(side === 'left' ? 'axisLeftManualBox' : 'axisRightManualBox');
+      if (box) box.classList.toggle('hidden', isAuto);
+    }
+
+    function applyAxisScales() {
+      const leftAuto = document.getElementById('axisLeftAuto').checked;
+      const rightAuto = document.getElementById('axisRightAuto').checked;
+
+      if (!leftAuto) {
+        const minL = parseFloat(document.getElementById('axisLeftMin').value) || 0;
+        const maxL = parseFloat(document.getElementById('axisLeftMax').value) || 600;
+        secondaryChart.options.scales.yLeft.min = minL;
+        secondaryChart.options.scales.yLeft.max = maxL;
+      } else {
+        delete secondaryChart.options.scales.yLeft.min;
+        delete secondaryChart.options.scales.yLeft.max;
+      }
+
+      if (!rightAuto) {
+        const minR = parseFloat(document.getElementById('axisRightMin').value) || 0;
+        const maxR = parseFloat(document.getElementById('axisRightMax').value) || 15;
+        secondaryChart.options.scales.yRight.min = minR;
+        secondaryChart.options.scales.yRight.max = maxR;
+      } else {
+        delete secondaryChart.options.scales.yRight.min;
+        delete secondaryChart.options.scales.yRight.max;
+      }
+
+      secondaryChart.update('none');
+      toggleAxisConfigModal();
+      addEventLog('Escalas de ejes aplicadas en gráfica secundaria', 'sky');
+    }
+
+    // Bucle de Simulación a 1.0 Hz (Sincronizado)
+    setInterval(() => {
+      const now = new Date();
+      document.getElementById('rtcClock').innerText = now.toTimeString().split(' ')[0] + '.' + Math.floor(now.getMilliseconds() / 10).toString().padStart(2, '0');
+
+      if (!isExperimentRunning) {
+        return; // Ensayo pausado o en espera
+      }
+
+      elapsedSec++;
+
+      const hh = Math.floor(elapsedSec / 3600).toString().padStart(2, '0');
+      const mm = Math.floor((elapsedSec % 3600) / 60).toString().padStart(2, '0');
+      const ss = (elapsedSec % 60).toString().padStart(2, '0');
+      document.getElementById('experimentTimer').innerText = `${hh}:${mm}:${ss}`;
+
+      if (isMotorRunning && targetRpm > 0) {
+        // Dinámica física: kLa · (C* - C) con saturación real de banco C* = 7.15 mg/L
+        const kla_s = (targetRpm / 600) * 0.00134; // s^-1
+        const delta = kla_s * (C_STAR_REAL - currentDo);
+        currentDo = Math.min(C_STAR_REAL, currentDo + delta);
+      }
+
+      const noisyDo = Number((currentDo + (Math.random() * 0.02 - 0.01)).toFixed(2));
+      document.getElementById('kpiDoValue').innerText = noisyDo.toFixed(2);
+      document.getElementById('kpiSatValue').innerText = ((noisyDo / C_STAR_REAL) * 100).toFixed(1);
+
+      // Tacómetro del mezclador PI con ruido de cuantización
+      if (mixerTargetRpm > 0) {
+        mixerMeasuredRpm = Math.round(mixerTargetRpm + (Math.random() * 8 - 4));
+      } else {
+        mixerMeasuredRpm = 0;
+      }
+      document.getElementById('mixerMeasuredRpmText').innerText = `${mixerMeasuredRpm} RPM`;
+
+      // Cálculos físicos derivados para el inspector multivariable
+      const curPower = Number((isMotorRunning ? (targetRpm / 600) * 110 + (Math.random() * 1.5 - 0.75) : 0).toFixed(1));
+      const curCurrent = Number((curPower > 0 ? (curPower / 24) + (Math.random() * 0.06 - 0.03) : 0).toFixed(2));
+      const curVoltage = Number((24.12 + (Math.random() * 0.1 - 0.05)).toFixed(2));
+      const curTemp = Number((24.08 + (Math.random() * 0.02 - 0.01)).toFixed(2));
+      const curPump = 12.5;
+      const curError = Number((6.00 - noisyDo).toFixed(2));
+
+      const newRecord = {
+        epochMs: now.getTime(),
+        relSec: elapsedSec,
+        do: noisyDo,
+        rpm: isMotorRunning ? targetRpm : 0,
+        odriveRpm: isMotorRunning ? targetRpm : 0,
+        power: curPower,
+        current: curCurrent,
+        voltage: curVoltage,
+        mixerRpm: mixerMeasuredRpm,
+        temp: curTemp,
+        pumpVol: curPump,
+        error: curError
+      };
+
+      dataHistory.push(newRecord);
+      if (dataHistory.length > 10000) {
+        dataHistory.shift();
+      }
+
+      updateChartsDisplay();
+    }, 1000);
+
+    // ODrive Motor Controls
+    function updateMotorRpm(rpm) {
+      targetRpm = Number(rpm);
+      document.getElementById('sliderRpmText').innerText = `${targetRpm} RPM`;
+      document.getElementById('kpiMotorRpm').innerText = targetRpm;
+      document.getElementById('kpiMotorSpeedPct').innerText = `${((targetRpm / 600) * 100).toFixed(1)}%`;
+      const watts = ((targetRpm / 600) * 110).toFixed(1);
+      document.getElementById('kpiMotorPower').innerText = `${watts} W`;
+      document.getElementById('odrivePowerText').innerText = `${watts} W`;
+
+      // Update estimated kLa dynamically with RPM
+      const estKla = ((targetRpm / 600) * 4.82).toFixed(2);
+      document.getElementById('kpiKlaValue').innerText = estKla;
+    }
+
+    function setRpmPreset(rpm) {
+      document.getElementById('odriveRpmSlider').value = rpm;
+      updateMotorRpm(rpm);
+    }
+
+    function toggleMotorPower(checked) {
+      isMotorRunning = checked;
+      const statusBadge = document.getElementById('kpiMotorStatus');
+      if (checked) {
+        statusBadge.className = 'text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-400 border border-amber-800';
+        statusBadge.innerText = 'EN MARCHA';
+      } else {
+        statusBadge.className = 'text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700';
+        statusBadge.innerText = 'APAGADO';
+      }
+    }
+
+    // Mixer PI Closed-Loop Velocity Controller
+    function updateMixerSpeed(rpm) {
+      mixerTargetRpm = Number(rpm);
+      document.getElementById('mixerTargetRpmText').innerText = `${mixerTargetRpm} RPM`;
+      const badge = document.getElementById('mixerPiBadge');
+      if (mixerTargetRpm === 0) {
+        badge.innerText = 'STOPPED';
+        badge.className = 'text-[9px] font-mono text-slate-400 px-1.5 py-0.5 rounded bg-scada-elevated border border-scada-border';
+      } else {
+        badge.innerText = 'PI CLOSED-LOOP';
+        badge.className = 'text-[9px] font-mono text-teal-300 px-1.5 py-0.5 rounded bg-teal-950/80 border border-teal-800';
+      }
+    }
+
+    function setMixerPreset(rpm) {
+      document.getElementById('mixerRpmSlider').value = rpm;
+      updateMixerSpeed(rpm);
+    }
+
+    // Emergency Stop
+    let isEStopActive = false;
+    function toggleEStop() {
+      isEStopActive = true;
+      isMotorRunning = false;
+      targetRpm = 0;
+      updateMotorRpm(0);
+      document.getElementById('odriveToggle').checked = false;
+      toggleMotorPower(false);
+
+      // Parar Mezclador PI
+      updateMixerSpeed(0);
+      document.getElementById('mixerRpmSlider').value = 0;
+
+      document.getElementById('estopBanner').classList.remove('hidden');
+      document.getElementById('orchestratorBadge').className = 'text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-rose-950 text-rose-400 border border-rose-800 flex items-center gap-1';
+      document.getElementById('orchestratorText').innerText = 'E-STOP LAT';
+      
+      addEventLog('PARADA DE EMERGENCIA: Todos los actuadores detenidos', 'red');
+    }
+
+    function resetEStop() {
+      isEStopActive = false;
+      document.getElementById('estopBanner').classList.add('hidden');
+      document.getElementById('orchestratorBadge').className = 'text-[10px] font-bold uppercase px-2 py-0.5 rounded bg-emerald-950/80 text-emerald-400 border border-emerald-800 flex items-center gap-1';
+      document.getElementById('orchestratorText').innerText = 'EXP ACTIVO';
+      addEventLog('Enclavamiento liberado por el operador', 'emerald');
+    }
+
+    // Modals
+    function openMilestoneModal() {
+      document.getElementById('modalCurrentT').innerText = `t=${document.getElementById('experimentTimer').innerText}`;
+      document.getElementById('milestoneModal').classList.remove('hidden');
+    }
+    function closeMilestoneModal() {
+      document.getElementById('milestoneModal').classList.add('hidden');
+    }
+
+    function openKlaExplanationModal() {
+      document.getElementById('klaExplanationModal').classList.remove('hidden');
+    }
+    function closeKlaExplanationModal() {
+      document.getElementById('klaExplanationModal').classList.add('hidden');
+    }
+
+    function openHistoryModal() {
+      document.getElementById('historyModal').classList.remove('hidden');
+      document.getElementById('downloadDropdownMenu').classList.add('hidden');
+    }
+    function closeHistoryModal() {
+      document.getElementById('historyModal').classList.add('hidden');
+    }
+
+    function confirmMilestone() {
+      const type = document.getElementById('milestoneType').value;
+      const detail = document.getElementById('milestoneDetail').value;
+
+      const typeTitles = {
+        sulfite: 'Inyección Na₂SO₃',
+        step: 'Escalón de Motor',
+        winkler: 'Titulación Winkler',
+        note: 'Nota Operador'
+      };
+
+      // Registrar hito en el buffer con coincidencia exacta (evita duplicados en el mismo segundo)
+      const existingIdx = milestonesList.findIndex(m => m.relSec === elapsedSec);
+      const newEntry = {
+        relSec: elapsedSec,
+        label: typeTitles[type] || 'Hito',
+        detail: detail,
+        type: type,
+        do: currentDo
+      };
+      if (existingIdx >= 0) {
+        milestonesList[existingIdx] = newEntry;
+      } else {
+        milestonesList.push(newEntry);
+      }
+
+      if (type === 'sulfite') {
+        currentDo = Math.max(2.1, currentDo - 0.9);
+        addEventLog(`Inyección Na₂SO₃: ${detail}`, 'purple');
+      } else if (type === 'step') {
+        addEventLog(`Escalón de Motor: ${detail}`, 'amber');
+      } else {
+        addEventLog(`Hito: ${detail}`, 'sky');
+      }
+
+      updateChartsDisplay();
+      closeMilestoneModal();
+    }
+
+    function triggerDose() {
+      const vol = document.getElementById('doseVolumeInput').value;
+      currentDo = Math.max(2.1, currentDo - 0.7);
+      addEventLog(`Dosificación Bomba: ${vol} mL Na₂SO₃`, 'purple');
+    }
+
+    function addEventLog(msg, color) {
+      const container = document.getElementById('eventLogContainer');
+      const timeStr = `t=${document.getElementById('experimentTimer').innerText.slice(3)}`;
+      const rtcStr = document.getElementById('rtcClock').innerText.slice(0, 8);
+
+      const colorMap = {
+        'purple': 'bg-purple-950/80 text-purple-300 border-purple-800',
+        'red': 'bg-rose-950/80 text-rose-300 border-rose-800',
+        'emerald': 'bg-emerald-950/80 text-emerald-300 border-emerald-800',
+        'amber': 'bg-amber-950/80 text-amber-300 border-amber-800',
+        'sky': 'bg-sky-950/80 text-sky-300 border-sky-800'
+      };
+
+      const row = document.createElement('div');
+      row.className = 'p-2 rounded bg-scada-well border border-scada-border flex items-center justify-between';
+      row.innerHTML = `
+        <div class="flex items-center gap-2">
+          <span class="px-1.5 py-0.5 rounded ${colorMap[color] || colorMap['sky']} text-[10px]">${timeStr}</span>
+          <span class="text-slate-300">${msg}</span>
+        </div>
+        <span class="text-[10px] text-slate-500 font-mono">RTC ${rtcStr}</span>
+      `;
+      container.prepend(row);
+    }
+
+    /* ===================================================================
+       PHASE ENGINE — Renderiza las fases por protocolo con toggles de modo
+       =================================================================== */
+    const PHASE_MODES = {}; // {phaseId: 'auto'|'manual'|'hibrido'}
+
+    function modeBtn(phaseId, mode, label) {
+      const colors = {
+        auto:    'bg-emerald-950/80 text-emerald-400 border-emerald-700',
+        manual:  'bg-amber-950/80 text-amber-400 border-amber-700',
+        hibrido: 'bg-sky-950/80 text-sky-400 border-sky-700',
+        off:     'bg-scada-elevated text-slate-400 border-scada-border'
+      };
+      return `<button onclick="setPhaseMode('${phaseId}','${mode}')" id="modeBtn_${phaseId}_${mode}"
+        class="modeBtn flex-1 py-1 text-[10px] font-bold rounded border font-mono transition-all ${colors[mode]}">${label}</button>`;
+    }
+
+    function setPhaseMode(phaseId, mode) {
+      PHASE_MODES[phaseId] = mode;
+      // Actualizar botones de modo
+      ['auto','manual','hibrido'].forEach(m => {
+        const btn = document.getElementById(`modeBtn_${phaseId}_${m}`);
+        if (!btn) return;
+        const colors = {
+          auto:    'bg-emerald-950/80 text-emerald-400 border-emerald-700',
+          manual:  'bg-amber-950/80 text-amber-400 border-amber-700',
+          hibrido: 'bg-sky-950/80 text-sky-400 border-sky-700'
+        };
+        if (m === mode) {
+          btn.className = `modeBtn flex-1 py-1 text-[10px] font-bold rounded border font-mono transition-all ${colors[m]} ring-1 ring-offset-1 ring-offset-scada-canvas ring-current shadow-sm`;
+        } else {
+          btn.className = `modeBtn flex-1 py-1 text-[10px] font-bold rounded border font-mono transition-all bg-scada-elevated text-slate-400 border-scada-border hover:text-slate-200`;
+        }
+      });
+      // Alternar visualmente los 3 pies de tarjeta diferenciados
+      const fAuto = document.getElementById(`footer_auto_${phaseId}`);
+      const fHibrido = document.getElementById(`footer_hibrido_${phaseId}`);
+      const fManual = document.getElementById(`footer_manual_${phaseId}`);
+      if (fAuto) fAuto.classList.toggle('hidden', mode !== 'auto');
+      if (fHibrido) fHibrido.classList.toggle('hidden', mode !== 'hibrido');
+      if (fManual) fManual.classList.toggle('hidden', mode !== 'manual');
+    }
+
+    function confirmPhase(id) {
+      addEventLog(`Fase completada / confirmada: ${id}`, 'sky');
+      const targetEl = document.getElementById(`confirm_hibrido_${id}`) || document.getElementById(`footer_manual_${id}`);
+      if (targetEl) {
+        targetEl.innerHTML = '<div class="text-[11px] text-emerald-400 font-mono text-center py-1.5 bg-emerald-950/50 rounded border border-emerald-800">✓ Confirmado por operador — Avanzando fase…</div>';
+      }
+    }
+
+    function triggerManualAction(id) {
+      addEventLog(`Acción manual ejecutada por el operador en: ${id}`, 'amber');
+      const statusBadge = document.getElementById(`status_badge_${id}`);
+      if (statusBadge) {
+        statusBadge.className = 'text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-950/80 text-amber-400 border border-amber-800';
+        statusBadge.innerText = 'EJECUTANDO';
+      }
+    }
+
+    function phaseCard({id, num, title, status, desc, icon, accentColor, params, condition, defaultMode}) {
+      const accentMap = {
+        sky:    {dot:'bg-sky-400',    badge:'bg-sky-950/80 text-sky-400 border-sky-800'},
+        amber:  {dot:'bg-amber-400',  badge:'bg-amber-950/80 text-amber-400 border-amber-800'},
+        teal:   {dot:'bg-teal-400',   badge:'bg-teal-950/80 text-teal-400 border-teal-800'},
+        purple: {dot:'bg-purple-400', badge:'bg-purple-950/80 text-purple-400 border-purple-800'},
+        emerald:{dot:'bg-emerald-400',badge:'bg-emerald-950/80 text-emerald-400 border-emerald-800'},
+        slate:  {dot:'bg-slate-400',  badge:'bg-slate-800 text-slate-300 border-slate-700'},
+      };
+      const ac = accentMap[accentColor] || accentMap.sky;
+      const statusColors = {
+        activo: 'bg-emerald-950/80 text-emerald-400 border border-emerald-800',
+        espera: 'bg-slate-800 text-slate-400 border border-slate-700',
+        completado: 'bg-sky-950/80 text-sky-400 border border-sky-800',
+        ejecutando: 'bg-amber-950/80 text-amber-400 border border-amber-800',
+      };
+
+      PHASE_MODES[id] = PHASE_MODES[id] || defaultMode || 'auto';
+      const currentMode = PHASE_MODES[id];
+
+      return `
+      <div class="border border-scada-border rounded-xl overflow-hidden bg-scada-canvas shadow-sm">
+        <!-- Barra de encabezado de fase -->
+        <div class="flex items-center justify-between px-3 py-2 bg-scada-surface border-b border-scada-border cursor-pointer hover:bg-scada-elevated/60 transition" onclick="togglePhaseBody('${id}')">
+          <div class="flex items-center gap-2">
+            <span class="font-mono text-[10px] font-bold text-slate-500 bg-scada-well px-1.5 py-0.5 rounded border border-scada-border">${num}</span>
+            <span class="${ac.dot} w-2 h-2 rounded-full flex-shrink-0"></span>
+            <span class="text-xs font-bold text-slate-100">${title}</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span id="status_badge_${id}" class="text-[10px] font-mono px-1.5 py-0.5 rounded ${statusColors[status] || statusColors.espera}">${status.toUpperCase()}</span>
+            <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-500"></i>
+          </div>
+        </div>
+
+        <!-- Cuerpo de la fase -->
+        <div id="phaseBody_${id}" class="p-3 space-y-3">
+          
+          <!-- Descripción del objetivo físico/químico -->
+          ${desc ? `<div class="p-2 rounded bg-scada-well/80 border border-scada-border text-[11px] text-slate-400 leading-relaxed font-sans">${desc}</div>` : ''}
+
+          <!-- Selector de Modo Tripartito -->
+          <div>
+            <div class="flex items-center justify-between mb-1.5">
+              <span class="text-[10px] text-slate-500 uppercase font-mono tracking-wider">Modo de Operación de la Fase:</span>
+            </div>
+            <div class="flex gap-1.5">
+              ${modeBtn(id,'auto','AUTO')}
+              ${modeBtn(id,'hibrido','HÍBRIDO')}
+              ${modeBtn(id,'manual','MANUAL')}
+            </div>
+          </div>
+
+          <!-- Parámetros específicos -->
+          ${params}
+
+          <!-- Condición de Avance -->
+          <div class="border-t border-scada-border pt-2.5">
+            <div class="text-[10px] text-slate-500 uppercase font-mono mb-1 tracking-wider">Condición para Salir de esta Fase:</div>
+            <div class="text-[11px] text-slate-300 font-mono bg-scada-well rounded px-2.5 py-1.5 border border-scada-border">${condition}</div>
+          </div>
+
+          <!-- PIE DE TARJETA 1: MODO AUTO -->
+          <div id="footer_auto_${id}" class="space-y-1.5 ${currentMode === 'auto' ? '' : 'hidden'}">
+            <div class="p-2 rounded bg-emerald-950/40 border border-emerald-800/60 text-emerald-300 text-[10px] font-mono flex items-center justify-between">
+              <span class="flex items-center gap-1.5"><span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span><strong>Modo Auto:</strong> Orquestador aplica consigna y avanza de fase automáticamente.</span>
+              <span class="text-[9px] bg-emerald-900/60 px-1.5 py-0.5 rounded border border-emerald-700">AUTÓNOMO</span>
+            </div>
+          </div>
+
+          <!-- PIE DE TARJETA 2: MODO HÍBRIDO -->
+          <div id="footer_hibrido_${id}" class="space-y-2 ${currentMode === 'hibrido' ? '' : 'hidden'}">
+            <div class="p-2 rounded bg-sky-950/40 border border-sky-800/60 text-sky-300 text-[10px] font-mono flex items-center justify-between">
+              <span class="flex items-center gap-1.5"><i data-lucide="shield-check" class="w-3.5 h-3.5 text-sky-400"></i><strong>Modo Híbrido:</strong> Al cumplirse la condición, requiere visto bueno del operador.</span>
+              <span class="text-[9px] bg-sky-900/60 px-1.5 py-0.5 rounded border border-sky-700">SUPERVISADO</span>
+            </div>
+            <div id="confirm_hibrido_${id}">
+              <button onclick="confirmPhase('${id}')" class="w-full py-2 bg-sky-600 hover:bg-sky-500 text-white rounded-lg font-bold text-xs flex items-center justify-center gap-1.5 transition active:scale-95 shadow-sm">
+                <i data-lucide="check-circle" class="w-3.5 h-3.5"></i> Visto Bueno / Confirmar y Pasar a Siguiente Fase
+              </button>
+            </div>
+          </div>
+
+          <!-- PIE DE TARJETA 3: MODO MANUAL -->
+          <div id="footer_manual_${id}" class="space-y-2 ${currentMode === 'manual' ? '' : 'hidden'}">
+            <div class="p-2 rounded bg-amber-950/40 border border-amber-800/60 text-amber-300 text-[10px] font-mono flex items-center justify-between">
+              <span class="flex items-center gap-1.5"><i data-lucide="hand" class="w-3.5 h-3.5 text-amber-400"></i><strong>Modo Manual:</strong> Control directo. No avanza automáticamente por umbral.</span>
+              <span class="text-[9px] bg-amber-900/60 px-1.5 py-0.5 rounded border border-amber-700">OPERADOR AL MANDO</span>
+            </div>
+            <div class="grid grid-cols-2 gap-2" id="manual_actions_${id}">
+              <button onclick="triggerManualAction('${id}')" class="py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg font-bold text-xs flex items-center justify-center gap-1 transition active:scale-95">
+                <i data-lucide="zap" class="w-3.5 h-3.5"></i> Disparar Acción
+              </button>
+              <button onclick="confirmPhase('${id}')" class="py-2 bg-scada-elevated hover:bg-slate-700 text-amber-300 border border-amber-500/40 rounded-lg font-bold text-xs flex items-center justify-center gap-1 transition active:scale-95">
+                <i data-lucide="chevrons-right" class="w-3.5 h-3.5"></i> Forzar Avance
+              </button>
+            </div>
+          </div>
+
+        </div>
+      </div>`;
+    }
+
+    function togglePhaseBody(id) {
+      const body = document.getElementById(`phaseBody_${id}`);
+      if (body) body.classList.toggle('hidden');
+    }
+
+    function toggle(id, labelOn, labelOff) {
+      return `<label class="relative inline-flex items-center cursor-pointer">
+        <input type="checkbox" checked class="sr-only peer" id="${id}">
+        <div class="w-7 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-emerald-500"></div>
+        <span class="ml-2 text-[10px] text-slate-400 font-mono" id="${id}Label">${labelOn}</span>
+      </label>`;
+    }
+
+    function numField(id, label, value, unit, min, max, step) {
+      return `<div class="flex items-center justify-between">
+        <span class="text-[11px] text-slate-300">${label}</span>
+        <div class="flex items-center gap-1">
+          <input type="number" id="${id}" value="${value}" min="${min}" max="${max}" step="${step}"
+            class="w-20 bg-scada-well text-slate-100 text-xs font-mono border border-scada-border rounded px-2 py-1 text-right focus:outline-none focus:border-sky-500">
+          <span class="text-[10px] text-slate-500 font-mono">${unit}</span>
+        </div>
+      </div>`;
+    }
+
+    function segSelect(id, label, options) {
+      const opts = options.map(o => `<option value="${o.v}">${o.l}</option>`).join('');
+      return `<div class="flex items-center justify-between">
+        <span class="text-[11px] text-slate-300">${label}</span>
+        <select id="${id}" class="bg-scada-well text-slate-100 text-xs border border-scada-border rounded px-2 py-1 font-mono focus:outline-none focus:border-sky-500 max-w-[210px]">${opts}</select>
+      </div>`;
+    }
+
+    /* =========== PER-PROTOCOL PHASE DEFINITIONS =========== */
+
+    const PROTOCOLS = {
+      planta_1_deox: {
+        filename: 'EXP_01_DEOX.CSV',
+        phases: () => [
+          phaseCard({
+            id:'p1_prep', num:'1', title:'Homogenización del Estanque (Mezcla Previa)', status:'activo', accentColor:'teal',
+            desc: '<strong>Objetivo:</strong> Homogeniza los 87.5 L de agua para eliminar estratificación térmica/DO y asegurar flujo laminar sobre la membrana del sensor Aqualabo OPTOD antes de dosificar reactivos.',
+            defaultMode: 'auto',
+            params: `<div class="space-y-2 text-[11px]">
+              <div class="text-[10px] text-slate-500 uppercase font-mono mb-1 tracking-wider">Parámetros de Homogenización</div>
+              ${numField('p1_mixer_rpm','Mezclador T-200 (Lazo PI)','1200','RPM',200,3000,50)}
+              ${numField('p1_warm_time','Tiempo previo de mezcla','60','s',10,300,10)}
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] text-slate-300">Aireador ODrive</span>
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">0 RPM (APAGADO)</span>
+              </div>
+            </div>`,
+            condition: 'DO estabilizado (|d[DO]/dt| &lt; 0.05 mg/L/min) durante ≥ 30 s'
+          }),
+          phaseCard({
+            id:'p1_dose', num:'2', title:'Dosificación Na₂SO₃ (Bomba Peristáltica)', status:'espera', accentColor:'purple',
+            desc: '<strong>Reacción Química:</strong> 2 Na₂SO₃ + O₂ → 2 Na₂SO₄ (7.878 mg Na₂SO₃ por mg O₂). El cálculo determina el volumen de solución madre (100 g/L) para llevar el estanque al DO piso meta.',
+            defaultMode: 'hibrido',
+            params: `<div class="space-y-2 text-[11px]">
+              <div class="text-[10px] text-slate-500 uppercase font-mono mb-1 tracking-wider">Cálculo de Volumen & Dosificación</div>
+              ${segSelect('p1_dose_mode','Método de Cálculo',[
+                {v:'auto',l:'Estequiométrico (ΔDO × 87.5 L × 7.878)'},
+                {v:'manual',l:'Volumen Fijo Personalizado (mL)'},
+              ])}
+              ${numField('p1_dose_vol','Volumen de solución madre','12.5','mL',0.5,100,0.5)}
+              ${numField('p1_stock_conc','Concentración madre Na₂SO₃','100','g/L',10,200,10)}
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] text-slate-300">Agitación durante inyección</span>
+                ${toggle('p1_mix_during_dose','ACTIVA (Acelera disolución)','DETENIDA')}
+              </div>
+            </div>`,
+            condition: 'Volumen dispensado = objetivo (12.5 mL ± 0.2 mL) registrado por encoder AS5600'
+          }),
+          phaseCard({
+            id:'p1_deox', num:'3', title:'Desoxigenación Química Activa', status:'espera', accentColor:'amber',
+            desc: '<strong>Detección de Fin de Sulfito:</strong> En el estanque real, se sabe que el sulfito se agotó cuando la caída cesa y la pendiente se anula (|d[DO]/dt| &lt; 0.02 mg/L/min durante 30s) y se cumple el tiempo cinético de reacción (&gt; 180 s con cobalto).',
+            defaultMode: 'auto',
+            params: `<div class="space-y-2 text-[11px]">
+              <div class="text-[10px] text-slate-500 uppercase font-mono mb-1 tracking-wider">Monitoreo de Agotamiento de Reactivo</div>
+              ${numField('p1_do_floor','DO piso objetivo','3.0','mg/L',0.5,7.0,0.1)}
+              ${numField('p1_do_timeout','Timeout de seguridad','600','s',60,3600,60)}
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] text-slate-300">Alerta de seguridad si DO &lt; 2.5 mg/L</span>
+                ${toggle('p1_do_alert','ACTIVA','')}
+              </div>
+            </div>`,
+            condition: 'DO &lt; 3.0 mg/L Y Derivada nula (|d[DO]/dt| &lt; 0.02 mg/L/min) Y t &gt; 180 s'
+          }),
+          phaseCard({
+            id:'p1_end', num:'4', title:'Fin de Desoxigenación / Reposo', status:'espera', accentColor:'slate',
+            desc: '<strong>Cierre del Protocolo A:</strong> Desarma la bomba peristáltica y deja el estanque en el estado basal desoxigenado listo para iniciar el Protocolo B (escalón de reoxigenación).',
+            defaultMode: 'auto',
+            params: `<div class="space-y-2 text-[11px]">
+              <div class="text-[10px] text-slate-500 uppercase font-mono mb-1 tracking-wider">Acciones de Transición</div>
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] text-slate-300">Detener Bomba Peristáltica</span>
+                ${toggle('p1_stop_pump','SÍ (Desarmada)','')}
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] text-slate-300">Mantener Mezclador T-200</span>
+                ${toggle('p1_keep_mixer','SÍ (Recomendado)','')}
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] text-slate-300">Continuar serie temporal CSV</span>
+                ${toggle('p1_keep_rec','SÍ','')}
+              </div>
+            </div>`,
+            condition: 'Bomba en reposo — Sistema listo para transicionar a Planta 2'
+          }),
+        ]
+      },
+
+      planta_2_step: {
+        filename: 'EXP_02_STEP.CSV',
+        phases: () => [
+          phaseCard({
+            id:'p2_precond', num:'1', title:'Verificación de Condiciones Iniciales (C₀)', status:'activo', accentColor:'sky',
+            desc: '<strong>Objetivo:</strong> Confirma que el estanque esté desoxigenado (DO inicial C₀ &lt; 3.5 mg/L) y el fluido estabilizado para fijar con precisión el punto inicial (t₀, C₀) antes de aplicar el escalón.',
+            defaultMode: 'hibrido',
+            params: `<div class="space-y-2 text-[11px]">
+              <div class="text-[10px] text-slate-500 uppercase font-mono mb-1 tracking-wider">Límites Iniciales</div>
+              ${numField('p2_do_start_min','DO inicial máximo permitido (C₀)','3.5','mg/L',0.5,6.0,0.1)}
+              ${numField('p2_settle_time','Tiempo de reposo previo','60','s',15,300,15)}
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] text-slate-300">Aireador ODrive</span>
+                <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-800 text-slate-400 border border-slate-700">0 RPM (EN REPOSO)</span>
+              </div>
+            </div>`,
+            condition: 'DO inicial &lt; 3.5 mg/L Y ODrive en 0 RPM durante ≥ 60 s'
+          }),
+          phaseCard({
+            id:'p2_step', num:'2', title:'Escalón de Aireación (Marca t₀)', status:'espera', accentColor:'amber',
+            desc: '<strong>Marca Automática t₀:</strong> Guarda el timestamp RTC en milisegundos en el momento exacto en que el motor arranca, anclando el origen temporal de la regresión ln(C* - C) vs (t - t₀).',
+            defaultMode: 'hibrido',
+            params: `<div class="space-y-2 text-[11px]">
+              <div class="text-[10px] text-slate-500 uppercase font-mono mb-1 tracking-wider">Configuración del Salto</div>
+              ${numField('p2_step_pct','Apertura del escalón ODrive','40','% throttle',0,100,5)}
+              <div class="text-[10px] text-slate-400 font-mono">Consigna estimada: <strong class="text-amber-400"><span id="p2_step_rpm_est">240</span> RPM</strong> (sobre 600 RPM máx)</div>
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] text-slate-300">Marca temporal automática (t₀)</span>
+                ${toggle('p2_auto_t0','SÍ (Timestamp RTC)','')}
+              </div>
+              <!-- Configuración del Mezclador (No forzado, configurable) -->
+              <div class="pt-1.5 border-t border-scada-border space-y-1.5">
+                <div class="flex items-center justify-between">
+                  <div>
+                    <span class="text-[11px] text-slate-200 block">Mezclador T-200 Auxiliar</span>
+                    <span class="text-[9px] text-slate-500">Apagado aísla kLa; encendido para ensayo combinado</span>
+                  </div>
+                  <label class="relative inline-flex items-center cursor-pointer">
+                    <input type="checkbox" id="p2_mixer_enable" onchange="document.getElementById('p2_mixer_rpm_box').classList.toggle('hidden', !this.checked)" class="sr-only peer">
+                    <div class="w-7 h-4 bg-slate-800 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-3 after:w-3 after:transition-all peer-checked:bg-teal-500"></div>
+                  </label>
+                </div>
+                <div id="p2_mixer_rpm_box" class="hidden">
+                  ${numField('p2_mixer_rpm','Consigna Mezclador Auxiliar','600','RPM',100,1500,50)}
+                </div>
+              </div>
+            </div>`,
+            condition: 'ODrive alcanza consigna (240 RPM) y t₀ queda registrado en el log'
+          }),
+          phaseCard({
+            id:'p2_acq', num:'3', title:'Adquisición de Curva de Oxigenación DO(t)', status:'espera', accentColor:'emerald',
+            desc: '<strong>Criterio ASCE:</strong> Se recomienda finalizar al alcanzar el 80-85% de saturación C* (≈ 6.08 mg/L a 7.15 mg/L de saturación), evitando el tramo final asintótico donde d[DO]/dt es muy bajo y susceptible a ruido.',
+            defaultMode: 'auto',
+            params: `<div class="space-y-2 text-[11px]">
+              <div class="text-[10px] text-slate-500 uppercase font-mono mb-1 tracking-wider">Criterio de Parada & Cadencia</div>
+              ${segSelect('p2_stop_crit','Criterio de Parada',[
+                {v:'do_exact',l:'Valor exacto de DO en mg/L (Recomendado)'},
+                {v:'time',  l:'Tiempo máximo transcurrido (s)'},
+              ])}
+              ${numField('p2_stop_do_mg_l','DO meta de corte (Exacto)','6.00','mg/L',2.0,7.15,0.05)}
+              <div class="text-[10px] text-slate-400 font-mono">Referencia relativa: <strong class="text-sky-400">≈ 84.0% de C* (7.15 mg/L)</strong></div>
+              ${numField('p2_stop_time','Timeout de seguridad','900','s',120,3600,60)}
+              <div class="pt-1 border-t border-scada-border flex items-center justify-between text-[10px] font-mono text-slate-400">
+                <span>Cadencia fija: Sensor 1.0 s (1 Hz)</span>
+                <span>ODrive 0.2 s (5 Hz)</span>
+              </div>
+            </div>`,
+            condition: 'DO ≥ 85% de C* (6.08 mg/L) ó t - t₀ ≥ 900 s'
+          }),
+          phaseCard({
+            id:'p2_analysis', num:'4', title:'Cálculo y Ajuste de Curva kLa (Post-Ensayo)', status:'espera', accentColor:'sky',
+            desc: '<strong>Ajuste Numérico:</strong> Toma la serie temporal completa, filtra la ventana ASCE (20% - 80%), efectúa la regresión lineal sobre ln(C* - C) vs (t - t₀) para hallar kLa y lo normaliza a 20°C (kLa₂₀).',
+            defaultMode: 'manual',
+            params: `<div class="space-y-2 text-[11px]">
+              <div class="text-[10px] text-slate-500 uppercase font-mono mb-1 tracking-wider">Parámetros del Ajuste OLS</div>
+              ${numField('p2_kla_c_star','Saturación teórica C*','7.15','mg/L',6.0,9.0,0.01)}
+              ${numField('p2_kla_t0_offset','Retardo de membrana sensor (τp)','10.0','s',0,30,0.5)}
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] text-slate-300">Exportar dataset linealizado [ln(C*-C)]</span>
+                ${toggle('p2_export_kla','SÍ (CSV MATLAB/Python)','')}
+              </div>
+              <button onclick="openKlaExplanationModal()" class="w-full py-1.5 bg-scada-elevated hover:bg-slate-700 text-sky-300 rounded-lg font-bold text-[11px] flex items-center justify-center gap-1.5 border border-sky-500/30 transition shadow-sm">
+                <i data-lucide="calculator" class="w-3.5 h-3.5 text-sky-400"></i> Ver Deducción Matemática & Regresión
+              </button>
+            </div>`,
+            condition: 'Regresión ajustada con R² &gt; 0.98 y validada por el operador'
+          }),
+        ]
+      },
+
+      closed_loop: {
+        filename: 'EXP_03_PID_LOOP.CSV',
+        phases: () => [
+          phaseCard({
+            id:'cl_config', num:'1', title:'Configuración del Lazo de Control', status:'activo', accentColor:'sky',
+            desc: '<strong>Control Automático:</strong> Sintonía del controlador para mantener la concentración de OD constante en el valor deseado ajustando dinámicamente las RPM del aireador ODrive.',
+            defaultMode: 'manual',
+            params: `<div class="space-y-2 text-[11px]">
+              <div class="text-[10px] text-slate-500 uppercase font-mono mb-1 tracking-wider">Consigna & Algoritmo</div>
+              ${numField('cl_setpoint','Setpoint Exacto de DO (SP)','6.00','mg/L',2.0,8.5,0.05)}
+              ${segSelect('cl_ctrl_type','Algoritmo de Control',[
+                {v:'pid',    l:'PID (Firmware ODrive a 20 Hz)'},
+                {v:'on_off', l:'On-Off (Banda histéresis ±0.2 mg/L)'},
+                {v:'fuzzy',  l:'Lógica Difusa / Fuzzy (Experimental)'},
+              ])}
+              <div id="cl_pid_gains" class="space-y-1.5 pt-1 border-t border-scada-border">
+                ${numField('cl_kp','Ganancia Proporcional (Kp)','0.10','',0,5,0.01)}
+                ${numField('cl_ki','Ganancia Integral (Ki)','0.02','',0,2,0.001)}
+                ${numField('cl_kd','Ganancia Derivativa (Kd)','0.00','',0,1,0.001)}
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] text-slate-300">Mezclador T-200 Auxiliar</span>
+                ${toggle('cl_mixer_toggle','APAGADO (Protocolo base)','')}
+              </div>
+            </div>`,
+            condition: 'Operador valida ganancias y confirma armado del lazo de control'
+          }),
+          phaseCard({
+            id:'cl_run', num:'2', title:'Lazo Cerrado Activo (Regulación)', status:'espera', accentColor:'emerald',
+            desc: '<strong>Monitoreo en Régimen:</strong> El ODrive modula automáticamente su velocidad para anular el error e(t) = SP - DO(t) reportado por el sensor OPTOD a 1 Hz.',
+            defaultMode: 'auto',
+            params: `<div class="space-y-2 text-[11px]">
+              <div class="text-[10px] text-slate-500 uppercase font-mono mb-1 tracking-wider">Seguridad & Duración</div>
+              ${numField('cl_run_time','Duración total del ensayo','600','s',60,3600,60)}
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] text-slate-300">Watchdog de sensor (35 s)</span>
+                ${toggle('cl_watchdog','ACTIVO (Failsafe 0 RPM si cae sensor)','')}
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] text-slate-300">Cálculo de métricas IAE/ISE en vivo</span>
+                ${toggle('cl_metrics','SÍ (Tiempo Real)','')}
+              </div>
+            </div>`,
+            condition: 'Tiempo transcurrido ≥ duración fijada (600 s)'
+          }),
+          phaseCard({
+            id:'cl_dist', num:'3', title:'Inyección de Perturbación (Opcional)', status:'espera', accentColor:'purple',
+            desc: '<strong>Ensayo de Rechazo a Perturbaciones:</strong> Dosifica una cantidad controlada de sulfito para crear un descenso repentino de DO y evaluar la robustez y capacidad de recuperación del PID.',
+            defaultMode: 'manual',
+            params: `<div class="space-y-2 text-[11px]">
+              <div class="text-[10px] text-slate-500 uppercase font-mono mb-1 tracking-wider">Parámetros de la Perturbación</div>
+              ${numField('cl_dist_vol','Volumen de Na₂SO₃ a inyectar','5.0','mL',0.5,50,0.5)}
+              ${numField('cl_dist_at','Instante de disparo programado','300','s',30,3600,10)}
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] text-slate-300">Inyección automática programada</span>
+                ${toggle('cl_dist_auto','NO (Disparo manual)','')}
+              </div>
+              <div class="flex items-center justify-between">
+                <span class="text-[11px] text-slate-300">Anotar marca de perturbación en gráfica</span>
+                ${toggle('cl_dist_log','SÍ (Línea vertical)','')}
+              </div>
+            </div>`,
+            condition: 'Perturbación inyectada y sistema re-estabilizado hacia el Setpoint'
+          }),
+          phaseCard({
+            id:'cl_eval', num:'4', title:'Evaluación de Desempeño del Controlador', status:'espera', accentColor:'slate',
+            desc: '<strong>Métricas de Ingeniería de Control:</strong> Cuantificación rigurosa del comportamiento dinámico y estacionario del lazo de control.',
+            defaultMode: 'manual',
+            params: `<div class="space-y-2 text-[11px]">
+              <div class="text-[10px] text-slate-500 uppercase font-mono mb-1 tracking-wider">Indicadores de Desempeño Calculados</div>
+              <div class="bg-scada-well rounded-lg p-2.5 border border-scada-border font-mono text-[10px] space-y-1.5">
+                <div class="flex justify-between items-center pb-1 border-b border-slate-800">
+                  <span class="text-slate-400 font-bold">Error Estado Estacionario (e_ss):</span>
+                  <span class="text-emerald-400 font-extrabold text-xs">0.08 mg/L (1.3%)</span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-slate-500">IAE (Integral Error Absoluto):</span>
+                  <span class="text-sky-300 font-semibold">42.5 mg·s/L</span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-slate-500">ISE (Integral Error Cuadrático):</span>
+                  <span class="text-sky-300 font-semibold">18.2 (mg/L)²·s</span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-slate-500">Tiempo Asentamiento (ts al 2%):</span>
+                  <span class="text-amber-300 font-semibold">145 s</span>
+                </div>
+                <div class="flex justify-between items-center">
+                  <span class="text-slate-500">Sobreimpulso Máximo (Mp):</span>
+                  <span class="text-amber-300 font-semibold">4.2 %</span>
+                </div>
+              </div>
+              <div class="flex items-center justify-between pt-1">
+                <span class="text-[11px] text-slate-300">Detener aireador al concluir</span>
+                ${toggle('cl_stop_motor','SÍ (0 RPM)','')}
+              </div>
+            </div>`,
+            condition: 'Operador valida métricas de control y archiva el reporte'
+          }),
+        ]
+      }
+    };
+    function changeRecipe(val) {
+      const proto = PROTOCOLS[val];
+      if (!proto) return;
+      // Update filename
+      document.getElementById('recipeFilenameInput').value = proto.filename;
+      document.getElementById('experimentFilename').innerText = proto.filename;
+      // Render phases
+      const container = document.getElementById('phaseContainer');
+      container.innerHTML = proto.phases().join('\n');
+      // Re-init icons
+      if (window.lucide) lucide.createIcons();
+      // Set default mode highlights
+      Object.keys(PHASE_MODES).forEach(id => setPhaseMode(id, PHASE_MODES[id]));
+      // Set RPM estimate listener for planta_2
+      const pctInput = document.getElementById('p2_step_pct');
+      if (pctInput) {
+        pctInput.addEventListener('input', e => {
+          const el = document.getElementById('p2_step_rpm_est');
+          if (el) el.innerText = Math.round(e.target.value / 100 * 600);
+        });
+      }
+    }
+
+    function toggleExperiment(btn) {
+      toggleExperimentMaster();
+    }
+
+    function downloadActiveCsv() {
+      downloadCsv(1);
+    }
+
+    function setSampleRate(sec, btn) {
+      document.querySelectorAll('.sample-btn').forEach(b => {
+        b.className = 'sample-btn py-1.5 rounded bg-slate-800 text-slate-400 border border-scada-border';
+      });
+      btn.className = 'sample-btn py-1.5 rounded bg-scada-elevated text-sky-400 border border-sky-500/40 font-bold';
+    }
+
+    // Inicializar receta inicial y sus fases una vez cargadas todas las funciones
+    if (document.getElementById('recipeSelect')) {
+      changeRecipe(document.getElementById('recipeSelect').value);
+    }
+
+    // Inicializar sincronización visual de estados de control y SD
+    updateExpStateUI();
+    updateSdLoggingUI();
+  </script>
+</body>
+</html>

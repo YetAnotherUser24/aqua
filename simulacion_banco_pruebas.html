@@ -1,0 +1,1853 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Simulador de Banco de Pruebas DO - AquaControl CAD (700 x 500 x 600 mm)</title>
+  <style>
+    /* 100% AUTOCONTENIDO, CERO DEPENDENCIAS EXTERNAS NI CDN */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      background-color: #030712;
+      color: #f1f5f9;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow-x: hidden;
+      user-select: none;
+    }
+
+    header {
+      background: rgba(15, 23, 42, 0.95);
+      border-bottom: 1px solid #1e293b;
+      padding: 10px 24px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .header-left {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .brand-icon {
+      width: 38px;
+      height: 38px;
+      border-radius: 8px;
+      background: rgba(14, 165, 233, 0.18);
+      border: 1px solid rgba(14, 165, 233, 0.4);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #38bdf8;
+      font-weight: 800;
+      font-size: 1.1rem;
+    }
+    .header-title {
+      font-size: 0.98rem;
+      font-weight: 600;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+    .tag {
+      font-size: 0.72rem;
+      font-family: ui-monospace, monospace;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-weight: 500;
+    }
+    .tag-blue { background: rgba(14, 165, 233, 0.15); color: #38bdf8; border: 1px solid rgba(14, 165, 233, 0.3); }
+    .tag-green { background: rgba(16, 185, 129, 0.15); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.3); }
+    .header-sub {
+      font-size: 0.75rem;
+      color: #94a3b8;
+      margin-top: 2px;
+    }
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .scale-box {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(30, 41, 59, 0.8);
+      border: 1px solid #334155;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-family: ui-monospace, monospace;
+    }
+    .scale-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #10b981;
+      box-shadow: 0 0 8px #10b981;
+    }
+    .btn-action {
+      background: #1e293b;
+      color: #e2e8f0;
+      border: 1px solid #334155;
+      padding: 6px 12px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 500;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: background 0.15s;
+    }
+    .btn-action:hover { background: #334155; }
+
+    main {
+      flex: 1;
+      display: grid;
+      grid-template-columns: 1fr 400px;
+      gap: 16px;
+      padding: 16px;
+      max-width: 1720px;
+      width: 100%;
+      margin: 0 auto;
+    }
+    @media (max-width: 1024px) {
+      main { grid-template-columns: 1fr; }
+    }
+
+    .viewport-panel {
+      background: rgba(15, 23, 42, 0.6);
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+      position: relative;
+    }
+    .viewport-toolbar {
+      position: absolute;
+      top: 12px;
+      left: 12px;
+      right: 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      pointer-events: none;
+      z-index: 10;
+    }
+    .toolbar-group {
+      display: flex;
+      gap: 8px;
+      pointer-events: auto;
+    }
+    .tb-btn {
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(51, 65, 85, 0.8);
+      color: #cbd5e1;
+      padding: 5px 10px;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      font-weight: 500;
+      cursor: pointer;
+      backdrop-filter: blur(4px);
+      transition: all 0.15s;
+    }
+    .tb-btn:hover { background: #334155; }
+    .tb-btn.active-dims { color: #38bdf8; border-color: rgba(14, 165, 233, 0.4); }
+    .tb-btn.active-splash { color: #f43f5e; border-color: rgba(244, 63, 94, 0.4); }
+    .tb-btn.active-flow { color: #38bdf8; border-color: rgba(14, 165, 233, 0.4); }
+
+    .speed-group {
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(51, 65, 85, 0.8);
+      padding: 3px 6px;
+      border-radius: 6px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 0.72rem;
+      color: #94a3b8;
+      pointer-events: auto;
+      backdrop-filter: blur(4px);
+    }
+    .btn-speed {
+      background: transparent;
+      border: none;
+      color: #94a3b8;
+      padding: 2px 6px;
+      border-radius: 4px;
+      font-size: 0.72rem;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    .btn-speed.active { color: #38bdf8; background: #1e293b; }
+
+    .canvas-container {
+      flex: 1;
+      min-height: 560px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #020617;
+      position: relative;
+    }
+    #bench-canvas {
+      display: block;
+      width: 100%;
+      height: 100%;
+      cursor: crosshair;
+    }
+
+    .viewport-footer {
+      background: rgba(2, 6, 23, 0.9);
+      border-top: 1px solid #1e293b;
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.72rem;
+      color: #94a3b8;
+      gap: 12px;
+      flex-wrap: wrap;
+    }
+    .footer-tags {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+    }
+    .footer-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .dot { width: 8px; height: 8px; border-radius: 50%; }
+    .dot-red { background: #ef4444; }
+    .dot-gray { background: #94a3b8; }
+    .dot-green { background: #10b981; }
+
+    .sidebar {
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      overflow-y: auto;
+      max-height: calc(100vh - 90px);
+    }
+    .card {
+      background: rgba(15, 23, 42, 0.75);
+      border: 1px solid #1e293b;
+      border-radius: 12px;
+      padding: 16px;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.3);
+    }
+    .card-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid #1e293b;
+      padding-bottom: 10px;
+      margin-bottom: 12px;
+    }
+    .card-title {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: #f1f5f9;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .card-sub { font-size: 0.68rem; color: #94a3b8; margin-top: 2px; }
+    .badge {
+      font-size: 0.68rem;
+      font-family: ui-monospace, monospace;
+      padding: 2px 7px;
+      border-radius: 4px;
+    }
+    .badge-stopped { background: #1e293b; color: #94a3b8; }
+    .badge-active-red { background: rgba(239, 68, 68, 0.2); color: #fca5a5; border: 1px solid rgba(239, 68, 68, 0.3); }
+    .badge-active-blue { background: rgba(14, 165, 233, 0.2); color: #7dd3fc; border: 1px solid rgba(14, 165, 233, 0.3); }
+
+    .telemetry-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .tele-cell {
+      background: rgba(2, 6, 23, 0.85);
+      border: 1px solid #1e293b;
+      padding: 10px;
+      border-radius: 8px;
+    }
+    .tele-label { font-size: 0.68rem; color: #94a3b8; }
+    .tele-val {
+      font-size: 1.5rem;
+      font-family: ui-monospace, monospace;
+      font-weight: 700;
+      margin: 4px 0;
+    }
+    .val-blue { color: #38bdf8; }
+    .val-green { color: #34d399; }
+    .tele-sub {
+      font-size: 0.65rem;
+      color: #64748b;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    .progress-bar-wrap { margin-top: 10px; }
+    .progress-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.7rem;
+      color: #94a3b8;
+      margin-bottom: 4px;
+    }
+    .progress-track {
+      width: 100%;
+      height: 8px;
+      background: #020617;
+      border: 1px solid #1e293b;
+      border-radius: 999px;
+      overflow: hidden;
+    }
+    .progress-fill {
+      height: 100%;
+      background: linear-gradient(90deg, #f43f5e, #f59e0b, #38bdf8, #10b981);
+      transition: width 0.3s;
+      width: 0%;
+    }
+
+    .chart-box {
+      margin-top: 10px;
+      background: #020617;
+      border: 1px solid #1e293b;
+      border-radius: 8px;
+      padding: 10px;
+    }
+    .chart-header {
+      display: flex;
+      justify-content: space-between;
+      font-size: 0.65rem;
+      color: #94a3b8;
+      margin-bottom: 6px;
+    }
+
+    .slider-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 8px;
+      font-size: 0.75rem;
+      color: #94a3b8;
+    }
+    .slider-val {
+      font-family: ui-monospace, monospace;
+      font-weight: 700;
+      font-size: 0.85rem;
+    }
+    input[type=range] {
+      width: 100%;
+      margin-top: 8px;
+      height: 6px;
+      background: #020617;
+      border-radius: 3px;
+      outline: none;
+    }
+    .range-red { accent-color: #ef4444; }
+    .range-blue { accent-color: #38bdf8; }
+
+    .btn-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 12px;
+    }
+    .btn-toggle {
+      flex: 1;
+      padding: 7px 12px;
+      border-radius: 6px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      cursor: pointer;
+      border: 1px solid #334155;
+      background: #1e293b;
+      color: #f1f5f9;
+      transition: all 0.15s;
+    }
+    .btn-toggle:hover { background: #334155; }
+    .btn-preset {
+      padding: 7px 10px;
+      border-radius: 6px;
+      font-size: 0.72rem;
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #cbd5e1;
+      cursor: pointer;
+    }
+    .btn-preset:hover { background: #334155; }
+
+    .btn-deox {
+      width: 100%;
+      margin-top: 10px;
+      padding: 9px;
+      background: rgba(245, 158, 11, 0.2);
+      border: 1px solid rgba(245, 158, 11, 0.4);
+      color: #fcd34d;
+      font-size: 0.75rem;
+      font-weight: 600;
+      border-radius: 6px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      transition: all 0.15s;
+    }
+    .btn-deox:hover { background: rgba(245, 158, 11, 0.35); }
+  </style>
+</head>
+<body>
+
+  <!-- HEADER -->
+  <header>
+    <div class="header-left">
+      <div class="brand-icon">AQ</div>
+      <div>
+        <div class="header-title">
+          Banco Experimental CAD — Modelo Físico Calibrado (real_CAD.png)
+          <span class="tag tag-blue">700 × 500 × 600 mm</span>
+          <span class="tag tag-green">Agua: 250 mm (87.5 L)</span>
+        </div>
+        <p class="header-sub">nodo-aerador (Splash 0–600 RPM) • nodo-mezclador (T-200 sumergido 0–1500 RPM) • nodo-sensor-od (OPTOD a 50 mm)</p>
+      </div>
+    </div>
+    
+    <div class="header-right">
+      <div class="scale-box">
+        <span class="scale-dot"></span>
+        <span>Escala:</span>
+        <strong style="color: #34d399;">1:1 CAD (757 px/m)</strong>
+      </div>
+      <button id="btn-reset" class="btn-action">
+        <svg style="width: 14px; height: 14px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+        Reiniciar
+      </button>
+    </div>
+  </header>
+
+  <!-- MAIN LAYOUT -->
+  <main>
+    
+    <!-- CANVAS VIEWPORT -->
+    <div class="viewport-panel">
+      <div class="viewport-toolbar">
+        <div class="toolbar-group">
+          <button id="toggle-dimensions" class="tb-btn active-dims">
+            <span id="lbl-dims">Cotas CAD: ON</span>
+          </button>
+          <button id="toggle-splash" class="tb-btn active-splash">
+            <span id="lbl-splash">Splash Superficial: ON</span>
+          </button>
+          <button id="toggle-flow" class="tb-btn active-flow">
+            <span id="lbl-flow">Líneas de Mezcla T-200: ON</span>
+          </button>
+        </div>
+        
+        <div class="speed-group">
+          <span>Tiempo:</span>
+          <button class="btn-speed active" data-speed="1">1×</button>
+          <button class="btn-speed" data-speed="2">2×</button>
+          <button class="btn-speed" data-speed="5">5×</button>
+        </div>
+      </div>
+
+      <div class="canvas-container">
+        <canvas id="bench-canvas"></canvas>
+      </div>
+
+      <div class="viewport-footer">
+        <div class="footer-tags">
+          <div class="footer-item">
+            <span class="dot dot-red"></span>
+            <strong>nodo-aerador:</strong> Impeller superficial tipo flor (0–600 RPM) • Salpicadura parabólica
+          </div>
+          <div class="footer-item">
+            <span class="dot dot-gray"></span>
+            <strong>nodo-mezclador:</strong> T-200 sumergido con tobera d=32 mm (0–1500 RPM) • Sin burbujas
+          </div>
+          <div class="footer-item">
+            <span class="dot dot-green"></span>
+            <strong>nodo-sensor-od:</strong> Sonda óptica Ponsel d=22 mm a 50 mm del fondo
+          </div>
+        </div>
+        <div class="tag tag-blue">Volumen: 87.5 L (70 × 50 × 25 cm)</div>
+      </div>
+    </div>
+
+    <!-- CONTROLES Y TELEMETRÍA -->
+    <div class="sidebar">
+      
+      <!-- CARD 1: TELEMETRÍA SCADA -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title">
+              <span class="dot dot-blue" style="background:#38bdf8;"></span>
+              Instrumentación DO (nodo-sensor-od)
+            </div>
+            <div class="card-sub">Ponsel OPTOD a 50 mm del fondo</div>
+          </div>
+          <span class="tag tag-blue">OPTICAL</span>
+        </div>
+        
+        <div class="telemetry-grid">
+          <div class="tele-cell">
+            <div class="tele-label">OD Sonda (Reportado)</div>
+            <div class="tele-val val-blue"><span id="readout-do-measured">0.00</span> <span style="font-size:0.75rem; color:#64748b;">mg/L</span></div>
+            <div class="tele-sub">
+              <span>Lag T₉₀: 28s</span>
+              <span>Sat: <strong id="readout-sat-pct" style="color:#7dd3fc;">0.0%</strong></span>
+            </div>
+          </div>
+
+          <div class="tele-cell">
+            <div class="tele-label">OD Real (Columna)</div>
+            <div class="tele-val val-green"><span id="readout-do-real">0.00</span> <span style="font-size:0.75rem; color:#64748b;">mg/L</span></div>
+            <div class="tele-sub">
+              <span>C* Sat: 8.20</span>
+              <span>T: 20.0 °C</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="progress-bar-wrap">
+          <div class="progress-header">
+            <span>Saturación del Tanque</span>
+            <span id="bar-sat-label">0%</span>
+          </div>
+          <div class="progress-track">
+            <div id="bar-sat-progress" class="progress-fill"></div>
+          </div>
+        </div>
+
+        <div class="chart-box">
+          <div class="chart-header">
+            <span style="color:#34d399;">— OD Real</span>
+            <span style="color:#38bdf8;">-- OD Medido</span>
+            <span>Historial (60s)</span>
+          </div>
+          <canvas id="chart-canvas" style="width:100%; height:75px; display:block;"></canvas>
+        </div>
+      </div>
+
+      <!-- CARD 2: NODO-AERADOR -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title" style="color:#f87171;">
+              <span style="background:rgba(239,68,68,0.2); color:#f87171; width:22px; height:22px; border-radius:5px; display:inline-flex; align-items:center; justify-content:center; font-size:0.75rem;">A</span>
+              nodo-aerador (Aireador Splash)
+            </div>
+            <div class="card-sub">ODrive S1 • Impeller flor superficial en 250 mm • 0 a 600 RPM</div>
+          </div>
+          <span id="badge-aerator-state" class="badge badge-stopped">PARADO</span>
+        </div>
+
+        <div class="slider-row">
+          <span>Velocidad del Rodete Splash</span>
+          <span id="val-aerator-rpm" class="slider-val" style="color:#f87171;">0 RPM (0%)</span>
+        </div>
+        <input type="range" id="slider-aerator" min="0" max="600" step="10" value="0" class="range-red">
+        
+        <div class="btn-row">
+          <button id="btn-aerator-toggle" class="btn-toggle">Activar Splash</button>
+          <button id="btn-aerator-preset-low" class="btn-preset">200</button>
+          <button id="btn-aerator-preset-mid" class="btn-preset">400</button>
+          <button id="btn-aerator-preset-high" class="btn-preset">600</button>
+        </div>
+      </div>
+
+      <!-- CARD 3: NODO-MEZCLADOR -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title" style="color:#38bdf8;">
+              <span style="background:rgba(14,165,233,0.2); color:#38bdf8; width:22px; height:22px; border-radius:5px; display:inline-flex; align-items:center; justify-content:center; font-size:0.75rem;">M</span>
+              nodo-mezclador (T-200 Sumergido)
+            </div>
+            <div class="card-sub">SNR8503M BLDC • Agitador sumergido • 0 a 1500 RPM</div>
+          </div>
+          <span id="badge-mixer-state" class="badge badge-stopped">PARADO</span>
+        </div>
+
+        <div class="slider-row">
+          <span>Velocidad del Mezclador</span>
+          <span id="val-mixer-rpm" class="slider-val" style="color:#38bdf8;">0 RPM (0%)</span>
+        </div>
+        <input type="range" id="slider-mixer" min="0" max="1500" step="50" value="0" class="range-blue">
+
+        <div class="btn-row">
+          <button id="btn-mixer-toggle" class="btn-toggle">Mezclar Agua</button>
+          <button id="btn-mixer-preset-low" class="btn-preset">500</button>
+          <button id="btn-mixer-preset-mid" class="btn-preset">1000</button>
+          <button id="btn-mixer-preset-high" class="btn-preset">1500</button>
+        </div>
+      </div>
+
+      <!-- CARD 4: DESOXIGENACIÓN Na2SO3 -->
+      <div class="card">
+        <div class="card-header">
+          <div>
+            <div class="card-title" style="color:#fbbf24;">
+              <span style="background:rgba(245,158,11,0.2); color:#fbbf24; width:22px; height:22px; border-radius:5px; display:inline-flex; align-items:center; justify-content:center; font-size:0.75rem;">⚡</span>
+              Protocolo ASCE Deox
+            </div>
+            <div class="card-sub">Purga Na₂SO₃ a 0.0 mg/L para ensayo</div>
+          </div>
+        </div>
+
+        <button id="btn-deox" class="btn-deox">
+          <svg style="width:16px; height:16px;" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>
+          Desoxigenar Tanque (Inyectar Sulfito)
+        </button>
+      </div>
+
+    </div>
+  </main>
+
+  <script>
+    (function() {
+      const canvas = document.getElementById('bench-canvas');
+      const ctx = canvas.getContext('2d');
+      const chartCanvas = document.getElementById('chart-canvas');
+      const chartCtx = chartCanvas.getContext('2d');
+
+      // MODELO FÍSICO Y GEOMÉTRICO CALIBRADO (Tanque 700x500x600 mm, Agua a 250 mm = 25 cm, 87.5 L)
+      const CAD_M = {
+        tank_width: 0.700,        // 700 mm ancho interior
+        tank_height: 0.600,       // 600 mm alto del tanque acrílico
+        tank_depth: 0.500,        // 500 mm profundidad
+        water_level: 0.250,       // 250 mm (Nivel de agua exacto = 25 cm, 87.5 L útiles)
+
+        // Estructura base de perfiles de aluminio sobre el fondo (Cota 200 mm desde base a impeller)
+        base_top_y: 0.038,        // Altura del marco base = 38 mm
+
+        // NODO-AERADOR (Carcasa motor cilíndrica grande de 185 mm d., 270 mm con bridas, montada arriba)
+        aerator_x: 0.350,         // Eje central del tanque
+        motor_bottom_y: 0.420,    // Base de la carcasa del motor (a 420 mm del piso, con amplio espacio libre)
+        motor_top_y: 0.600,       // Cima del motor (a 600 mm, alcanza la viga superior)
+        motor_width: 0.224,       // Carcasa de 224 mm de ancho total
+        motor_drum_diam: 0.185,   // Diámetro del tambor cilíndrico = 185 mm
+        motor_flange_w: 0.270,    // Ancho con bridas de anclaje a perfiles = 270 mm
+
+        // EJE VERTICAL EN EL AIRE (142 mm de longitud en el aire, NUNCA TOCA EL AGUA)
+        shaft_top_y: 0.420,       // Conecta con base del motor
+        shaft_bottom_y: 0.278,    // Conecta con cuello superior del impeller (longitud = 142 mm)
+        shaft_diam: 0.020,        // 20 mm diámetro
+
+        // IMPELLER TIPO FLOR HACIA ARRIBA (Cáliz/flor abierta cóncava hacia arriba, d=146 mm, h=45 mm)
+        // La base del buje se sumerge 12 mm en el agua (a 238 mm, agua a 250 mm): aspas chocan contra el agua
+        impeller_bottom_y: 0.238, // Base del buje sumergida 12 mm en el agua (a 238 mm del piso)
+        impeller_collar_y: 0.278, // Cuello de acople con el eje (a 278 mm, en el aire, 28 mm sobre el agua)
+        impeller_blade_top_y: 0.283, // Cima de las aletas verticales de las paletas (a 283 mm, en el aire)
+        impeller_radius: 0.073,   // Radio 73 mm (Ancho total 146 mm)
+        impeller_height: 0.045,   // Altura total de paletas y buje = 45 mm
+        collar_radius: 0.016,     // Cuello central de 32 mm de diámetro
+
+        // NODO-MEZCLADOR (Thruster T-200 calibrado fiel a real_CAD.png)
+        mixer_rail_x: 0.575,      // Carril vertical derecho a 575 mm
+        mixer_body_left_x: 0.422, // Cilindro del motor (longitud = 153 mm)
+        mixer_nozzle_right_x: 0.628, // Extremo derecho tobera
+        mixer_center_y: 0.125,    // Centro horizontal a 125 mm (mitad de los 25 cm de agua)
+        mixer_clamp_bottom_y: 0.050, // Cota CAD: Abrazadera inferior a 50 mm del fondo
+        mixer_clamp_top_y: 0.194, // Abrazadera superior a 194 mm
+        mixer_body_diam: 0.068,   // Diámetro del cilindro = 68 mm
+        mixer_nozzle_diam: 0.032, // Tobera pequeña (anillo azul d=32 mm, fiel a CAD)
+
+        // NODO-SENSOR-OD (Sonda Ponsel OPTOD esbelta, fiel a real_CAD.png)
+        sensor_rail_x: 0.104,     // Carril vertical izquierdo a 104 mm
+        sensor_rail_bottom_y: 0.050, // Cota CAD: Carril a 50 mm del fondo
+        sensor_x: 0.127,          // Centro de la sonda a 127 mm
+        sensor_tip_y: 0.045,      // Punta óptica a 45 mm del fondo
+        sensor_top_y: 0.177,      // Cima del cuerpo de la sonda a 177 mm
+        sensor_diam: 0.024,       // Sonda esbelta de 24 mm de diámetro (fiel a CAD)
+
+        profile_size: 0.025       // Perfiles T-slot de 25 mm
+      };
+
+      const STATE = {
+        aerator_target_rpm: 0,
+        aerator_actual_rpm: 0,
+        aerator_angle: 0,
+        mixer_target_rpm: 0,
+        mixer_actual_rpm: 0,
+        do_real: 1.0,
+        do_measured: 1.0,
+        do_saturation: 8.20,
+        show_dimensions: true,
+        show_splash: true,
+        show_flow: true,
+        sim_speed: 1.0,
+        deox_in_progress: false,
+        deox_timer: 0,
+        splashDrops: [],
+        wallDrips: [],
+        surfaceFoam: [],
+        flowParticles: []
+      };
+
+      const history = { times: [], do_real: [], do_measured: [] };
+
+      // Trazadores de corriente y filamentos hidrodinámicos (Sin bolitas, estelas fluidas continuas)
+      const TRAIL_LEN = 10;
+      const N_STREAKLETS = 135;
+
+      function spawnStreaklet(forceNozzle = false) {
+        let sx, sy;
+        if (forceNozzle || Math.random() < 0.45) {
+          sx = 0.50 + Math.random() * 0.10;
+          sy = (CAD_M.mixer_center_y - 0.035) + Math.random() * 0.07;
+        } else {
+          sx = 0.04 + Math.random() * 0.62;
+          sy = 0.025 + Math.random() * (CAD_M.water_level - 0.035);
+        }
+        const maxLife = 1.6 + Math.random() * 2.2;
+        return {
+          x: sx,
+          y: sy,
+          trail: Array(TRAIL_LEN).fill(null).map(() => ({ x: sx, y: sy })),
+          life: maxLife,
+          maxLife: maxLife,
+          speed: 0.85 + Math.random() * 0.35,
+          width: 1.0 + Math.random() * 0.8
+        };
+      }
+
+      for (let i = 0; i < N_STREAKLETS; i++) {
+        const s = spawnStreaklet();
+        s.life = Math.random() * s.maxLife; // Escalonamiento de ciclo de vida
+        STATE.flowParticles.push(s);
+      }
+
+      function resizeCanvas() {
+        const parent = canvas.parentElement;
+        const rect = parent ? parent.getBoundingClientRect() : { width: 900, height: 600 };
+        const w = Math.max(300, rect.width || 900);
+        const h = Math.max(300, rect.height || 560);
+        const dpr = window.devicePixelRatio || 1;
+        canvas.width = Math.floor(w * dpr);
+        canvas.height = Math.floor(h * dpr);
+
+        if (chartCanvas && chartCanvas.parentElement) {
+          const chartRect = chartCanvas.parentElement.getBoundingClientRect();
+          const cw = Math.max(200, chartRect.width || 340);
+          chartCanvas.width = Math.floor(cw * dpr);
+          chartCanvas.height = Math.floor(75 * dpr);
+        }
+      }
+      window.addEventListener('resize', resizeCanvas);
+      window.addEventListener('load', resizeCanvas);
+      resizeCanvas();
+
+      function getViewport() {
+        const dpr = window.devicePixelRatio || 1;
+        const cw = (canvas.width / dpr) || 900;
+        const ch = (canvas.height / dpr) || 560;
+        const marginX = 85;
+        const marginBottom = 65;
+        const marginTop = 50;
+        const availW = Math.max(120, cw - marginX * 2);
+        const availH = Math.max(120, ch - marginBottom - marginTop);
+        const scale = Math.min(availW / CAD_M.tank_width, availH / (CAD_M.tank_height + 0.08));
+        const tankW_px = CAD_M.tank_width * scale;
+        const tankH_px = CAD_M.tank_height * scale;
+        const originX = (cw - tankW_px) / 2;
+        const originY = ch - marginBottom;
+        return { originX, originY, scale, tankW_px, tankH_px, cw, ch };
+      }
+
+      let lastTime = performance.now();
+
+      function updatePhysics(dt) {
+        const effectiveDt = Math.min(dt * STATE.sim_speed, 0.1);
+        
+        // Inercia de motores
+        STATE.aerator_actual_rpm += (STATE.aerator_target_rpm - STATE.aerator_actual_rpm) * Math.min(1.0, 3.2 * effectiveDt);
+        STATE.mixer_actual_rpm += (STATE.mixer_target_rpm - STATE.mixer_actual_rpm) * Math.min(1.0, 4.0 * effectiveDt);
+        STATE.aerator_angle += (STATE.aerator_actual_rpm / 60) * (2 * Math.PI) * effectiveDt;
+
+        // Oxígeno disuelto
+        if (STATE.deox_in_progress) {
+          STATE.do_real -= 2.4 * effectiveDt;
+          if (STATE.do_real <= 0.03) {
+            STATE.do_real = 0.01;
+            STATE.deox_timer -= effectiveDt;
+            if (STATE.deox_timer <= 0) STATE.deox_in_progress = false;
+          }
+        } else {
+          const aRatio = STATE.aerator_actual_rpm / 600;
+          const mRatio = STATE.mixer_actual_rpm / 1500;
+          const KLa_splash = aRatio * 0.026;
+          const convectionMultiplier = 1.0 + mRatio * 0.45;
+          const KLa_natural = 0.0003;
+          const totalKLa = KLa_natural + (KLa_splash * convectionMultiplier);
+          const drivingForce = Math.max(0, STATE.do_saturation - STATE.do_real);
+          STATE.do_real += totalKLa * drivingForce * effectiveDt;
+        }
+
+        const tau_sensor = 28.0;
+        STATE.do_measured += (STATE.do_real - STATE.do_measured) * (effectiveDt / tau_sensor);
+
+        // GENERACIÓN DE SPLASH CON DIFERENCIACIÓN DRAMÁTICA Y PRECISA ENTRE VELOCIDADES
+        if (STATE.aerator_actual_rpm > 40 && STATE.show_splash) {
+          const aNorm = STATE.aerator_actual_rpm / 600; // 0.0 a 1.0
+
+          // Cantidad de gotas por frame con escalamiento no-lineal para contraste visual indiscutible:
+          // 200 RPM: ~3 a 5 gotas/frame (fuente suave)
+          // 400 RPM: ~20 a 25 gotas/frame (arcos parabólicos enérgicos)
+          // 600 RPM: ~65 gotas/frame (torrente intenso con impacto en paredes acrílicas)
+          let dropSpawns = Math.floor(Math.pow(aNorm, 2.3) * 65 * (effectiveDt * 60));
+          if (aNorm > 0.15 && dropSpawns < 2) dropSpawns = 2;
+
+          // Altura de ápice balístico calibrada a escala física real del tanque (60 cm alto):
+          // 200 RPM -> ~4.5 cm de ápice (permanece cerca del rodete)
+          // 400 RPM -> ~14 cm de ápice (alcanza mitad del tanque)
+          // 600 RPM -> ~28 cm de ápice (alcanza casi hasta el motor y salpica paredes laterales)
+          const g = 9.8;
+          const targetApex = (aNorm <= 0.35) 
+            ? (0.045 * Math.pow(aNorm / 0.33, 1.3))
+            : (0.045 + 0.235 * Math.pow((aNorm - 0.33) / 0.67, 1.4));
+
+          for (let i = 0; i < dropSpawns; i++) {
+            const side = Math.random() < 0.5 ? -1 : 1;
+            const rOffset = CAD_M.impeller_radius * (0.75 + Math.random() * 0.25);
+            const spawnX = CAD_M.aerator_x + side * rOffset;
+            const spawnY = CAD_M.water_level + (Math.random() - 0.2) * 0.004;
+
+            // Ángulo de salida con fuerte componente vertical (25° a 50°)
+            const launchAngleDeg = 25 + Math.random() * 25;
+            const launchRad = launchAngleDeg * (Math.PI / 180);
+
+            // Componente vertical vy determinada por el ápice
+            const vy = Math.sqrt(2 * g * targetApex) * (0.88 + Math.random() * 0.25);
+            // Componente horizontal vx ligada al ángulo con dispersión radial
+            const vx = side * (vy / Math.tan(launchRad)) * (0.85 + Math.random() * 0.30);
+
+            STATE.splashDrops.push({
+              x: spawnX,
+              y: spawnY,
+              vx: vx,
+              vy: vy,
+              radius: (0.0012 + Math.random() * 0.0024) * (0.60 + aNorm * 0.85),
+              life: 1.0
+            });
+          }
+
+          // Espuma blanca superficial proporcional a la agitación
+          const foamProb = (aNorm <= 0.35) ? (aNorm * 0.25) : (0.15 + Math.pow(aNorm, 1.5) * 0.85);
+          if (Math.random() < foamProb) {
+            STATE.surfaceFoam.push({
+              x: CAD_M.aerator_x + (Math.random() - 0.5) * CAD_M.impeller_radius * (1.2 + aNorm * 1.4),
+              y: CAD_M.water_level + (Math.random() - 0.5) * 0.006,
+              radius: (0.003 + Math.random() * 0.008) * (0.5 + aNorm * 1.1),
+              alpha: 0.92,
+              life: 0.20 + aNorm * 0.50
+            });
+          }
+        }
+
+        // Balística de gotas con gravedad
+        const g = 9.8;
+        for (let i = STATE.splashDrops.length - 1; i >= 0; i--) {
+          const d = STATE.splashDrops[i];
+          d.vy -= g * effectiveDt;
+          d.x += d.vx * effectiveDt;
+          d.y += d.vy * effectiveDt;
+
+          // Impacto en paredes
+          if (d.x <= 0.015 || d.x >= CAD_M.tank_width - 0.015) {
+            if (d.y > CAD_M.water_level && Math.random() < 0.40) {
+              STATE.wallDrips.push({
+                x: d.x <= 0.015 ? 0.014 : CAD_M.tank_width - 0.014,
+                y: d.y,
+                vy: -(0.14 + Math.random() * 0.26),
+                radius: d.radius * 0.9,
+                life: 0.85
+              });
+            }
+            STATE.splashDrops.splice(i, 1);
+            continue;
+          }
+
+          if (d.y <= CAD_M.water_level && d.vy < 0) {
+            d.life -= 12.0 * effectiveDt;
+          }
+          if (d.life <= 0) {
+            STATE.splashDrops.splice(i, 1);
+          }
+        }
+        if (STATE.splashDrops.length > 450) {
+          STATE.splashDrops.splice(0, STATE.splashDrops.length - 450);
+        }
+
+        for (let i = STATE.wallDrips.length - 1; i >= 0; i--) {
+          const w = STATE.wallDrips[i];
+          w.y += w.vy * effectiveDt;
+          w.life -= effectiveDt * 1.2;
+          if (w.y <= CAD_M.water_level || w.life <= 0) {
+            STATE.wallDrips.splice(i, 1);
+          }
+        }
+
+        for (let i = STATE.surfaceFoam.length - 1; i >= 0; i--) {
+          const f = STATE.surfaceFoam[i];
+          f.life -= effectiveDt * 1.5;
+          f.radius += effectiveDt * 0.004;
+          if (f.life <= 0) STATE.surfaceFoam.splice(i, 1);
+        }
+
+        // T-200 Mezcla (Agitación pura sin burbujas sumergidas, trazadores hidrodinámicos sin bolitas)
+        const mRatio = STATE.mixer_actual_rpm / 1500;
+        if (STATE.mixer_actual_rpm > 30) {
+          const tSec = performance.now() * 0.003;
+          const wLevel = CAD_M.water_level;
+
+          for (const s of STATE.flowParticles) {
+            s.life -= effectiveDt;
+            // Fin de ciclo de vida o choque con límite -> reaparición suave sin acumulación ni parones
+            if (s.life <= 0 || s.x < 0.025 || s.x > 0.675 || s.y < 0.018 || s.y > wLevel - 0.008) {
+              const ns = spawnStreaklet();
+              s.x = ns.x;
+              s.y = ns.y;
+              for (let k = 0; k < s.trail.length; k++) {
+                s.trail[k].x = ns.x;
+                s.trail[k].y = ns.y;
+              }
+              s.life = ns.maxLife;
+              s.maxLife = ns.maxLife;
+              s.speed = ns.speed;
+              continue;
+            }
+
+            // 1. Circulación macro en el tanque (elipse hidrodinámica suave adaptada al nivel de agua)
+            const yRel = (s.y - wLevel * 0.52) / (wLevel * 0.44);
+            let u = Math.tanh(yRel * 2.2) * (0.50 + 1.25 * mRatio);
+            let v = 0;
+
+            // Ascenso suave en pared izquierda y retorno superficial
+            if (s.x < 0.22) {
+              const turnLeft = (0.22 - s.x) / 0.22;
+              v += (0.60 + 1.35 * mRatio) * turnLeft * Math.sin(Math.PI * s.y / wLevel);
+              if (s.y > wLevel * 0.48) u += (0.35 + 0.75 * mRatio) * turnLeft;
+            } else if (s.x > 0.48) {
+              // Descenso hacia admisión del propulsor
+              const turnRight = (s.x - 0.48) / 0.20;
+              v -= (0.50 + 1.20 * mRatio) * turnRight * Math.sin(Math.PI * s.y / wLevel);
+            }
+
+            // 2. Chorro concentrado del propulsor T-200 hacia la izquierda
+            const jetYDist = Math.abs(s.y - CAD_M.mixer_center_y);
+            if (s.x > 0.06 && s.x < 0.62 && jetYDist < 0.065) {
+              const jetCore = Math.exp(-Math.pow(jetYDist / 0.038, 2));
+              u -= (0.75 + 1.75 * mRatio) * jetCore * (1.1 - s.x / 0.70);
+            }
+
+            // 3. Vórtices turbulentos dinámicos en el centro (mezclado activo)
+            const vYScale = wLevel / 0.25;
+            const vortices = [
+              [0.26, 0.13 * vYScale],
+              [0.42, 0.15 * vYScale],
+              [0.34, 0.09 * vYScale]
+            ];
+            for (const [ecx, ecy] of vortices) {
+              const cx = ecx + 0.04 * Math.sin(tSec * 2.0 + ecx * 8);
+              const cy = ecy + 0.02 * Math.cos(tSec * 1.8 + ecy * 8);
+              const edx = s.x - cx;
+              const edy = s.y - cy;
+              const d2 = edx * edx + edy * edy;
+              if (d2 < 0.022) {
+                const factor = (1.0 - d2 / 0.022) * (0.45 * mRatio);
+                u += -edy * 12 * factor;
+                v += edx * 12 * factor;
+              }
+            }
+
+            // 4. Micro-oleaje y turbulencia de Reynolds
+            u += Math.cos(s.y * 22 + tSec * 6) * 0.08 * mRatio;
+            v += Math.sin(s.x * 16 + tSec * 5) * 0.10 * mRatio;
+
+            s.x += u * s.speed * effectiveDt;
+            s.y += v * s.speed * effectiveDt;
+
+            s.x = Math.max(0.020, Math.min(0.680, s.x));
+            s.y = Math.max(0.018, Math.min(wLevel - 0.008, s.y));
+
+            // Actualizar histórico del rastro fluido
+            s.trail.push({ x: s.x, y: s.y });
+            if (s.trail.length > TRAIL_LEN) s.trail.shift();
+          }
+        }
+
+        const nowSec = performance.now() / 1000;
+        if (history.times.length === 0 || nowSec - history.times[history.times.length - 1] > 0.25) {
+          history.times.push(nowSec);
+          history.do_real.push(STATE.do_real);
+          history.do_measured.push(STATE.do_measured);
+          if (history.times.length > 200) {
+            history.times.shift();
+            history.do_real.shift();
+            history.do_measured.shift();
+          }
+        }
+      }
+
+      function render() {
+        const { originX, originY, scale, tankW_px, tankH_px } = getViewport();
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.save();
+        const dpr = window.devicePixelRatio || 1;
+        ctx.scale(dpr, dpr);
+
+        function m2px(x_m, y_m) {
+          return { x: originX + x_m * scale, y: originY - y_m * scale };
+        }
+
+        // 1. SOPORTES Y FONDO TRASERO DEL TANQUE
+        const footW = 0.045 * scale;
+        const footH = 0.025 * scale;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+        ctx.lineWidth = 1.2;
+        ctx.fillRect(originX, originY, footW, footH);
+        ctx.strokeRect(originX, originY, footW, footH);
+        ctx.fillRect(originX + tankW_px - footW, originY, footW, footH);
+        ctx.strokeRect(originX + tankW_px - footW, originY, footW, footH);
+
+        const tankTopLeft = m2px(0, CAD_M.tank_height);
+        const tankBottomLeft = m2px(0, 0);
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.40)';
+        ctx.fillRect(tankTopLeft.x, tankTopLeft.y, tankW_px, tankH_px);
+
+        // FUNCIONES DE DIBUJO DE PERFILES DE ALUMINIO T-SLOT (Calibrado a CAD)
+        function drawProfile(x_m, y1_m, y2_m, w_m = CAD_M.profile_size) {
+          const pTop = m2px(x_m - w_m/2, y2_m);
+          const w = w_m * scale;
+          const h = (y2_m - y1_m) * scale;
+          const alumGrad = ctx.createLinearGradient(pTop.x, 0, pTop.x + w, 0);
+          alumGrad.addColorStop(0, '#64748b');
+          alumGrad.addColorStop(0.25, '#94a3b8');
+          alumGrad.addColorStop(0.75, '#cbd5e1');
+          alumGrad.addColorStop(1, '#475569');
+          ctx.fillStyle = alumGrad;
+          ctx.fillRect(pTop.x, pTop.y, w, h);
+          ctx.strokeStyle = '#334155';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(pTop.x, pTop.y, w, h);
+          ctx.fillStyle = '#1e293b';
+          ctx.fillRect(pTop.x + w * 0.38, pTop.y, w * 0.24, h);
+        }
+
+        function drawHorizProfile(x1_m, x2_m, y_m, h_m = CAD_M.profile_size) {
+          const p1 = m2px(x1_m, y_m + h_m/2);
+          const w = (x2_m - x1_m) * scale;
+          const h = h_m * scale;
+          const alumGrad = ctx.createLinearGradient(0, p1.y, 0, p1.y + h);
+          alumGrad.addColorStop(0, '#94a3b8');
+          alumGrad.addColorStop(0.5, '#cbd5e1');
+          alumGrad.addColorStop(1, '#475569');
+          ctx.fillStyle = alumGrad;
+          ctx.fillRect(p1.x, p1.y, w, h);
+          ctx.strokeStyle = '#334155';
+          ctx.lineWidth = 1;
+          ctx.strokeRect(p1.x, p1.y, w, h);
+          ctx.fillStyle = '#1e293b';
+          ctx.fillRect(p1.x, p1.y + h * 0.38, w, h * 0.24);
+        }
+
+        // 2. ESTRUCTURA DE ALUMINIO DE FONDO
+        // Base de aluminio en el fondo (Cota base = 38 mm)
+        drawHorizProfile(0.190, 0.480, CAD_M.base_top_y - 0.012, 0.025);
+        ctx.fillStyle = '#64748b';
+        ctx.strokeStyle = '#334155';
+        ctx.beginPath();
+        const bFL = m2px(0.180, 0.020);
+        const bBL = m2px(0.200, CAD_M.base_top_y);
+        ctx.moveTo(bFL.x, bFL.y); ctx.lineTo(bBL.x, bBL.y); ctx.lineTo(bBL.x + 0.020 * scale, bBL.y); ctx.lineTo(bFL.x + 0.020 * scale, bFL.y);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+
+        const bFR = m2px(0.490, 0.020);
+        const bBR = m2px(0.470, CAD_M.base_top_y);
+        ctx.beginPath();
+        ctx.moveTo(bFR.x, bFR.y); ctx.lineTo(bBR.x, bBR.y); ctx.lineTo(bBR.x - 0.020 * scale, bBR.y); ctx.lineTo(bFR.x - 0.020 * scale, bFR.y);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+
+        drawHorizProfile(0.180, 0.490, 0.020, 0.025);
+
+        // Columnas verticales
+        drawProfile(0.250, CAD_M.base_top_y, CAD_M.tank_height + 0.050);
+        drawProfile(0.450, CAD_M.base_top_y, CAD_M.tank_height + 0.050);
+        drawProfile(0.320, CAD_M.motor_bottom_y - 0.020, CAD_M.tank_height + 0.070, 0.020);
+        drawProfile(0.380, CAD_M.motor_bottom_y - 0.020, CAD_M.tank_height + 0.070, 0.020);
+        drawProfile(CAD_M.sensor_rail_x, CAD_M.sensor_rail_bottom_y, CAD_M.tank_height + 0.050);
+        drawProfile(CAD_M.mixer_rail_x, CAD_M.mixer_clamp_bottom_y, CAD_M.tank_height + 0.070);
+
+        // Vigas transversales superiores
+        drawHorizProfile(0.100, 0.580, CAD_M.tank_height, 0.025);
+        drawHorizProfile(0.110, 0.520, CAD_M.tank_height + 0.040, 0.022);
+        
+        ctx.fillStyle = '#64748b';
+        ctx.strokeStyle = '#334155';
+        ctx.beginPath();
+        const pBrc1 = m2px(0.110, CAD_M.tank_height);
+        const pBrc2 = m2px(0.080, CAD_M.tank_height + 0.060);
+        ctx.moveTo(pBrc1.x, pBrc1.y); ctx.lineTo(pBrc2.x, pBrc2.y); ctx.lineTo(pBrc2.x + 10, pBrc2.y); ctx.lineTo(pBrc1.x + 10, pBrc1.y);
+        ctx.closePath(); ctx.fill(); ctx.stroke();
+
+        drawHorizProfile(0.210, 0.490, CAD_M.motor_bottom_y - 0.012, 0.024);
+
+        // 3. CAPA DE AGUA (Nivel = 250 mm = 25 cm, 87.5 L)
+        const waterTop = m2px(0, CAD_M.water_level);
+        const waterHeightPx = CAD_M.water_level * scale;
+        const oxRatio = Math.min(1.0, Math.max(0, STATE.do_real / STATE.do_saturation));
+        const waterGrad = ctx.createLinearGradient(0, waterTop.y, 0, tankBottomLeft.y);
+        const r = Math.floor(12 + (1 - oxRatio) * 14);
+        const g = Math.floor(70 + oxRatio * 80);
+        const b = Math.floor(145 + oxRatio * 110);
+        waterGrad.addColorStop(0, `rgba(${r}, ${g}, ${b}, 0.38)`);
+        waterGrad.addColorStop(1, `rgba(${Math.floor(r*0.6)}, ${Math.floor(g*0.7)}, ${Math.floor(b*0.9)}, 0.68)`);
+        ctx.fillStyle = waterGrad;
+        ctx.fillRect(tankTopLeft.x, waterTop.y, tankW_px, waterHeightPx);
+
+        // Ondulación y olas superficiales con turbulencia directamente proporcional a RPM
+        ctx.beginPath();
+        ctx.moveTo(tankTopLeft.x, waterTop.y);
+        const waveSpeed = performance.now() * 0.0035;
+        const aNorm = STATE.aerator_actual_rpm / 600;
+        const splashWaveAmp = Math.pow(aNorm, 1.8) * 6.5;
+        
+        // Turbulencia del mezclador estrictamente proporcional a la velocidad (0 a 8.5 px)
+        const mRatio = STATE.mixer_actual_rpm / 1500;
+        const mixerWaveAmp = Math.pow(mRatio, 1.25) * 8.5;
+
+        for (let x = 0; x <= tankW_px; x += 6) {
+          const x_m = x / scale;
+          const distSplash = Math.abs(x_m - CAD_M.aerator_x);
+          const localSplash = splashWaveAmp * Math.exp(-distSplash * 5.2);
+          
+          // Olas de agitación del T-200: hervor turbulento en pared izquierda + oleaje continuo + chop micro-turbulento
+          const distLeft = x_m;
+          const boilWave = mixerWaveAmp * Math.exp(-distLeft * 4.2) * Math.sin(x * 0.16 + waveSpeed * 4);
+          const swellWave = mixerWaveAmp * 0.70 * Math.sin(x * 0.08 - waveSpeed * 3);
+          const chopWave = (mixerWaveAmp * 0.38) * Math.sin(x * 0.24 + waveSpeed * 7 + (x % 3));
+          const localMixerWave = boilWave + swellWave + chopWave;
+
+          const wy = waterTop.y + Math.sin(x * 0.06 + waveSpeed) * (localSplash + 0.3) + localMixerWave;
+          ctx.lineTo(tankTopLeft.x + x, wy);
+        }
+        ctx.strokeStyle = `rgba(186, 230, 253, ${0.55 + oxRatio * 0.35 + mRatio * 0.25})`;
+        ctx.lineWidth = 2.4;
+        ctx.stroke();
+
+        // 4. ELEMENTOS SUMERGIDOS
+        // Corrientes y filamentos fluidos continuos del T-200 (sin bolitas, estilo trazadores hidrodinámicos)
+        if (STATE.show_flow && STATE.mixer_actual_rpm > 30) {
+          const mRpmRatio = STATE.mixer_actual_rpm / 1500;
+          ctx.save();
+          ctx.lineCap = 'round';
+          ctx.lineJoin = 'round';
+
+          for (const s of STATE.flowParticles) {
+            const lifeFrac = s.life / s.maxLife;
+            const fade = Math.sin(lifeFrac * Math.PI);
+            const baseAlpha = (0.32 + 0.55 * mRpmRatio) * fade;
+            if (baseAlpha <= 0.01) continue;
+
+            const pts = s.trail.map(tp => m2px(tp.x, tp.y));
+            const nPts = pts.length;
+            if (nPts < 2) continue;
+
+            for (let k = 0; k < nPts - 1; k++) {
+              const p1 = pts[k];
+              const p2 = pts[k + 1];
+              const prog = (k + 1) / nPts;
+              const alpha = baseAlpha * Math.pow(prog, 1.6);
+              if (alpha < 0.015) continue;
+
+              ctx.strokeStyle = `rgba(56, 189, 248, ${alpha})`;
+              ctx.lineWidth = s.width * (0.8 + prog * 0.9);
+              ctx.beginPath();
+              ctx.moveTo(p1.x, p1.y);
+              ctx.lineTo(p2.x, p2.y);
+              ctx.stroke();
+
+              // Resplandor luminoso en la cabeza de la corriente (suave y fluido, sin esfera sólida)
+              if (prog > 0.65) {
+                ctx.strokeStyle = `rgba(224, 242, 254, ${alpha * 0.88})`;
+                ctx.lineWidth = 1.0;
+                ctx.beginPath();
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(p2.x, p2.y);
+                ctx.stroke();
+              }
+            }
+          }
+          ctx.restore();
+        }
+
+        // T-200 Thruster (Calibrado a real_CAD.png: tobera pequeña d=32 mm)
+        const pMixerRail = m2px(CAD_M.mixer_rail_x, CAD_M.mixer_center_y);
+        const pMixerBodyLeft = m2px(CAD_M.mixer_body_left_x, CAD_M.mixer_center_y);
+        const pMixerNozzleRight = m2px(CAD_M.mixer_nozzle_right_x, CAD_M.mixer_center_y);
+        const mBodyW = pMixerRail.x - pMixerBodyLeft.x;
+        const mBodyDiam = CAD_M.mixer_body_diam * scale;
+        const mNozzleDiam = CAD_M.mixer_nozzle_diam * scale; // Pequeño d=32 mm
+        const pClampBot = m2px(CAD_M.mixer_rail_x, CAD_M.mixer_clamp_bottom_y);
+        const pClampTop = m2px(CAD_M.mixer_rail_x, CAD_M.mixer_clamp_top_y);
+
+        // Abrazadera vertical de sujeción
+        ctx.fillStyle = '#334155';
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 1.2;
+        ctx.fillRect(pClampTop.x - 12, pClampTop.y, 24, 14);
+        ctx.strokeRect(pClampTop.x - 12, pClampTop.y, 24, 14);
+        ctx.fillRect(pClampTop.x - 5, pClampTop.y + 14, 10, pClampBot.y - pClampTop.y - 28);
+        ctx.fillRect(pClampBot.x - 12, pClampBot.y - 14, 24, 14);
+        ctx.strokeRect(pClampBot.x - 12, pClampBot.y - 14, 24, 14);
+
+        // Cilindro principal motor
+        const tGrad = ctx.createLinearGradient(0, pMixerRail.y - mBodyDiam/2, 0, pMixerRail.y + mBodyDiam/2);
+        tGrad.addColorStop(0, '#475569');
+        tGrad.addColorStop(0.25, '#94a3b8');
+        tGrad.addColorStop(0.75, '#64748b');
+        tGrad.addColorStop(1, '#1e293b');
+        ctx.fillStyle = tGrad;
+        ctx.fillRect(pMixerBodyLeft.x, pMixerRail.y - mBodyDiam/2, mBodyW, mBodyDiam);
+        ctx.strokeStyle = '#0f172a';
+        ctx.strokeRect(pMixerBodyLeft.x, pMixerRail.y - mBodyDiam/2, mBodyW, mBodyDiam);
+
+        ctx.fillStyle = '#334155';
+        ctx.beginPath();
+        ctx.arc(pMixerBodyLeft.x, pMixerRail.y, mBodyDiam/2, Math.PI/2, Math.PI*1.5);
+        ctx.fill();
+        ctx.stroke();
+
+        // Tobera pequeña con anillo azul anodizado (d=32 mm, fiel a real_CAD.png)
+        const nozzleW = pMixerNozzleRight.x - pMixerRail.x;
+        ctx.fillStyle = '#0284c7';
+        ctx.fillRect(pMixerRail.x, pMixerRail.y - mNozzleDiam/2, nozzleW * 0.6, mNozzleDiam);
+        ctx.fillStyle = '#1e293b';
+        ctx.fillRect(pMixerRail.x + nozzleW * 0.6, pMixerRail.y - mNozzleDiam * 0.45, nozzleW * 0.4, mNozzleDiam * 0.90);
+        ctx.strokeStyle = '#0369a1';
+        ctx.strokeRect(pMixerRail.x, pMixerRail.y - mNozzleDiam/2, nozzleW, mNozzleDiam);
+
+        // Penacho difuso y orgánico de propulsión en la tobera del T-200
+        if (STATE.mixer_actual_rpm > 40) {
+          const flowRatio = STATE.mixer_actual_rpm / 1500;
+          const jetReach = (0.10 + flowRatio * 0.18) * scale;
+          const jetGrad = ctx.createRadialGradient(
+            pMixerBodyLeft.x, pMixerRail.y, 4,
+            pMixerBodyLeft.x - jetReach * 0.5, pMixerRail.y, jetReach
+          );
+          jetGrad.addColorStop(0, `rgba(56, 189, 248, ${0.30 * flowRatio})`);
+          jetGrad.addColorStop(0.5, `rgba(56, 189, 248, ${0.12 * flowRatio})`);
+          jetGrad.addColorStop(1, 'rgba(56, 189, 248, 0)');
+          ctx.fillStyle = jetGrad;
+          ctx.beginPath();
+          ctx.ellipse(pMixerBodyLeft.x - jetReach * 0.45, pMixerRail.y, jetReach * 0.55, mBodyDiam * 0.85, 0, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+        // Sonda Ponsel OPTOD esbelta (d=22 mm, punta a 50 mm, fiel a real_CAD.png)
+        const pSensorTip = m2px(CAD_M.sensor_x, CAD_M.sensor_tip_y);
+        const pSensorTop = m2px(CAD_M.sensor_x, CAD_M.sensor_top_y);
+        const sDiam = CAD_M.sensor_diam * scale;
+        const sLen = pSensorTip.y - pSensorTop.y;
+
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 2.5;
+        ctx.beginPath();
+        ctx.moveTo(pSensorTop.x, pSensorTop.y);
+        ctx.lineTo(pSensorTop.x, tankTopLeft.y);
+        ctx.stroke();
+
+        ctx.fillStyle = '#475569';
+        ctx.fillRect(pSensorTop.x - sDiam * 0.35, pSensorTop.y - 8, sDiam * 0.7, 8);
+
+        const probeGrad = ctx.createLinearGradient(pSensorTip.x - sDiam/2, 0, pSensorTip.x + sDiam/2, 0);
+        probeGrad.addColorStop(0, '#334155');
+        probeGrad.addColorStop(0.3, '#64748b');
+        probeGrad.addColorStop(0.7, '#475569');
+        probeGrad.addColorStop(1, '#1e293b');
+        ctx.fillStyle = probeGrad;
+        ctx.fillRect(pSensorTip.x - sDiam/2, pSensorTop.y, sDiam, sLen);
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(pSensorTip.x - sDiam/2, pSensorTop.y, sDiam, sLen);
+
+        const capPulse = Math.sin(performance.now() * 0.006) > 0 ? '#38bdf8' : '#0284c7';
+        ctx.fillStyle = capPulse;
+        ctx.beginPath();
+        ctx.arc(pSensorTip.x, pSensorTip.y, sDiam * 0.40, 0, Math.PI);
+        ctx.fill();
+        ctx.strokeStyle = '#0369a1';
+        ctx.stroke();
+
+        // 5. MOTOR NODO-AERADOR, EJE CORTO EN EL AIRE E IMPELLER TIPO FLOR HACIA ARRIBA
+        const pMotorBottom = m2px(CAD_M.aerator_x, CAD_M.motor_bottom_y);
+        const drumDiamPx = CAD_M.motor_drum_diam * scale;
+        const flangeWPx = CAD_M.motor_flange_w * scale;
+        const motorHeightPx = (CAD_M.motor_top_y - CAD_M.motor_bottom_y) * scale;
+        
+        // Bridas laterales de anclaje a la estructura de perfiles (fiel a CAD)
+        ctx.fillStyle = '#475569';
+        ctx.strokeStyle = '#1e293b';
+        ctx.lineWidth = 1.2;
+        ctx.fillRect(pMotorBottom.x - flangeWPx/2, pMotorBottom.y - 20, flangeWPx, 22);
+        ctx.strokeRect(pMotorBottom.x - flangeWPx/2, pMotorBottom.y - 20, flangeWPx, 22);
+        // Orificios de fijación con pernos
+        ctx.fillStyle = '#0f172a';
+        ctx.beginPath();
+        ctx.arc(pMotorBottom.x - flangeWPx * 0.42, pMotorBottom.y - 9, 3.5, 0, Math.PI * 2);
+        ctx.arc(pMotorBottom.x + flangeWPx * 0.42, pMotorBottom.y - 9, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Tambor cilíndrico principal del motor (185 mm d., 235 mm alto, grande y prominente como en CAD)
+        const mGrad = ctx.createLinearGradient(pMotorBottom.x - drumDiamPx/2, 0, pMotorBottom.x + drumDiamPx/2, 0);
+        mGrad.addColorStop(0, '#334155');
+        mGrad.addColorStop(0.12, '#64748b');
+        mGrad.addColorStop(0.35, '#94a3b8');
+        mGrad.addColorStop(0.5, '#cbd5e1');
+        mGrad.addColorStop(0.75, '#64748b');
+        mGrad.addColorStop(1, '#334155');
+        ctx.fillStyle = mGrad;
+        ctx.fillRect(pMotorBottom.x - drumDiamPx/2, pMotorBottom.y - motorHeightPx, drumDiamPx, motorHeightPx);
+        ctx.strokeStyle = '#0f172a';
+        ctx.lineWidth = 1.4;
+        ctx.strokeRect(pMotorBottom.x - drumDiamPx/2, pMotorBottom.y - motorHeightPx, drumDiamPx, motorHeightPx);
+
+        // Tapa superior del tambor con pestillos
+        ctx.fillStyle = '#475569';
+        ctx.fillRect(pMotorBottom.x - drumDiamPx * 0.52, pMotorBottom.y - motorHeightPx - 8, drumDiamPx * 1.04, 10);
+        ctx.strokeStyle = '#1e293b';
+        ctx.strokeRect(pMotorBottom.x - drumDiamPx * 0.52, pMotorBottom.y - motorHeightPx - 8, drumDiamPx * 1.04, 10);
+        [-0.42, -0.15, 0.15, 0.42].forEach(fx => {
+          ctx.fillStyle = '#64748b';
+          ctx.fillRect(pMotorBottom.x + drumDiamPx * fx - 4, pMotorBottom.y - motorHeightPx - 4, 8, 12);
+          ctx.strokeRect(pMotorBottom.x + drumDiamPx * fx - 4, pMotorBottom.y - motorHeightPx - 4, 8, 12);
+        });
+
+        // Placa circular inferior de salida del eje y conector eléctrico
+        ctx.fillStyle = '#cbd5e1';
+        ctx.fillRect(pMotorBottom.x - drumDiamPx * 0.42, pMotorBottom.y - 4, drumDiamPx * 0.84, 5);
+        ctx.strokeStyle = '#475569';
+        ctx.strokeRect(pMotorBottom.x - drumDiamPx * 0.42, pMotorBottom.y - 4, drumDiamPx * 0.84, 5);
+
+        // Conector de control frontal
+        ctx.fillStyle = '#334155';
+        ctx.fillRect(pMotorBottom.x - 10, pMotorBottom.y - 32, 20, 24);
+        ctx.strokeStyle = '#1e293b';
+        ctx.strokeRect(pMotorBottom.x - 10, pMotorBottom.y - 32, 20, 24);
+
+        // EJE VERTICAL EN EL AIRE (Calibrado a 142 mm: Y=278 a 420 mm, NUNCA TOCA EL AGUA)
+        const pCollar = m2px(CAD_M.aerator_x, CAD_M.impeller_collar_y);
+        const shaftWPx = CAD_M.shaft_diam * scale;
+        const shaftGrad = ctx.createLinearGradient(pCollar.x - shaftWPx/2, 0, pCollar.x + shaftWPx/2, 0);
+        shaftGrad.addColorStop(0, '#92400e');
+        shaftGrad.addColorStop(0.3, '#d97706');
+        shaftGrad.addColorStop(0.7, '#f59e0b');
+        shaftGrad.addColorStop(1, '#78350f');
+        ctx.fillStyle = shaftGrad;
+        ctx.fillRect(pCollar.x - shaftWPx/2, pMotorBottom.y, shaftWPx, pCollar.y - pMotorBottom.y);
+        ctx.strokeStyle = '#451a03';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(pCollar.x - shaftWPx/2, pMotorBottom.y, shaftWPx, pCollar.y - pMotorBottom.y);
+
+        // IMPELLER TIPO FLOR HACIA ARRIBA (Fiel a real_CAD.png)
+        // La base del buje se sumerge 12 mm en el agua (a 238 mm del piso, nivel de agua = 250 mm).
+        // Las 6 aspas se curvan hacia ARRIBA y hacia AFUERA como los pétalos de una flor/cáliz.
+        // En los extremos exteriores se alzan aletas verticales rectangulares de paleta.
+        const pImpellerBase = m2px(CAD_M.aerator_x, CAD_M.impeller_bottom_y); // A 238 mm (sumergido 12 mm)
+        const R_px = CAD_M.impeller_radius * scale;        // 73 mm radio (146 mm ancho total)
+        const H_rise = 0.032 * scale;                      // 32 mm de curvatura ascendente de las palas
+        const Fin_h = 0.015 * scale;                       // 15 mm de altura de aleta vertical (45 mm alto total)
+        const Hub_r = 0.020 * scale;                       // 20 mm radio del buje inferior
+        const Collar_r = CAD_M.collar_radius * scale;      // 16 mm radio del cuello (32 mm diámetro)
+        const col_h = 0.010 * scale;                       // 10 mm altura del cuello de acople
+        const collarY = pCollar.y;
+
+        // Cuello de acople superior con anillo biselado y cilindro
+        const colGrad = ctx.createLinearGradient(pCollar.x - Collar_r, 0, pCollar.x + Collar_r, 0);
+        colGrad.addColorStop(0, '#78350f');
+        colGrad.addColorStop(0.3, '#b45309');
+        colGrad.addColorStop(0.7, '#d97706');
+        colGrad.addColorStop(1, '#451a03');
+        ctx.fillStyle = colGrad;
+        ctx.beginPath();
+        ctx.moveTo(pCollar.x - Collar_r, collarY);
+        ctx.lineTo(pCollar.x + Collar_r, collarY);
+        ctx.lineTo(pCollar.x + Collar_r * 0.9, collarY + col_h);
+        ctx.lineTo(pCollar.x - Collar_r * 0.9, collarY + col_h);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#451a03';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        // 6 Aspas en proyección 3D con curvatura hacia ARRIBA (Cáliz floral abierto)
+        const angle = STATE.aerator_angle;
+        const blades = [];
+        for (let i = 0; i < 6; i++) {
+          const bAngle = angle + (i * Math.PI / 3);
+          blades.push({
+            idx: i,
+            angle: bAngle,
+            cos: Math.cos(bAngle),
+            sin: Math.sin(bAngle)
+          });
+        }
+        // Orden de profundidad: Aspas traseras primero, buje central, aspas delanteras al final
+        blades.sort((a, b) => a.sin - b.sin);
+
+        function drawFlowerBlade(b, isFront) {
+          const cos_a = b.cos;
+          const sin_a = b.sin;
+          
+          // Raíz en el buje inferior
+          const rx = pImpellerBase.x + cos_a * (Hub_r * 0.70);
+          const ry = pImpellerBase.y - (Hub_r * 0.20 * (1 + sin_a * 0.5));
+          
+          // Punta exterior (se curva hacia ARRIBA y hacia AFUERA)
+          const tx = pImpellerBase.x + cos_a * R_px;
+          const ty = pImpellerBase.y - H_rise - (sin_a * 0.005 * scale);
+          
+          // Cima de la aleta vertical periférica
+          const fx = tx;
+          const fy = ty - Fin_h;
+          
+          // Anchura de aleta en perspectiva 3D
+          const fin_w = 0.011 * scale;
+          const fin_dx = -sin_a * fin_w * 0.45;
+          const fin_dy = cos_a * fin_w * 0.12;
+          
+          // Punto medio de la curva cóncava ascendente
+          const mx = pImpellerBase.x + cos_a * (R_px * 0.52);
+          const my = pImpellerBase.y - (H_rise * 0.25) - (sin_a * 0.003 * scale);
+          
+          // Raíz interior superior de la pala hacia el cuello
+          const ux = pImpellerBase.x + cos_a * (Collar_r * 0.85);
+          const uy = collarY + col_h - (sin_a * 0.003 * scale);
+          const mid_upper_x = pImpellerBase.x + cos_a * (R_px * 0.45);
+          const mid_upper_y = pImpellerBase.y - (H_rise * 0.50) - (sin_a * 0.003 * scale);
+
+          // Sombreado 3D realista basado en orientación de luz
+          const light = 0.65 + 0.35 * cos_a;
+          let rVal, gVal, bVal;
+          if (isFront) {
+            rVal = Math.floor(180 * light);
+            gVal = Math.floor(75 * light);
+            bVal = Math.floor(65 * light);
+          } else {
+            rVal = Math.floor(120 * light);
+            gVal = Math.floor(45 * light);
+            bVal = Math.floor(40 * light);
+          }
+
+          // Polígono de la pala: Curva inferior cóncava, aleta vertical rectangular, retorno superior cóncavo
+          ctx.beginPath();
+          ctx.moveTo(rx, ry);
+          ctx.quadraticCurveTo(mx, my, tx, ty);
+          ctx.lineTo(tx + fin_dx, ty + fin_dy);
+          ctx.lineTo(fx + fin_dx, fy + fin_dy);
+          ctx.lineTo(fx - fin_dx, fy - fin_dy);
+          ctx.lineTo(tx - fin_dx, ty - fin_dy);
+          ctx.quadraticCurveTo(mid_upper_x, mid_upper_y, ux, uy);
+          ctx.lineTo(rx, ry);
+          ctx.closePath();
+
+          ctx.fillStyle = `rgb(${rVal}, ${gVal}, ${bVal})`;
+          ctx.fill();
+          ctx.strokeStyle = '#450a0a';
+          ctx.lineWidth = 1.1;
+          ctx.stroke();
+
+          // Nervadura radial de refuerzo estructural en cada pala
+          ctx.beginPath();
+          ctx.moveTo(rx, ry);
+          ctx.quadraticCurveTo(mx, my, tx, ty);
+          ctx.strokeStyle = isFront ? `rgba(254, 202, 202, ${0.45 + light * 0.4})` : 'rgba(153, 27, 27, 0.6)';
+          ctx.lineWidth = 1.3;
+          ctx.stroke();
+        }
+
+        // 1. Aspas traseras (sin <= 0)
+        for (const b of blades) {
+          if (b.sin <= 0) drawFlowerBlade(b, false);
+        }
+
+        // 2. Buje central cónico / copa que se abre hacia ARRIBA
+        const hubGrad = ctx.createLinearGradient(pImpellerBase.x - Hub_r, 0, pImpellerBase.x + Hub_r, 0);
+        hubGrad.addColorStop(0, '#7f1d1d');
+        hubGrad.addColorStop(0.3, '#dc2626');
+        hubGrad.addColorStop(0.7, '#b91c1c');
+        hubGrad.addColorStop(1, '#450a0a');
+        ctx.fillStyle = hubGrad;
+
+        ctx.beginPath();
+        ctx.moveTo(pImpellerBase.x - Hub_r, pImpellerBase.y);
+        ctx.lineTo(pImpellerBase.x - Hub_r * 0.6, pImpellerBase.y + 3);
+        ctx.lineTo(pImpellerBase.x + Hub_r * 0.6, pImpellerBase.y + 3);
+        ctx.lineTo(pImpellerBase.x + Hub_r, pImpellerBase.y);
+        ctx.lineTo(pImpellerBase.x + Collar_r * 0.85, collarY + col_h);
+        ctx.lineTo(pImpellerBase.x - Collar_r * 0.85, collarY + col_h);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#450a0a';
+        ctx.lineWidth = 1.2;
+        ctx.stroke();
+
+        // Faceta triangular frontal del buje (idéntica a real_CAD.png)
+        const triGrad = ctx.createLinearGradient(pImpellerBase.x - Collar_r * 0.7, 0, pImpellerBase.x + Collar_r * 0.7, 0);
+        triGrad.addColorStop(0, '#dc2626');
+        triGrad.addColorStop(0.5, '#ef4444');
+        triGrad.addColorStop(1, '#991b1b');
+        ctx.fillStyle = triGrad;
+        ctx.beginPath();
+        ctx.moveTo(pImpellerBase.x - Collar_r * 0.7, collarY + col_h);
+        ctx.lineTo(pImpellerBase.x + Collar_r * 0.7, collarY + col_h);
+        ctx.lineTo(pImpellerBase.x, pImpellerBase.y - 2);
+        ctx.closePath();
+        ctx.fill();
+        ctx.strokeStyle = '#7f1d1d';
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // Borde circular inferior del buje en la superficie del agua
+        ctx.fillStyle = '#b91c1c';
+        ctx.beginPath();
+        ctx.ellipse(pImpellerBase.x, pImpellerBase.y, Hub_r * 0.65, 3.2, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.strokeStyle = '#450a0a';
+        ctx.stroke();
+
+        // 3. Aspas delanteras (sin > 0)
+        for (const b of blades) {
+          if (b.sin > 0) drawFlowerBlade(b, true);
+        }
+
+
+        // Choque de aspas contra la superficie del agua (burbujeo y espuma de colisión)
+        if (STATE.aerator_actual_rpm > 30) {
+          const chopNorm = STATE.aerator_actual_rpm / 600;
+          const chopAlpha = 0.45 + chopNorm * 0.50;
+          const pImpL = m2px(CAD_M.aerator_x - CAD_M.impeller_radius * 0.75, CAD_M.water_level);
+          const pImpR = m2px(CAD_M.aerator_x + CAD_M.impeller_radius * 0.75, CAD_M.water_level);
+          const chopW = (0.016 + chopNorm * 0.024) * scale;
+          const chopH = (0.005 + chopNorm * 0.009) * scale;
+          
+          [pImpL, pImpR].forEach(pt => {
+            const fGrad = ctx.createRadialGradient(pt.x, pt.y, 1, pt.x, pt.y, chopW);
+            fGrad.addColorStop(0, `rgba(255, 255, 255, ${chopAlpha})`);
+            fGrad.addColorStop(0.5, `rgba(224, 242, 254, ${chopAlpha * 0.65})`);
+            fGrad.addColorStop(1, 'rgba(255, 255, 255, 0)');
+            ctx.fillStyle = fGrad;
+            ctx.beginPath();
+            ctx.ellipse(pt.x, pt.y, chopW, chopH, 0, 0, Math.PI * 2);
+            ctx.fill();
+          });
+        }
+
+        // 6. GOTAS Y ESPUMA DE SALPICADURA SUPERFICIAL (ARCOS PARABÓLICOS REALISTAS)
+        for (const d of STATE.splashDrops) {
+          const p = m2px(d.x, d.y);
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, d.radius * scale, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(224, 242, 254, ${0.92 * d.life})`;
+          ctx.fill();
+          ctx.strokeStyle = `rgba(255, 255, 255, ${0.95 * d.life})`;
+          ctx.lineWidth = 0.6;
+          ctx.stroke();
+        }
+
+        for (const w of STATE.wallDrips) {
+          const p = m2px(w.x, w.y);
+          ctx.beginPath();
+          ctx.ellipse(p.x, p.y, w.radius * scale * 0.8, w.radius * scale * 1.8, 0, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(224, 242, 254, ${0.72 * w.life})`;
+          ctx.fill();
+        }
+
+        for (const f of STATE.surfaceFoam) {
+          const p = m2px(f.x, f.y);
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, f.radius * scale, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(255, 255, 255, ${f.alpha * (f.life / 0.45)})`;
+          ctx.fill();
+        }
+
+        // 7. MARCO EXTERIOR DEL TANQUE ACRÍLICO
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.45)';
+        ctx.lineWidth = 2.5;
+        ctx.strokeRect(tankTopLeft.x, tankTopLeft.y, tankW_px, tankH_px);
+
+        // 8. COTAS CAD (Calibradas fielmente a real_CAD.png)
+        if (STATE.show_dimensions) {
+          drawCADDimension(m2px(0, -0.035), m2px(CAD_M.tank_width, -0.035), '700 mm', 'horizontal');
+          drawCADDimension(m2px(-0.035, 0), m2px(-0.035, CAD_M.tank_height), '600 mm', 'vertical');
+          drawCADDimension(m2px(CAD_M.tank_width + 0.035, 0), m2px(CAD_M.tank_width + 0.035, CAD_M.water_level), '250 mm', 'vertical', '#38bdf8');
+          // 200 mm desde la viga base al fondo del buje del impeller (como indica la cota central)
+          drawCADDimension(m2px(CAD_M.aerator_x - 0.012, CAD_M.base_top_y), m2px(CAD_M.aerator_x - 0.012, CAD_M.impeller_bottom_y), '200 mm', 'vertical', '#f87171');
+          drawCADDimension(m2px(CAD_M.sensor_rail_x - 0.025, 0), m2px(CAD_M.sensor_rail_x - 0.025, CAD_M.sensor_rail_bottom_y), '50 mm', 'vertical', '#34d399');
+          drawCADDimension(m2px(CAD_M.mixer_nozzle_right_x + 0.025, 0), m2px(CAD_M.mixer_nozzle_right_x + 0.025, CAD_M.mixer_clamp_bottom_y), '50 mm', 'vertical', '#e2e8f0');
+        }
+
+        ctx.restore();
+      }
+
+      function drawCADDimension(p1, p2, text, orientation, color = '#f1f5f9') {
+        ctx.save();
+        ctx.strokeStyle = color;
+        ctx.fillStyle = color;
+        ctx.lineWidth = 1.3;
+        ctx.font = 'bold 11px ui-monospace, monospace';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.stroke();
+
+        const arrowSize = 6;
+        if (orientation === 'horizontal') {
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y); ctx.lineTo(p1.x + arrowSize, p1.y - 3); ctx.lineTo(p1.x + arrowSize, p1.y + 3); ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(p2.x, p2.y); ctx.lineTo(p2.x - arrowSize, p2.y - 3); ctx.lineTo(p2.x - arrowSize, p2.y + 3); ctx.fill();
+          const midX = (p1.x + p2.x) / 2;
+          const midY = p1.y;
+          ctx.fillStyle = '#090d16';
+          ctx.fillRect(midX - 26, midY - 8, 52, 16);
+          ctx.fillStyle = color;
+          ctx.fillText(text, midX, midY);
+        } else {
+          ctx.beginPath();
+          ctx.moveTo(p1.x, p1.y); ctx.lineTo(p1.x - 3, p1.y - arrowSize); ctx.lineTo(p1.x + 3, p1.y - arrowSize); ctx.fill();
+          ctx.beginPath();
+          ctx.moveTo(p2.x, p2.y); ctx.lineTo(p2.x - 3, p2.y + arrowSize); ctx.lineTo(p2.x + 3, p2.y + arrowSize); ctx.fill();
+          const midX = p1.x;
+          const midY = (p1.y + p2.y) / 2;
+          ctx.save();
+          ctx.translate(midX, midY);
+          ctx.rotate(-Math.PI / 2);
+          ctx.fillStyle = '#090d16';
+          ctx.fillRect(-24, -9, 48, 18);
+          ctx.fillStyle = color;
+          ctx.fillText(text, 0, 0);
+          ctx.restore();
+        }
+        ctx.restore();
+      }
+
+      function renderChart() {
+        if (!chartCtx || history.times.length < 2) return;
+        const dpr = window.devicePixelRatio || 1;
+        const cw = (chartCanvas.width / dpr) || 300;
+        const ch = (chartCanvas.height / dpr) || 75;
+        chartCtx.clearRect(0, 0, chartCanvas.width, chartCanvas.height);
+        chartCtx.save();
+        chartCtx.scale(dpr, dpr);
+
+        chartCtx.strokeStyle = 'rgba(51, 65, 85, 0.4)';
+        chartCtx.lineWidth = 1;
+        chartCtx.beginPath();
+        for (let y = 0; y <= ch; y += ch / 3) {
+          chartCtx.moveTo(0, y);
+          chartCtx.lineTo(cw, y);
+        }
+        chartCtx.stroke();
+
+        const maxDO = 9.0;
+        const count = history.times.length;
+
+        chartCtx.strokeStyle = '#34d399';
+        chartCtx.lineWidth = 2;
+        chartCtx.beginPath();
+        for (let i = 0; i < count; i++) {
+          const x = (i / (count - 1)) * cw;
+          const y = ch - (history.do_real[i] / maxDO) * ch;
+          if (i === 0) chartCtx.moveTo(x, y);
+          else chartCtx.lineTo(x, y);
+        }
+        chartCtx.stroke();
+
+        chartCtx.strokeStyle = '#38bdf8';
+        chartCtx.lineWidth = 2;
+        chartCtx.setLineDash([4, 2]);
+        chartCtx.beginPath();
+        for (let i = 0; i < count; i++) {
+          const x = (i / (count - 1)) * cw;
+          const y = ch - (history.do_measured[i] / maxDO) * ch;
+          if (i === 0) chartCtx.moveTo(x, y);
+          else chartCtx.lineTo(x, y);
+        }
+        chartCtx.stroke();
+        chartCtx.setLineDash([]);
+        chartCtx.restore();
+      }
+
+      const elDoMeasured = document.getElementById('readout-do-measured');
+      const elDoReal = document.getElementById('readout-do-real');
+      const elSatPct = document.getElementById('readout-sat-pct');
+      const elSatBar = document.getElementById('bar-sat-progress');
+      const elSatBarLabel = document.getElementById('bar-sat-label');
+      const elAeratorRpmVal = document.getElementById('val-aerator-rpm');
+      const elAeratorState = document.getElementById('badge-aerator-state');
+      const elMixerRpmVal = document.getElementById('val-mixer-rpm');
+      const elMixerState = document.getElementById('badge-mixer-state');
+
+      function updateUI() {
+        if (elDoMeasured) elDoMeasured.textContent = STATE.do_measured.toFixed(2);
+        if (elDoReal) elDoReal.textContent = STATE.do_real.toFixed(2);
+        const satPct = (STATE.do_real / STATE.do_saturation * 100).toFixed(1);
+        if (elSatPct) elSatPct.textContent = satPct + '%';
+        if (elSatBarLabel) elSatBarLabel.textContent = satPct + '%';
+        if (elSatBar) elSatBar.style.width = Math.min(100, Math.max(0, satPct)) + '%';
+
+        const aRpm = Math.round(STATE.aerator_actual_rpm);
+        const aPct = Math.round((aRpm / 600) * 100);
+        if (elAeratorRpmVal) elAeratorRpmVal.textContent = `${aRpm} RPM (${aPct}%)`;
+        if (elAeratorState) {
+          if (aRpm > 20) {
+            elAeratorState.textContent = 'SPLASH ACTIVO';
+            elAeratorState.className = 'badge badge-active-red';
+          } else {
+            elAeratorState.textContent = 'PARADO';
+            elAeratorState.className = 'badge badge-stopped';
+          }
+        }
+
+        const mRpm = Math.round(STATE.mixer_actual_rpm);
+        const mPct = Math.round((mRpm / 1500) * 100);
+        if (elMixerRpmVal) elMixerRpmVal.textContent = `${mRpm} RPM (${mPct}%)`;
+        if (elMixerState) {
+          if (mRpm > 30) {
+            elMixerState.textContent = 'AGITANDO';
+            elMixerState.className = 'badge badge-active-blue';
+          } else {
+            elMixerState.textContent = 'PARADO';
+            elMixerState.className = 'badge badge-stopped';
+          }
+        }
+      }
+
+      const sliderAerator = document.getElementById('slider-aerator');
+      if (sliderAerator) {
+        sliderAerator.addEventListener('input', (e) => { STATE.aerator_target_rpm = parseFloat(e.target.value); });
+      }
+      const btnAeratorToggle = document.getElementById('btn-aerator-toggle');
+      if (btnAeratorToggle) {
+        btnAeratorToggle.addEventListener('click', () => {
+          if (STATE.aerator_target_rpm > 0) { STATE.aerator_target_rpm = 0; if (sliderAerator) sliderAerator.value = 0; }
+          else { STATE.aerator_target_rpm = 350; if (sliderAerator) sliderAerator.value = 350; }
+        });
+      }
+      const btnAeratorLow = document.getElementById('btn-aerator-preset-low');
+      if (btnAeratorLow) btnAeratorLow.addEventListener('click', () => { STATE.aerator_target_rpm = 200; if (sliderAerator) sliderAerator.value = 200; });
+      const btnAeratorMid = document.getElementById('btn-aerator-preset-mid');
+      if (btnAeratorMid) btnAeratorMid.addEventListener('click', () => { STATE.aerator_target_rpm = 400; if (sliderAerator) sliderAerator.value = 400; });
+      const btnAeratorHigh = document.getElementById('btn-aerator-preset-high');
+      if (btnAeratorHigh) btnAeratorHigh.addEventListener('click', () => { STATE.aerator_target_rpm = 600; if (sliderAerator) sliderAerator.value = 600; });
+
+      const sliderMixer = document.getElementById('slider-mixer');
+      if (sliderMixer) {
+        sliderMixer.addEventListener('input', (e) => { STATE.mixer_target_rpm = parseFloat(e.target.value); });
+      }
+      const btnMixerToggle = document.getElementById('btn-mixer-toggle');
+      if (btnMixerToggle) {
+        btnMixerToggle.addEventListener('click', () => {
+          if (STATE.mixer_target_rpm > 0) { STATE.mixer_target_rpm = 0; if (sliderMixer) sliderMixer.value = 0; }
+          else { STATE.mixer_target_rpm = 800; if (sliderMixer) sliderMixer.value = 800; }
+        });
+      }
+      const btnMixerLow = document.getElementById('btn-mixer-preset-low');
+      if (btnMixerLow) btnMixerLow.addEventListener('click', () => { STATE.mixer_target_rpm = 500; if (sliderMixer) sliderMixer.value = 500; });
+      const btnMixerMid = document.getElementById('btn-mixer-preset-mid');
+      if (btnMixerMid) btnMixerMid.addEventListener('click', () => { STATE.mixer_target_rpm = 1000; if (sliderMixer) sliderMixer.value = 1000; });
+      const btnMixerHigh = document.getElementById('btn-mixer-preset-high');
+      if (btnMixerHigh) btnMixerHigh.addEventListener('click', () => { STATE.mixer_target_rpm = 1500; if (sliderMixer) sliderMixer.value = 1500; });
+
+      const btnDeox = document.getElementById('btn-deox');
+      if (btnDeox) btnDeox.addEventListener('click', () => { STATE.deox_in_progress = true; STATE.deox_timer = 4.0; });
+
+      const btnReset = document.getElementById('btn-reset');
+      if (btnReset) {
+        btnReset.addEventListener('click', () => {
+          STATE.aerator_target_rpm = 0; STATE.aerator_actual_rpm = 0;
+          STATE.mixer_target_rpm = 0; STATE.mixer_actual_rpm = 0;
+          STATE.do_real = 1.0; STATE.do_measured = 1.0;
+          STATE.splashDrops = []; STATE.wallDrips = []; STATE.surfaceFoam = [];
+          if (sliderAerator) sliderAerator.value = 0;
+          if (sliderMixer) sliderMixer.value = 0;
+          history.times = []; history.do_real = []; history.do_measured = [];
+        });
+      }
+
+      const btnToggleDims = document.getElementById('toggle-dimensions');
+      if (btnToggleDims) {
+        btnToggleDims.addEventListener('click', () => {
+          STATE.show_dimensions = !STATE.show_dimensions;
+          btnToggleDims.classList.toggle('active-dims', STATE.show_dimensions);
+          document.getElementById('lbl-dims').textContent = `Cotas CAD: ${STATE.show_dimensions ? 'ON' : 'OFF'}`;
+        });
+      }
+
+      const btnToggleSplash = document.getElementById('toggle-splash');
+      if (btnToggleSplash) {
+        btnToggleSplash.addEventListener('click', () => {
+          STATE.show_splash = !STATE.show_splash;
+          btnToggleSplash.classList.toggle('active-splash', STATE.show_splash);
+          document.getElementById('lbl-splash').textContent = `Splash Superficial: ${STATE.show_splash ? 'ON' : 'OFF'}`;
+        });
+      }
+
+      const btnToggleFlow = document.getElementById('toggle-flow');
+      if (btnToggleFlow) {
+        btnToggleFlow.addEventListener('click', () => {
+          STATE.show_flow = !STATE.show_flow;
+          btnToggleFlow.classList.toggle('active-flow', STATE.show_flow);
+          document.getElementById('lbl-flow').textContent = `Líneas de Mezcla T-200: ${STATE.show_flow ? 'ON' : 'OFF'}`;
+        });
+      }
+
+      document.querySelectorAll('.btn-speed').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          document.querySelectorAll('.btn-speed').forEach(b => b.classList.remove('active'));
+          e.target.classList.add('active');
+          STATE.sim_speed = parseFloat(e.target.dataset.speed);
+        });
+      });
+
+      function loop(currentTime) {
+        const dt = (currentTime - lastTime) / 1000;
+        lastTime = currentTime;
+        updatePhysics(dt);
+        render();
+        renderChart();
+        updateUI();
+        requestAnimationFrame(loop);
+      }
+      requestAnimationFrame(loop);
+    })();
+  </script>
+</body>
+</html>

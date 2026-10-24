@@ -1,0 +1,70 @@
+# Prerequisites
+*.d
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+*.smod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# Windows Zone.Identifier files (metadata from downloads)
+*:Zone.Identifier
+
+# Arduino IDE build artifacts
+*.elf
+*.hex
+*.bin
+*.map
+
+# VS Code / PlatformIO
+.vscode/
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# Temporary files
+*~
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# IDE specific
+*.sublime-*
+.idea/
+
+# Logs
+*.log
+
+# Local deployment config
+src/config.h
+implementation_plan.md
+.clang-format
+# Python bytecode. A committed .pyc turns `git diff` into a binary blob that
+# `git apply` refuses, which is how it was found (firmware-patches/03).
+__pycache__/
+*.pyc

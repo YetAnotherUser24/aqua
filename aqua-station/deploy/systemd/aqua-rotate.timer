@@ -1,0 +1,71 @@
+# =============================================================================
+# aqua-rotate.timer — midnight rotation and retention
+# =============================================================================
+# Install to: /etc/systemd/system/aqua-rotate.timer
+# Partner unit: aqua-rotate.service
+#
+# =============================================================================
+# WHY THIS EXISTS
+# =============================================================================
+# At midnight America/Lima, the open CSV for each role is closed, checksummed and
+# gzipped, so the day becomes flushable. Retention then runs against the manifest.
+#
+# This MUST use the project timezone, not the host's. The Pi shipped on
+# Europe/London while the system is defined in America/Lima; a mismatch would
+# misfile every nightly file by five hours, splitting days at the wrong point and
+# corrupting every per-day aggregate. deploy/install.sh sets the host timezone, and
+# retention also computes its own dates in America/Lima so it cannot depend on the
+# host being right.
+# =============================================================================
+
+[Unit]
+Description=AquaControl archive rotation, compression and retention
+Documentation=file:///opt/aqua-station/docs/DATA-FORMAT.md
+After=aqua-gateway.service
+PartOf=aqua-gateway.service
+
+[Service]
+Type=oneshot
+User=aqua
+Group=aqua
+EnvironmentFile=/etc/aqua/gateway.env
+WorkingDirectory=/opt/aqua-station/gateway
+
+ExecStart=/opt/aqua-station/gateway/.venv/bin/python -m aqua_gateway.archive.rotate
+
+# Rotation touches files the gateway is actively writing, so it coordinates
+# through the manifest rather than moving files underneath the writer.
+# It must never be killed mid-gzip: a half-written .gz is worse than no .gz.
+TimeoutStartSec=20min
+KillMode=process
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aqua-rotate
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/data/telemetry /var/lib/aqua-gateway
+
+# =============================================================================
+# TIMER — install to /etc/systemd/system/aqua-rotate.timer
+# =============================================================================
+# Two runs, on purpose:
+#   00:05  close and compress yesterday's file
+#   00:35  apply retention once the manifest has the new file recorded
+#
+# Splitting them means retention can never race the rotation that would have made a
+# file eligible. Persistent=true covers a Pi that was off overnight.
+
+[Timer]
+# Rotation
+OnCalendar=*-*-* 00:05:00
+# Retention pass (a second OnCalendar line schedules both)
+OnCalendar=*-*-* 00:35:00
+RandomizedDelaySec=2min
+Persistent=true
+Unit=aqua-rotate.service
+
+[Install]
+WantedBy=timers.target

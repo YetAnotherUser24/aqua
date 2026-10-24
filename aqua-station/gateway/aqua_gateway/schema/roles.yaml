@@ -1,0 +1,156 @@
+# ==============================================================================
+# Telemetry schema registry — schema version 2
+# ==============================================================================
+# This file is the machine-readable half of docs/PROTOCOL.md. The gateway loads
+# it at startup and validates every incoming batch against it.
+#
+# Adding a node type or a field is a DATA change here, never a code change.
+# `legacy_source` / `legacy_divisor` document how the redesigned field is derived
+# from the pre-overhaul firmware field, so the firmware patches can be written
+# from this file alone.
+#
+# Field naming: <domain>_<measure><_raw>. Units live in the suffix.
+#   t_    time          od_   DO probe        drv_  motor drive / actuator
+#   pump_ pump/dosing    pwr_  power/battery  rtc_  real-time clock
+#   dev_  device status  ctl_  controller      peer_ value echoed from ANOTHER node
+#
+# Rules:
+#   - `raw` fields are device-native values, kept for calibration provenance.
+#   - `peer_*` fields are NOT authoritative. Never average them with the od_* source.
+#   - Booleans serialise as 0/1. Enums serialise as their string name.
+# ==============================================================================
+
+version: 2
+max_batch: 200
+
+# Retired by schema v2 — the gateway rejects these outright rather than guessing.
+#   rtc_timestamp_ms  (ambiguous: epoch ms OR ms-since-2000)
+#   seconds_since_2000
+#   datetime          (string timestamps in telemetry)
+retired_fields:
+  - rtc_timestamp_ms
+  - seconds_since_2000
+  - datetime
+  - is_on            # renamed drv_running
+  - status_code      # renamed drv_status
+
+roles:
+
+  # --------------------------------------------------------------------------
+  # Optical dissolved-oxygen logger. Also the deployment's time authority:
+  # its DS3231 is battery-backed and survives power cuts, unlike the Pi.
+  # AUTHORITATIVE for dissolved oxygen and water temperature.
+  # --------------------------------------------------------------------------
+  od_sensor:
+    display_name: "Sensor OD — oxígeno disuelto óptico"
+    node_id: "a0000000-0000-0000-0000-000000000001"
+    topic: aqua/tlm/od_sensor
+    # Descriptive, not aspirational -- the same mistake the mixer and pump notes below record.
+    # `main.cpp` samples every `experimentIntervalMs` / `webMonitorIntervalMs` (5000 ms by
+    # default), queues one reading, and flushes on that same 5 s boundary, so the node delivers
+    # one sample per 5 s = 0.2 Hz. The {5.0, 0.0167} this role used to carry was copy-paste from
+    # the aerator, which genuinely samples at 5 Hz. Two data paths divide by this value: the
+    # rollup computes downtime from it and the export takes its minimum to pick a resample
+    # cadence, so a declared rate the firmware does not produce corrupts both.
+    expected_rate_hz: {experiment: 0.2, idle: 0.0167}   # idle = 1/min
+    authoritative_for: [dissolved_oxygen, water_temperature]
+    fields:
+      - {name: od_do_mg_l,       type: float, unit: "mg/L", precision: 3, legacy_source: do_milli_mg_l,   legacy_divisor: 1000}
+      - {name: od_do_raw,        type: int,   unit: null,  legacy_source: do_milli_mg_l}
+      - {name: od_sat_pct,       type: float, unit: "%",    precision: 2, legacy_source: do_sat_deci_pct, legacy_divisor: 10}
+      - {name: od_sat_raw,       type: int,   unit: null,  legacy_source: do_sat_deci_pct}
+      - {name: od_temp_c,        type: float, unit: "°C",   precision: 2, legacy_source: water_temp_centi, legacy_divisor: 100}
+      - {name: od_temp_raw,      type: int,   unit: null,  legacy_source: water_temp_centi}
+      - {name: od_aux1_raw,      type: int,   unit: null,  legacy_source: param3_centi, note: "spare channel, purpose TBD"}
+      - {name: od_aux2_raw,      type: int,   unit: null,  legacy_source: param4_centi, note: "spare channel, purpose TBD"}
+      - {name: pwr_battery_v,    type: float, unit: "V",    precision: 2, legacy_source: battery_mv, legacy_divisor: 1000}
+      - {name: rtc_temp_c,       type: float, unit: "°C",   precision: 2, legacy_source: rtc_temp_centi, legacy_divisor: 100,
+         note: "DS3231 die temperature — drift indicator"}
+      - {name: rtc_health,       type: int,   unit: null,  note: "oscillator/battery status word"}
+      - {name: dev_status,       type: int,   unit: null,  legacy_source: status}
+
+  # --------------------------------------------------------------------------
+  # ODrive S1 driving the M8325s aerator. PID runs on-node at 20 Hz; this stack
+  # is purely supervisory, so nothing here is on the control path.
+  # --------------------------------------------------------------------------
+  aerator:
+    display_name: "Aireador — ODrive S1 / M8325s"
+    node_id: "b0000000-0000-0000-0000-000000000002"
+    topic: aqua/tlm/aerator
+    expected_rate_hz: {experiment: 5.0, idle: 0.0167}
+    fields:
+      - {name: drv_rpm,          type: float, unit: "rpm",  precision: 2, legacy_source: actual_rpm}
+      - {name: drv_rpm_target,   type: float, unit: "rpm",  precision: 2, legacy_source: target_rpm}
+      - {name: drv_vbus_v,       type: float, unit: "V",    precision: 2, legacy_source: vbus_voltage}
+      - {name: drv_ibus_a,       type: float, unit: "A",    precision: 2, legacy_source: ibus_current}
+      - {name: drv_power_w,      type: float, unit: "W",    precision: 2, legacy_source: power_watts}
+      - {name: drv_torque_nm,    type: float, unit: "N·m",  precision: 3, legacy_source: torque_estimate}
+      - {name: drv_iq_a,         type: float, unit: "A",    precision: 2, legacy_source: iq_measured}
+      - {name: drv_running,      type: bool,  legacy_source: is_on}
+      - {name: drv_status,       type: int,   unit: null,  legacy_source: status_code}
+      - {name: drv_state,        type: int,   unit: null,  note: "ODrive axis0.current_state (1=IDLE, 8=CLOSED_LOOP)"}
+      - {name: drv_disarm_reason, type: int,  unit: null,  note: "ODrive axis0.disarm_reason (motivo de desarme)"}
+      - {name: ctl_mode,         type: enum,  values: [pid, fuzzy, manual], legacy_source: control_mode,
+         legacy_map: {0: pid, 1: fuzzy, 2: manual}}
+      - {name: ctl_failsafe,     type: bool,  legacy_source: failsafe_active}
+      # Received from the OD logger over ESP-NOW for this node's own control loop.
+      # Informational only — od_sensor is authoritative for these quantities.
+      - {name: peer_do_mg_l,     type: float, unit: "mg/L", precision: 3, legacy_source: measured_do, authoritative: false}
+      - {name: peer_temp_c,      type: float, unit: "°C",   precision: 2, legacy_source: water_temp,  authoritative: false}
+
+  # --------------------------------------------------------------------------
+  # T-200 mixer via SNR8503 (ESC + FG tachometer). Specified in rad/s and duty —
+  # the previous shared schema assumed PWM microseconds, which never described
+  # this device.
+  # --------------------------------------------------------------------------
+  mixer:
+    display_name: "Mezclador — T-200 / SNR8503"
+    node_id: "c0000000-0000-0000-0000-000000000003"
+    topic: aqua/tlm/mixer
+    # Descriptive, not aspirational. This node publishes every TELEMETRY_INTERVAL_MS
+    # (3000 ms) while running and every 20000 ms idle, which is what config.h and
+    # cloud_worker.cpp do. The rollup divides by this to compute downtime, so a declared
+    # rate the firmware does not produce reports a healthy run as mostly down -- at 5.0 Hz
+    # a running mixer showed ~56 s of downtime per minute. 5 Hz is the fidelity target for
+    # the node that samples at it -- the aerator, which batches twenty-five readings into an
+    # envelope -- not for a motor controller reporting one state per 3 s.
+    expected_rate_hz: {experiment: 0.2, idle: 0.05}
+    fields:
+      - {name: drv_rpm,          type: float, unit: "rpm",   precision: 1, legacy_source: actual_rpm}
+      - {name: drv_rpm_target,   type: float, unit: "rpm",   precision: 1, legacy_source: target_rpm}
+      - {name: drv_rad_s,        type: float, unit: "rad/s", precision: 3, legacy_source: actual_rad_s}
+      - {name: drv_rad_s_target, type: float, unit: "rad/s", precision: 3, legacy_source: target_rad_s}
+      - {name: drv_duty_pct,     type: float, unit: "%",     precision: 2, legacy_source: commanded_duty}
+      - {name: drv_running,      type: bool}
+      - {name: drv_stall,        type: bool,  note: "commanded but below stall threshold"}
+      - {name: drv_status,       type: int,   unit: null, note: "ESC fault word"}
+
+  # --------------------------------------------------------------------------
+  # Peristaltic dosing pump. Volume-oriented, not speed-oriented.
+  # --------------------------------------------------------------------------
+  pump:
+    display_name: "Bomba dosificadora — peristáltica"
+    node_id: "d0000000-0000-0000-0000-000000000004"
+    topic: aqua/tlm/pump
+    # As for the mixer: 3000 ms while running, 20000 ms idle, straight from config.h. The
+    # identical {5.0, 0.0167} this role used to carry was copy-paste -- 0.0167 is one sample
+    # per minute, which is neither node's idle cadence.
+    expected_rate_hz: {experiment: 0.3333, idle: 0.05}
+    fields:
+      - {name: pump_dosed_ml,        type: float, unit: "mL", precision: 2, legacy_source: dosed_ml}
+      - {name: pump_target_ml,       type: float, unit: "mL", precision: 2, legacy_source: target_ml}
+      - {name: pump_rpm,             type: float, unit: "rpm", precision: 2, legacy_source: rpm}
+      - {name: pump_flow_ml_min,     type: float, unit: "mL/min", precision: 2}
+      - {name: pump_mode,            type: enum,  values: [idle, dose, manual], legacy_source: mode,
+         legacy_map: {0: idle, 1: dose, 2: manual}}
+      - {name: pump_dose_completed,  type: bool,  legacy_source: dose_completed}
+      - {name: pump_dose_timed_out,  type: bool,  legacy_source: dose_timed_out}
+      - {name: drv_status,           type: int,   unit: null}
+
+# ------------------------------------------------------------------------------
+# Calibration constants. NOT telemetry — recorded in the experiment manifest so a
+# dose can be reconstructed after the fact.
+# ------------------------------------------------------------------------------
+calibration:
+  pump:
+    ml_per_rev: {value: null, unit: "mL/rev", note: "from ML_PER_REV in nodo-bomba config.h — must be pinned per experiment"}

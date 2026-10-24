@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <title>Boceto 2D – Banco de Pruebas</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #1a1a2e;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      font-family: 'Segoe UI', sans-serif;
+      color: #e0e0e0;
+    }
+    h1 { font-size: 1.1rem; letter-spacing: 0.15em; margin-bottom: 16px; color: #90caf9; text-transform: uppercase; }
+    canvas { background: #f5f5f0; border: 2px solid #333; box-shadow: 0 8px 32px #0008; }
+    .legend { margin-top: 12px; font-size: 0.78rem; color: #aaa; letter-spacing: 0.05em; }
+  </style>
+</head>
+<body>
+  <h1>Banco de Pruebas – Vista Frontal</h1>
+  <canvas id="c"></canvas>
+  <p class="legend">Escala proporcional · 700 mm × 600 mm · Cotas en mm</p>
+
+<script>
+// ─── Dimensiones reales (mm) ──────────────────────────────────────────────────
+const REAL_W = 700;   // ancho total
+const REAL_H = 600;   // alto total
+
+// ─── Canvas y escala ─────────────────────────────────────────────────────────
+const PADDING = 80;   // espacio para cotas alrededor
+const CANVAS_DRAW_W = 620;
+const CANVAS_DRAW_H = Math.round(CANVAS_DRAW_W * REAL_H / REAL_W);  // 531 px
+const TOTAL_W = CANVAS_DRAW_W + PADDING * 2;
+const TOTAL_H = CANVAS_DRAW_H + PADDING * 2;
+
+const cvs = document.getElementById('c');
+cvs.width  = TOTAL_W;
+cvs.height = TOTAL_H;
+const ctx = cvs.getContext('2d');
+
+// Función de conversión mm → px (origen en esquina superior-izquierda del dibujo)
+const OX = PADDING;  // origin x en canvas
+const OY = PADDING;  // origin y en canvas
+const S  = CANVAS_DRAW_W / REAL_W;  // escala px/mm
+
+function px(mmX) { return OX + mmX * S; }
+function py(mmY) { return OY + (REAL_H - mmY) * S; }   // Y invertido (0 = suelo)
+function sc(mm)  { return mm * S; }
+
+// ─── Colores ──────────────────────────────────────────────────────────────────
+const C = {
+  bg       : '#f5f5f0',
+  frame    : '#4a4a4a',
+  frameStroke: '#222',
+  rail     : '#5a5a5a',
+  railStroke: '#333',
+  base     : '#6b6b6b',
+  cylinder : '#7a7a8a',
+  cylStroke: '#333',
+  shaft    : '#8b3a3a',
+  impeller : '#8b3a3a',
+  motor    : '#6a6a7a',
+  motorStr : '#333',
+  dim      : '#1565c0',
+  dimText  : '#0d47a1',
+  center   : '#b0bec5',
+  glass    : 'rgba(180,210,240,0.12)',
+  glassStroke: 'rgba(120,170,210,0.55)',
+};
+
+// ─── Utilidades de dibujo ─────────────────────────────────────────────────────
+function rect(x, y, w, h, fill, stroke, lw = 1) {
+  ctx.fillStyle = fill;
+  ctx.strokeStyle = stroke;
+  ctx.lineWidth = lw;
+  ctx.fillRect(px(x), py(y + h), sc(w), sc(h));
+  ctx.strokeRect(px(x), py(y + h), sc(w), sc(h));
+}
+
+// ─── COTA con flechas ─────────────────────────────────────────────────────────
+function dimH(x, y1, y2, label, side = 'left', offset = 30) {
+  const cx = side === 'left' ? px(x) - offset : px(x) + offset;
+  const cy1 = py(y1), cy2 = py(y2);
+  ctx.save();
+  ctx.strokeStyle = C.dim; ctx.fillStyle = C.dimText;
+  ctx.lineWidth = 1.2;
+  ctx.setLineDash([4, 3]);
+  ctx.beginPath(); ctx.moveTo(px(x), cy1); ctx.lineTo(cx, cy1); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(px(x), cy2); ctx.lineTo(cx, cy2); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(cx, cy1); ctx.lineTo(cx, cy2); ctx.stroke();
+  arrow(cx, cy1, 'up');
+  arrow(cx, cy2, 'down');
+  ctx.save();
+  ctx.translate(cx - (side === 'left' ? 8 : -8), (cy1 + cy2) / 2);
+  ctx.rotate(-Math.PI / 2);
+  ctx.font = 'bold 11px Segoe UI';
+  ctx.fillStyle = C.dimText;
+  ctx.textAlign = 'center';
+  ctx.fillText(label, 0, 0);
+  ctx.restore();
+  ctx.restore();
+}
+
+function dimV(x1, x2, y, label, above = true, offset = 28) {
+  const cy = above ? py(y) - offset : py(y) + offset;
+  const cx1 = px(x1), cx2 = px(x2);
+  ctx.save();
+  ctx.strokeStyle = C.dim; ctx.fillStyle = C.dimText;
+  ctx.lineWidth = 1.2;
+  ctx.setLineDash([4, 3]);
+  ctx.beginPath(); ctx.moveTo(cx1, py(y)); ctx.lineTo(cx1, cy); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(cx2, py(y)); ctx.lineTo(cx2, cy); ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.beginPath(); ctx.moveTo(cx1, cy); ctx.lineTo(cx2, cy); ctx.stroke();
+  arrow(cx1, cy, 'left');
+  arrow(cx2, cy, 'right');
+  ctx.font = 'bold 11px Segoe UI';
+  ctx.fillStyle = C.dimText;
+  ctx.textAlign = 'center';
+  ctx.fillText(label, (cx1 + cx2) / 2, cy + (above ? -4 : 14));
+  ctx.restore();
+}
+
+function arrow(x, y, dir) {
+  const a = 6;
+  ctx.beginPath();
+  if (dir === 'up')    { ctx.moveTo(x, y); ctx.lineTo(x - a/2, y + a); ctx.lineTo(x + a/2, y + a); }
+  if (dir === 'down')  { ctx.moveTo(x, y); ctx.lineTo(x - a/2, y - a); ctx.lineTo(x + a/2, y - a); }
+  if (dir === 'left')  { ctx.moveTo(x, y); ctx.lineTo(x + a, y - a/2); ctx.lineTo(x + a, y + a/2); }
+  if (dir === 'right') { ctx.moveTo(x, y); ctx.lineTo(x - a, y - a/2); ctx.lineTo(x - a, y + a/2); }
+  ctx.closePath();
+  ctx.fillStyle = C.dim;
+  ctx.fill();
+}
+
+// ─── FONDO ────────────────────────────────────────────────────────────────────
+ctx.fillStyle = C.bg;
+ctx.fillRect(0, 0, TOTAL_W, TOTAL_H);
+
+// ─── CAJA DE VIDRIO (bounding box exterior) ───────────────────────────────────
+ctx.fillStyle = C.glass;
+ctx.strokeStyle = C.glassStroke;
+ctx.lineWidth = 1.5;
+ctx.setLineDash([6, 4]);
+ctx.fillRect(px(0), py(REAL_H), sc(REAL_W), sc(REAL_H));
+ctx.strokeRect(px(0), py(REAL_H), sc(REAL_W), sc(REAL_H));
+ctx.setLineDash([]);
+
+// ─── BASE (plataforma inferior) ───────────────────────────────────────────────
+rect(0, -20, 700, 20, '#c8c8c0', '#888', 2);
+rect(20, 0, 660, 12, C.base, C.railStroke, 1.5);
+
+// ─── RIELES DE BASE ──────────────────────────────────────────────────────────
+rect(20, 0, 140, 28, C.rail, C.railStroke, 1.5);
+rect(540, 0, 140, 28, C.rail, C.railStroke, 1.5);
+rect(180, 0, 340, 20, C.rail, C.railStroke, 1.2);
+
+ctx.save();
+ctx.strokeStyle = '#888'; ctx.lineWidth = 0.8;
+for (let xmm = 40; xmm <= 140; xmm += 20) {
+  ctx.beginPath(); ctx.moveTo(px(xmm), py(28)); ctx.lineTo(px(xmm), py(2)); ctx.stroke();
+}
+for (let xmm = 560; xmm <= 660; xmm += 20) {
+  ctx.beginPath(); ctx.moveTo(px(xmm), py(28)); ctx.lineTo(px(xmm), py(2)); ctx.stroke();
+}
+ctx.restore();
+
+// ─── COLUMNAS VERTICALES ─────────────────────────────────────────────────────
+const colW = 30, colH = 572, colY = 28;
+rect(20, colY, colW, colH, C.frame, C.frameStroke, 2);
+rect(80, colY, colW, colH, C.frame, C.frameStroke, 2);
+rect(590, colY, colW, colH, C.frame, C.frameStroke, 2);
+rect(650, colY, colW, colH, C.frame, C.frameStroke, 2);
+
+ctx.save(); ctx.strokeStyle = '#777'; ctx.lineWidth = 0.7;
+[20, 80, 590, 650].forEach((cx) => {
+  ctx.beginPath(); ctx.moveTo(px(cx + colW/2), py(colY)); ctx.lineTo(px(cx + colW/2), py(colY + colH)); ctx.stroke();
+});
+ctx.restore();
+
+// ─── TRAVESAÑO SUPERIOR ───────────────────────────────────────────────────────
+const topY = colY + colH;
+rect(20, topY - 30, 660, 30, C.frame, C.frameStroke, 2);
+rect(20, topY - 14, 660, 10, C.rail, C.railStroke, 1.5);
+rect(320, topY - 30, 60, 30, C.rail, C.railStroke, 1.5);
+
+// ─── TRAVESAÑOS INTERMEDIOS ──────────────────────────────────────────────────
+rect(20,  280, 60, 18, C.rail, C.railStroke, 1.5);
+rect(620, 280, 60, 18, C.rail, C.railStroke, 1.5);
+
+// ─── CARRO DESLIZANTE CENTRAL ────────────────────────────────────────────────
+rect(80,  380, 510, 22, C.rail,  C.railStroke, 1.5);
+rect(200, 370, 300, 28, C.frame, C.frameStroke, 1.5);
+
+// ─── CILINDRO / ACTUADOR ─────────────────────────────────────────────────────
+rect(285, 402, 130, 120, C.cylinder, C.cylStroke, 2);
+rect(295, 522,  110, 10, '#9a9aaa',  C.cylStroke, 1.5);
+rect(295, 398,  110, 12, '#5a5a6a',  C.cylStroke, 1.5);
+ctx.save(); ctx.strokeStyle = '#555'; ctx.lineWidth = 0.8;
+ctx.beginPath(); ctx.moveTo(px(315), py(402)); ctx.lineTo(px(315), py(522)); ctx.stroke();
+ctx.beginPath(); ctx.moveTo(px(385), py(402)); ctx.lineTo(px(385), py(522)); ctx.stroke();
+ctx.restore();
+
+// ─── EJE / VÁSTAGO (200mm) ───────────────────────────────────────────────────
+const shaftX = 344, shaftW = 12;
+const shaftTop = 395, shaftBot = shaftTop - 200;
+rect(shaftX, shaftBot, shaftW, 200, C.shaft, '#600', 1.5);
+
+// ─── IMPULSOR / HÉLICE ───────────────────────────────────────────────────────
+const impY = shaftBot;
+rect(335, impY - 14, 30, 28, C.impeller, '#600', 2);
+
+ctx.save();
+ctx.strokeStyle = '#600'; ctx.lineWidth = 2.5; ctx.fillStyle = C.impeller;
+// Pala izquierda
+ctx.beginPath();
+ctx.moveTo(px(350), py(impY));
+ctx.lineTo(px(220), py(impY - 8));
+ctx.lineTo(px(225), py(impY + 8));
+ctx.closePath(); ctx.fill(); ctx.stroke();
+// Pala derecha
+ctx.beginPath();
+ctx.moveTo(px(350), py(impY));
+ctx.lineTo(px(480), py(impY - 8));
+ctx.lineTo(px(475), py(impY + 8));
+ctx.closePath(); ctx.fill(); ctx.stroke();
+// Pala frontal abajo
+ctx.beginPath();
+ctx.moveTo(px(350), py(impY));
+ctx.lineTo(px(335), py(impY - 55));
+ctx.lineTo(px(365), py(impY - 52));
+ctx.closePath(); ctx.fill(); ctx.stroke();
+// Pala frontal arriba
+ctx.beginPath();
+ctx.moveTo(px(350), py(impY));
+ctx.lineTo(px(335), py(impY + 45));
+ctx.lineTo(px(365), py(impY + 43));
+ctx.closePath(); ctx.fill(); ctx.stroke();
+ctx.restore();
+
+// Hub central impulsor
+ctx.save();
+ctx.fillStyle = '#6b2020'; ctx.strokeStyle = '#400'; ctx.lineWidth = 1.5;
+ctx.beginPath();
+ctx.arc(px(350), py(impY), sc(18), 0, Math.PI*2);
+ctx.fill(); ctx.stroke();
+ctx.restore();
+
+// ─── MOTOR ELÉCTRICO (lado derecho) ──────────────────────────────────────────
+const mX = 530, mY = 50, mW = 160, mH = 110;
+rect(mX, mY, mW, mH, C.motor, C.motorStr, 2);
+
+ctx.save();
+ctx.fillStyle = '#8a8a9a'; ctx.strokeStyle = C.motorStr; ctx.lineWidth = 1.5;
+ctx.beginPath();
+ctx.arc(px(mX), py(mY + mH/2), sc(40), 0, Math.PI*2);
+ctx.fill(); ctx.stroke();
+ctx.fillStyle = '#5a5a6a';
+ctx.beginPath();
+ctx.arc(px(mX), py(mY + mH/2), sc(22), 0, Math.PI*2);
+ctx.fill(); ctx.stroke();
+// Eje motor
+ctx.fillStyle = '#b0b0c0'; ctx.strokeStyle = '#333'; ctx.lineWidth = 1.2;
+ctx.fillRect(px(mX) - sc(8), py(mY + mH/2) - sc(5), sc(14), sc(10));
+ctx.strokeRect(px(mX) - sc(8), py(mY + mH/2) - sc(5), sc(14), sc(10));
+ctx.restore();
+
+// Terminal azul
+ctx.save();
+ctx.fillStyle = '#1565c0'; ctx.strokeStyle = '#0d47a1'; ctx.lineWidth = 1.2;
+ctx.beginPath();
+ctx.arc(px(mX + mW - 10), py(mY + 20), sc(10), 0, Math.PI*2);
+ctx.fill(); ctx.stroke();
+ctx.restore();
+
+// Etiqueta motor
+ctx.save();
+ctx.fillStyle = '#ddd'; ctx.font = 'bold 10px Segoe UI'; ctx.textAlign = 'center';
+ctx.fillText('MOTOR', px(mX + mW/2 + 8), py(mY + mH/2) + 4);
+ctx.restore();
+
+// Soporte motor
+rect(510, mY + mH/2 - 8, 24, 16, C.rail, C.railStroke, 1.5);
+
+// ─── LÍNEA DE CENTRO ──────────────────────────────────────────────────────────
+ctx.save();
+ctx.strokeStyle = '#b0bec5'; ctx.lineWidth = 0.8;
+ctx.setLineDash([8, 5]);
+ctx.beginPath(); ctx.moveTo(px(350), py(0)); ctx.lineTo(px(350), py(REAL_H)); ctx.stroke();
+ctx.setLineDash([]);
+ctx.restore();
+
+// ─── COTAS PRINCIPALES ───────────────────────────────────────────────────────
+dimH(0,   0,   600, '600 mm', 'left',  55);
+dimV(0,   700, 0,   '700 mm', false,   45);
+dimH(700, 50,  300, '250 mm', 'right', 55);
+dimH(700, 0,   50,  '50 mm',  'right', 22);
+dimH(350, shaftBot, shaftTop, '200 mm', 'right', 60);
+dimH(0,   0,   50,  '50 mm',  'left',  22);
+
+// ─── TÍTULO ───────────────────────────────────────────────────────────────────
+ctx.save();
+ctx.font = 'bold 13px Segoe UI'; ctx.fillStyle = '#333'; ctx.textAlign = 'left';
+ctx.fillText('BANCO DE PRUEBAS – Vista Frontal', OX, OY - 18);
+ctx.font = '10px Segoe UI'; ctx.fillStyle = '#666';
+ctx.fillText('Escala proporcional  |  700 × 600 mm', OX, OY - 4);
+ctx.restore();
+
+// ─── LEYENDA ──────────────────────────────────────────────────────────────────
+const legX = TOTAL_W - 170, legY = TOTAL_H - 110;
+const items = [
+  { color: C.frame,    label: 'Perfil estructural' },
+  { color: C.rail,     label: 'Riel / travesaño' },
+  { color: C.cylinder, label: 'Cilindro / actuador' },
+  { color: C.shaft,    label: 'Eje / vástago' },
+  { color: C.motor,    label: 'Motor eléctrico' },
+];
+ctx.save();
+ctx.strokeStyle = '#bbb'; ctx.lineWidth = 1;
+ctx.strokeRect(legX - 8, legY - 14, 170, items.length*18 + 18);
+ctx.fillStyle = '#f5f5f0'; ctx.fillRect(legX - 8, legY - 14, 170, items.length*18 + 18);
+ctx.font = 'bold 10px Segoe UI'; ctx.fillStyle = '#333'; ctx.textAlign = 'left';
+ctx.fillText('LEYENDA', legX, legY - 1);
+items.forEach((it, i) => {
+  ctx.fillStyle = it.color;
+  ctx.fillRect(legX, legY + 4 + i*18, 14, 12);
+  ctx.strokeStyle = '#555'; ctx.lineWidth = 0.7;
+  ctx.strokeRect(legX, legY + 4 + i*18, 14, 12);
+  ctx.fillStyle = '#333'; ctx.font = '9.5px Segoe UI';
+  ctx.fillText(it.label, legX + 18, legY + 14 + i*18);
+});
+ctx.restore();
+</script>
+</body>
+</html>
+

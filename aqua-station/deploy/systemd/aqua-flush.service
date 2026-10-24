@@ -1,0 +1,61 @@
+# =============================================================================
+# aqua-flush.service + aqua-flush.timer
+# =============================================================================
+# Install to: /etc/systemd/system/aqua-flush.service
+#             /etc/systemd/system/aqua-flush.timer
+#
+# =============================================================================
+# WHY THIS EXISTS
+# =============================================================================
+# The Pi keeps a configurable rolling window (default 14 days). The durable archive
+# is Supabase Storage. This job uploads closed, compressed archive files, VERIFIES
+# them against the remote object, and only then marks them flushable.
+#
+# Critical detail: retention keys off `flushed_at` AND `verified`, never off the
+# calendar. If this job fails for a week, nothing is deleted - the local window
+# simply grows. That is the intended behaviour: being offline must never cause data
+# loss.
+#
+# Verification is what makes that safe. Marking a file flushed without comparing
+# sha256 and row count would let retention delete the only good copy of a
+# truncated upload.
+# =============================================================================
+
+[Unit]
+Description=AquaControl archive flush to Supabase Storage
+Documentation=file:///opt/aqua-station/docs/RUNBOOK.md
+After=network-online.target aqua-gateway.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+User=aqua
+Group=aqua
+EnvironmentFile=/etc/aqua/gateway.env
+WorkingDirectory=/opt/aqua-station/gateway
+
+# --oneshot entry point; exits non-zero if any upload or verification failed.
+ExecStart=/opt/aqua-station/gateway/.venv/bin/python -m aqua_gateway.backup.flush
+
+# A failed flush must be loud. Surface it as a failed unit so `systemctl --failed`
+# and any monitoring sees it; the gateway also raises a `flush_failed` event.
+SuccessExitStatus=0
+TimeoutStartSec=30min
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aqua-flush
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+# Read-only on the archive: flushing must never mutate local data.
+ReadOnlyPaths=/data/telemetry
+ReadWritePaths=/var/lib/aqua-gateway
+
+# -----------------------------------------------------------------------------
+# Scheduled by aqua-flush.timer (separate file), which runs this at 03:00 local
+# time in America/Lima. See that file for why the timezone matters.
+# -----------------------------------------------------------------------------

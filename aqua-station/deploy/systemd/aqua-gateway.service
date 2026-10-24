@@ -1,0 +1,74 @@
+# =============================================================================
+# aqua-gateway.service
+# =============================================================================
+# Install to: /etc/systemd/system/aqua-gateway.service
+#
+# Single process, single worker, on purpose: this process owns the MQTT session
+# and the archive writer. Two instances would double-subscribe and interleave
+# writes to the same CSV files.
+#
+# Memory ceiling is set explicitly because the box has 905 MB and the failure mode
+# we care about is the gateway growing until the OOM killer takes PostgreSQL with
+# it. Better to restart the gateway than to lose the database.
+# =============================================================================
+
+[Unit]
+Description=AquaControl gateway (MQTT ingest, archive, rollups, API)
+Documentation=file:///opt/aqua-station/docs/ARCHITECTURE.md
+After=network-online.target mosquitto.service postgresql.service
+Wants=network-online.target
+Requires=mosquitto.service
+
+[Service]
+Type=exec
+User=aqua
+Group=aqua
+SupplementaryGroups=i2c
+
+EnvironmentFile=/etc/aqua/gateway.env
+WorkingDirectory=/opt/aqua-station/gateway
+ExecStart=/opt/aqua-station/gateway/.venv/bin/aqua-gateway
+
+# Restart on any failure. The gateway is stateless across restarts: archive state
+# lives in the manifest, operational state in PostgreSQL, and QoS 1 means unacked
+# messages are redelivered.
+Restart=always
+RestartSec=5s
+# Do not give up on a slow SD card during rotation.
+TimeoutStopSec=60s
+KillSignal=SIGTERM
+
+# -- resource ceiling --------------------------------------------------------
+MemoryHigh=200M
+MemoryMax=320M
+# Modest CPU weight: the gateway must never starve PostgreSQL or the broker.
+CPUWeight=100
+
+# -- logging -----------------------------------------------------------------
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=aqua-gateway
+
+# -- hardening ---------------------------------------------------------------
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+RestrictNamespaces=true
+LockPersonality=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+# Writable paths, and nothing else:
+#   /data/telemetry        the CSV archive
+#   /data/exports          experiment bundles assembled by the export endpoint
+#   /var/lib/aqua-gateway  the manifest database and the event spill file
+ReadWritePaths=/data/telemetry /data/exports /var/lib/aqua-gateway
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,33 @@
+# Build de PlatformIO: se regenera y contiene rutas absolutas de la maquina que lo compilo.
+.pio/
+.pioenvs/
+.piolibdeps/
+
+# IDE
+.vscode/
+.idea/
+
+# Artefactos de compilacion
+*.o
+*.a
+*.d
+*.out
+*.exe
+*.bin
+*.elf
+*.hex
+*.map
+
+# Copias de seguridad y temporales
+*.bak
+*.tmp
+*~
+*.swp
+
+# Sistema
+.DS_Store
+Thumbs.db
+# Python bytecode. A committed .pyc turns `git diff` into a binary blob that
+# `git apply` refuses, which is how it was found (firmware-patches/03).
+__pycache__/
+*.pyc

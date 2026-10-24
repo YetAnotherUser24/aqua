@@ -1,0 +1,236 @@
+/**
+ * @file main.cpp
+ * @brief AquaControl: ESP32 Closed-Loop ODrive S1 Aeration Controller
+ *
+ * Architecture:
+ *   Core 1: Deterministic 20 Hz Control Loop (PID / Fuzzy / Watchdog / Manual)
+ *           Sole hardware owner of ODrive S1 UART (Zero Cross-Core Contention)
+ *   Core 0: FreeRTOS Cloud Worker (WiFi + HTTPS Supabase telemetry + Command Polling + NVS Flash)
+ *   P2P: Direct ESP-NOW link receiving DO & Temperature from OD-Logger
+ */
+
+#include <Arduino.h>
+#include <esp_task_wdt.h>
+#include <WiFi.h>
+#include "config.h"
+#include "motor_bus.h"
+#include "control_engine.h"
+#include "esp_now_rx.h"
+#include "cloud_worker.h"
+#include "odrive_sd_logger.h"
+
+// The motor is reached exclusively through the injected bus. In real builds it wraps
+// ODriveUART; in virtual builds it wraps the simulated motor. Control code is identical.
+static IMotorBus& odrive = motorBus();
+
+static ControlEngine controlEngine;
+
+static unsigned long lastLoopMs = 0;
+static unsigned long lastLogMs = 0;
+static unsigned long lastSdLogMs = 0;
+static uint32_t loopTickCounter = 0;
+static MotorTelemetry cachedODriveTelem;
+
+void setup() {
+  Serial.begin(115200);
+  delay(1000);
+  Serial.println("\n=======================================================");
+#if defined(AERADOR_VIRTUAL) && AERADOR_VIRTUAL
+  Serial.println("  AquaControl: ESP32 [VIRTUAL MOTOR BUS] Controller Ready  ");
+#else
+  Serial.println("  AquaControl: ESP32 ODrive S1 Controller Starting...  ");
+#endif
+  Serial.printf("  Board: %s\n", BOARD_NAME);
+
+  // Task watchdog: 60 s, trigger_panic.
+  //
+  // This node had none, so the Arduino default applied -- 5 s with the idle tasks on the watch
+  // list -- while the cloud task opens a blocking TLS connection from Core 0. A broker or
+  // server that accepts TCP and then answers nothing starves that core's idle task and resets
+  // the node. Configured explicitly here so the timeout is a decision rather than a default.
+  //
+  // The registration is only half of it: `esp_task_wdt_add(NULL)` adds *this* task, so `loop()`
+  // must feed it (see below). The mixer shipped without the feed and rebooted on an exact 60 s
+  // cycle, which is worse than the fault the watchdog was added to catch.
+#if defined(ESP_IDF_VERSION_MAJOR) && (ESP_IDF_VERSION_MAJOR >= 5)
+  esp_task_wdt_config_t wdt_config = {
+      .timeout_ms = 60000,
+      .idle_core_mask = (1 << portNUM_PROCESSORS) - 1,
+      .trigger_panic = true,
+  };
+  esp_task_wdt_reconfigure(&wdt_config);
+  esp_task_wdt_add(NULL);
+#else
+  esp_task_wdt_init(60, true);
+  esp_task_wdt_add(NULL);
+#endif
+  Serial.println("=======================================================");
+
+  // 1. Initialize the motor bus (real ODrive UART or simulated motor)
+#if defined(AERADOR_VIRTUAL) && AERADOR_VIRTUAL
+  Serial.println("[Init] Initializing virtual motor bus (simulated ODrive + paddle)...");
+#else
+  Serial.printf("[Init] Connecting to ODrive S1 via UART (RX: GPIO %d, TX: GPIO %d @ %lu baud)...\n",
+                ODRIVE_SERIAL_RX_PIN, ODRIVE_SERIAL_TX_PIN, (unsigned long)ODRIVE_BAUD_RATE);
+#endif
+  odrive.begin();
+
+  // 2. Initialize ESP-NOW Receiver (P2P direct radio from Logger)
+#if defined(AERADOR_VIRTUAL) && AERADOR_VIRTUAL
+  Serial.println("[Init] Virtual Mode: ESP-NOW radio disabled (Web Dashboard <-> motor bus only).");
+#else
+  Serial.println("[Init] Initializing ESP-NOW radio...");
+  if (!espNowRxInit(controlEngine)) {
+    Serial.println("[Init] WARNING: ESP-NOW init failed! Controller will use failsafe baseline.");
+  }
+#endif
+
+  // 3. Initialize MicroSD Card Data Logger
+  odriveSdLoggerInit();
+
+  // 4. Start Core 0 Cloud Worker (Passes only ControlEngine, preserving UART single ownership)
+  Serial.println("[Init] Launching Cloud Worker on Core 0...");
+  startCloudWorker(controlEngine);
+
+  // 5. Initial attempt to engage closed-loop control on ODrive S1
+  odrive.clearErrors();
+  delay(100);
+  odrive.setControlMode(ODRIVE_CONTROL_MODE, ODRIVE_INPUT_MODE);
+  delay(50);
+  odrive.writeFloatProperty("axis0.controller.config.vel_ramp_rate", ODRIVE_VEL_RAMP_RATE);
+  delay(50);
+  odrive.enterClosedLoop();
+  delay(100);
+  if (odrive.pollTelemetry(cachedODriveTelem)) {
+    Serial.printf("[Init] ODrive connected: %.1fV | State: %u (%s) | Mode: VEL_RAMP (%.1f rev/s^2)\n",
+                  cachedODriveTelem.vbus_voltage,
+                  cachedODriveTelem.current_state,
+                  cachedODriveTelem.is_armed ? "ARMED" : "DISARMED",
+                  ODRIVE_VEL_RAMP_RATE);
+  } else {
+    Serial.println("[Init] WARNING: ODrive not responding on UART! Check wiring & power.");
+  }
+
+  Serial.println("[Init] System ready. Deterministic control loop active on Core 1.\n");
+}
+
+void loop() {
+  // Feed the task watchdog registered in `setup()`. Without this the node reboots on a fixed
+  // 60 s cycle regardless of what it is doing -- the idle tasks stay on the watch list too
+  // (`idle_core_mask`), which is what still catches a core-0 task blocking long enough to
+  // starve idle0.
+  esp_task_wdt_reset();
+
+  unsigned long now = millis();
+
+  // 20 Hz deterministic control loop on Core 1
+  if (now - lastLoopMs >= CONTROL_LOOP_INTERVAL_MS) {
+    lastLoopMs = now;
+
+    // A. Refresh the motor device model / live telemetry.
+    //    Real build: tiered serial polling (<= 2.5 ms per tick). Virtual: one model step.
+    odrive.updateTieredTelemetry(cachedODriveTelem, loopTickCounter++);
+
+    // B. Check Emergency Stop or compute target velocity from control algorithm
+    // B. Check Emergency Stop or compute target velocity from control algorithm
+    float targetRpm = 0.0f;
+    if (controlEngine.isEmergencyStopActive()) {
+      targetRpm = 0.0f;
+      odrive.setVelocityRpm(0.0f);
+      odrive.enterIdle();
+    } else if (controlEngine.isArmed()) {
+      targetRpm = controlEngine.computeOutputRpm(now);
+      // Armed holding closed loop even if target is 0 RPM
+      if (!cachedODriveTelem.is_armed && cachedODriveTelem.vbus_voltage > ODRIVE_ARM_MIN_VBUS) {
+        odrive.enterClosedLoop();
+      }
+      odrive.setVelocityRpm(targetRpm);
+    } else {
+      // Stopped / Disarmed -> IDLE
+      targetRpm = 0.0f;
+      if (cachedODriveTelem.is_armed) {
+        odrive.setVelocityRpm(0.0f);
+        odrive.enterIdle();
+      }
+    }
+
+    const LoggerSyncState& sync = espNowGetLoggerState();
+
+    // C. Build shared telemetry snapshot for Core 0 cloud worker
+    SharedTelemetry sTelem;
+    if (sync.has_valid_packet) {
+      sTelem.rtc_timestamp_ms = sync.rtc_timestamp_ms + (now - sync.received_at_ms);
+    } else {
+      sTelem.rtc_timestamp_ms = 0; // Will be ignored by backend if 0
+    }
+    sTelem.target_rpm = targetRpm;
+    float safeActualRpm = cachedODriveTelem.actual_rpm;
+    if (safeActualRpm < 0.0f) safeActualRpm = 0.0f;
+    else if (safeActualRpm > 600.0f) safeActualRpm = 600.0f;
+    sTelem.actual_rpm = safeActualRpm;
+    sTelem.vbus_voltage = cachedODriveTelem.vbus_voltage;
+    sTelem.ibus_current = cachedODriveTelem.ibus_current;
+    sTelem.power_watts = cachedODriveTelem.power_watts;
+    sTelem.torque_estimate = cachedODriveTelem.torque_estimate;
+    sTelem.iq_measured = cachedODriveTelem.iq_measured;
+    sTelem.measured_do = controlEngine.getLastMeasuredDo();
+    sTelem.water_temp = controlEngine.getLastWaterTemp();
+    sTelem.is_on = cachedODriveTelem.is_armed;
+    sTelem.is_armed = cachedODriveTelem.is_armed;
+    sTelem.control_mode = (uint8_t)controlEngine.getConfig().mode;
+    sTelem.failsafe_active = controlEngine.isFailsafeActive();
+    sTelem.status_code = cachedODriveTelem.axis_error;
+    sTelem.drv_state = cachedODriveTelem.current_state;
+    sTelem.disarm_reason = cachedODriveTelem.disarm_reason;
+
+    updateSharedTelemetry(sTelem);
+
+    // D. MicroSD logging a 5 Hz SOLO durante un experimento activo (V4 §2.1/§2.2)
+    if (controlEngine.isExperimentLogging() && now - lastSdLogMs >= SD_LOG_INTERVAL_MS) {
+      lastSdLogMs = now;
+
+      OdriveLogSample sample;
+      sample.t_ms = now;
+      sample.rtc_timestamp_ms = sTelem.rtc_timestamp_ms;
+      sample.target_rpm = targetRpm;
+      sample.actual_rpm = cachedODriveTelem.actual_rpm;
+      sample.torque_nm = cachedODriveTelem.torque_estimate;
+      sample.iq_a = cachedODriveTelem.iq_measured;
+      sample.ibus_a = cachedODriveTelem.ibus_current;
+      sample.vbus_v = cachedODriveTelem.vbus_voltage;
+      sample.fet_temp_c = cachedODriveTelem.fet_temperature;
+      sample.current_do_mg_l = controlEngine.getLastMeasuredDo();
+      sample.control_mode = (uint8_t)controlEngine.getConfig().mode;
+
+      odriveSdLoggerEnqueue(sample);
+    }
+
+    // E. Periodic Serial Monitor status output (every 1 second)
+    if (now - lastLogMs >= 1000) {
+      lastLogMs = now;
+      ControlConfig cfg = controlEngine.getConfig();
+      const char* modeStr = (cfg.mode == MODE_PID) ? "PID" :
+                            ((cfg.mode == MODE_FUZZY) ? "FUZZY" : "MANUAL");
+
+      remoteLogPrintf("[CTRL Core 1] Mode: %s | DO: %.2f mg/L | Target: %.0f RPM | Act: %.0f RPM | %.1fV %.2fA (%.1fW) | Iq: %.3fA | ch=%u espnow_rx=%u%s%s%s%s%s\n",
+                    modeStr,
+                    controlEngine.getLastMeasuredDo(),
+                    targetRpm,
+                    cachedODriveTelem.actual_rpm,
+                    cachedODriveTelem.vbus_voltage,
+                    cachedODriveTelem.ibus_current,
+                    cachedODriveTelem.power_watts,
+                    cachedODriveTelem.torque_estimate,
+                    (unsigned)WiFi.channel(),
+                    (unsigned)sync.packet_count,
+                    controlEngine.isFailsafeActive() ? " [FAILSAFE]" : "",
+                    controlEngine.isEmergencyStopActive() ? " [EMERGENCY STOP]" : "",
+                    (!cachedODriveTelem.is_armed) ? " [DISARMED]" : "",
+                    (cachedODriveTelem.axis_error != 0) ? " [ERROR]" : "",
+                    (sync.has_valid_packet && !sync.sample_valid) ? " [OD INVALID]" : "");
+    }
+  }
+
+  // Yield to allow FreeRTOS IDLE task watchdog reset on Core 1
+  vTaskDelay(pdMS_TO_TICKS(5));
+}
