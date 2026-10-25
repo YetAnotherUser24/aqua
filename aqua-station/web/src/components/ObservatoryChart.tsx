@@ -223,6 +223,43 @@ export function ObservatoryChart({
 
     let sorted = Array.from(byMs.values()).sort((a, b) => a.ms - b.ms);
 
+    // Continuous Zero-Order Hold (Sample-and-Hold):
+    // Real hardware nodes sample at differing cadences (OPTOD RS485 at 1 Hz, ODrive UART at 5-20 Hz).
+    // Without continuous alignment, points where only one node sampled have null for the other,
+    // causing Chart.js to show only one variable unless they coincide at the exact same millisecond.
+    // By holding the last physical measurement across the timeline, both DO and RPM are continuously
+    // present at every point, guaranteeing that the inspection box always displays all variables together.
+    let lastDo: number | null = null;
+    let lastRpm: number | null = null;
+    let lastMixerRpm: number | null = null;
+
+    for (const pt of sorted) {
+      if (pt.do !== null) lastDo = pt.do;
+      else if (lastDo !== null) pt.do = lastDo;
+
+      if (pt.rpm !== null) lastRpm = pt.rpm;
+      else if (lastRpm !== null) pt.rpm = lastRpm;
+
+      if (pt.mixerRpm !== null) lastMixerRpm = pt.mixerRpm;
+      else if (lastMixerRpm !== null) pt.mixerRpm = lastMixerRpm;
+    }
+
+    let nextDo: number | null = null;
+    let nextRpm: number | null = null;
+    let nextMixerRpm: number | null = null;
+
+    for (let i = sorted.length - 1; i >= 0; i--) {
+      const pt = sorted[i];
+      if (pt.do !== null) nextDo = pt.do;
+      else if (nextDo !== null) pt.do = nextDo;
+
+      if (pt.rpm !== null) nextRpm = pt.rpm;
+      else if (nextRpm !== null) pt.rpm = nextRpm;
+
+      if (pt.mixerRpm !== null) nextMixerRpm = pt.mixerRpm;
+      else if (nextMixerRpm !== null) pt.mixerRpm = nextMixerRpm;
+    }
+
     if (emaFilter) {
       const alpha = 0.2;
       let prevEma: number | null = null;

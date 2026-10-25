@@ -175,6 +175,29 @@ export function MultivariableInspector({ registry }: { registry: Registry | null
       }
     }
     const merged = Array.from(byMs.values()).sort((a, b) => a.ms - b.ms);
+
+    // Continuous Zero-Order Hold across all active telemetry series:
+    // Ensures all selected curves have synchronized values at every point in time so
+    // the multivariable inspector tooltip always presents all variables together.
+    for (const def of VAR_DEFS) {
+      if (!active.has(def.key)) continue;
+      let lastVal: number | null = null;
+      for (const row of merged) {
+        if (row[def.key] !== undefined && row[def.key] !== null) {
+          lastVal = row[def.key];
+        } else if (lastVal !== null) {
+          row[def.key] = lastVal;
+        }
+      }
+      let nextVal: number | null = null;
+      for (let i = merged.length - 1; i >= 0; i--) {
+        if (merged[i][def.key] !== undefined && merged[i][def.key] !== null) {
+          nextVal = merged[i][def.key];
+        } else if (nextVal !== null) {
+          merged[i][def.key] = nextVal;
+        }
+      }
+    }
     for (const def of VAR_DEFS) {
       const derive = DERIVED[def.key];
       if (!active.has(def.key) || !derive) continue;
