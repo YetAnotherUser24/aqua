@@ -526,7 +526,7 @@ void setup() {
 #endif
 
   Wire.begin(I2C_SDA_PIN, I2C_SCL_PIN);
-  Wire.setClock(100000);
+  Wire.setClock(400000);
   Wire.setTimeOut(25);
 
   pumpEncoderRef.init();

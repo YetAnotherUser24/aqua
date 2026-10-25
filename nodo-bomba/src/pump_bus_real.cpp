@@ -97,7 +97,7 @@ private:
 class As5600Encoder : public IRotaryEncoder {
 public:
   void init() override {
-    Wire.setClock(100000); // 100 kHz Standard I2C: robust against motor brush EMI
+    Wire.setClock(400000); // 400 kHz Fast-Mode I2C: ultra-fast non-blocking angle sampling
     Wire.setTimeOut(25);   // 25 ms timeout
     // Fast tracking DSP configuration (CONF = 0x07C1):
     //   - SF = 01 (Fast filter, latency ~0.28 ms vs 2.2 ms slow filter)

@@ -151,13 +151,40 @@ void PumpController::setSysidMode(bool enable) {
   }
 }
 
+void PumpController::updateAngleTracker() {
+  uint16_t rawAngle = pumpEncoder().readRawAngle();
+  _telem.rawAngle = rawAngle;
+
+  if (!_anglePrimed) {
+    _prevRawAngle = rawAngle;
+    _anglePrimed = true;
+    return;
+  }
+
+  int32_t delta = (int32_t)rawAngle - (int32_t)_prevRawAngle;
+  // Handle 12-bit wrap around
+  if (delta > 2048) delta -= 4096;
+  else if (delta < -2048) delta += 4096;
+
+  _prevRawAngle = rawAngle;
+  _accumTicks += delta;
+  _telem.totalTicks += delta;
+
+  float revDelta = (float)delta / (float)TICKS_PER_REV;
+  _telem.totalRevolutions += revDelta;
+
+  // Track volume delivered forward only during active dose (scaled by gearbox ratio)
+  if (revDelta > 0.0f && _telem.mode == PUMP_CTRL_DOSE) {
+    float headRevs = revDelta / _gearRatio;
+    _telem.dosedMl += headRevs * _mlPerRev;
+  }
+}
+
 void PumpController::updateVelocity(uint32_t nowMs) {
   (void)nowMs;
   uint32_t nowUs = micros();
   if (_lastVelocityUs == 0) {
     _lastVelocityUs = nowUs;
-    _prevRawAngle = pumpEncoder().readRawAngle();
-    _anglePrimed = true;
     return;
   }
 
@@ -166,33 +193,11 @@ void PumpController::updateVelocity(uint32_t nowMs) {
   _lastVelocityUs = nowUs;
   float dt = (float)elapsedUs / 1000000.0f;
 
-  uint16_t rawAngle = pumpEncoder().readRawAngle();
-  _telem.rawAngle = rawAngle;
-
-  int32_t deltaTicks = (int32_t)rawAngle - (int32_t)_prevRawAngle;
-  // Handle 12-bit wrap around
-  if (deltaTicks > 2048) deltaTicks -= 4096;
-  else if (deltaTicks < -2048) deltaTicks += 4096;
-
-  _prevRawAngle = rawAngle;
-
-  if (!_anglePrimed) {
-    _anglePrimed = true;
-    deltaTicks = 0;
-  }
+  int32_t deltaTicks = _accumTicks;
+  _accumTicks = 0;
 
   float deltaRad = (float)deltaTicks * (TWO_PI_F / (float)TICKS_PER_REV);
   float instRadS = (dt > 0.0f) ? (deltaRad / dt) : 0.0f;
-  float revDelta = (float)deltaTicks / (float)TICKS_PER_REV;
-
-  _telem.totalTicks += deltaTicks;
-  _telem.totalRevolutions += revDelta;
-
-  // Track volume delivered forward only during active dose (scaled by gearbox ratio)
-  if (revDelta > 0.0f && _telem.mode == PUMP_CTRL_DOSE) {
-    float headRevs = revDelta / _gearRatio;
-    _telem.dosedMl += headRevs * _mlPerRev;
-  }
 
   // 1. Classical low-pass filter directly in canonical SI units (rad/s)
   _filteredRadS = (_filteredRadS * (1.0f - _filterAlpha)) + (instRadS * _filterAlpha);
@@ -335,6 +340,7 @@ void PumpController::update(uint32_t nowMs) {
   // Let the encoder bus step if simulated
   pumpEncoder().tick(nowMs);
 
+  updateAngleTracker();
   updateVelocity(nowMs);
   updatePid(nowMs);
 

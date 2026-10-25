@@ -86,6 +86,7 @@ public:
   void printHelp();
 
 private:
+  void updateAngleTracker();
   void updateVelocity(uint32_t nowMs);
   void updatePid(uint32_t nowMs);
   void handleCliCommand(char* cmd);
@@ -96,6 +97,7 @@ private:
   // Velocity and disturbance observer internals (Luenberger 2nd order)
   uint16_t _prevRawAngle = 0;
   bool _anglePrimed = false;
+  int32_t _accumTicks = 0;
   uint32_t _lastVelocityUs = 0;
   float _filteredRadS = 0.0f;       // Primary filtered velocity in rad/s
   float _obsTheta = 0.0f;           // Estimated angular position (rad)
