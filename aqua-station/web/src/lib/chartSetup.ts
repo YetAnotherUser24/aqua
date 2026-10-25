@@ -55,4 +55,21 @@ ChartJS.defaults.font.family = 'var(--font-mono), ui-monospace, SFMono-Regular, 
 ChartJS.defaults.font.size = 10;
 ChartJS.defaults.borderColor = '#1c2436';
 
+declare module 'chart.js' {
+  interface TooltipPositionerMap {
+    cursor: (items: readonly any[], eventPosition: { x: number; y: number } | any) => any;
+  }
+}
+
+// Register custom 'cursor' positioner so tooltips closely track the mouse cursor
+Tooltip.positioners.cursor = function (items, eventPosition) {
+  if (!eventPosition || typeof eventPosition.x !== 'number') {
+    return false;
+  }
+  return {
+    x: eventPosition.x,
+    y: eventPosition.y,
+  };
+};
+
 export default ChartJS;
