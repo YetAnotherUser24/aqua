@@ -940,32 +940,32 @@ export function ObservatoryChart({
           position: 'cursor' as any,
           mode: 'index' as const,
           intersect: false,
-          backgroundColor: 'rgba(11, 15, 25, 0.96)',
-          borderColor: 'rgba(56, 189, 248, 0.45)',
+          backgroundColor: 'rgba(11, 15, 25, 0.97)',
+          borderColor: 'rgba(56, 189, 248, 0.5)',
           borderWidth: 1.5,
           cornerRadius: 8,
-          padding: { top: 10, bottom: 10, left: 14, right: 14 },
-          itemSpacing: 6,
+          padding: { top: 12, bottom: 12, left: 16, right: 16 },
+          itemSpacing: 8,
           caretSize: 6,
-          caretPadding: 6,
+          caretPadding: 8,
           usePointStyle: true,
-          boxWidth: 10,
-          boxHeight: 10,
-          boxPadding: 6,
-          titleColor: '#f8fafc',
-          titleFont: { size: 13, family: 'monospace', weight: 'bold' as const },
-          titleSpacing: 6,
-          bodyColor: '#e2e8f0',
-          bodyFont: { size: 12.5, family: 'monospace', weight: '500' as const },
+          boxWidth: 12,
+          boxHeight: 12,
+          boxPadding: 8,
+          titleColor: '#ffffff',
+          titleFont: { size: 14, family: 'Inter, system-ui, sans-serif', weight: 'bold' as const },
+          titleSpacing: 8,
+          bodyColor: '#f1f5f9',
+          bodyFont: { size: 13.5, family: 'Inter, system-ui, sans-serif', weight: '500' as const },
           footerColor: '#94a3b8',
-          footerFont: { size: 11, family: 'monospace' },
+          footerFont: { size: 12, family: 'Inter, system-ui, sans-serif' },
           callbacks: {
             labelColor: (item: any) => {
               const color = (item.dataset.borderColor as string) || '#38bdf8';
               return {
                 borderColor: color,
                 backgroundColor: color,
-                borderWidth: 1,
+                borderWidth: 1.5,
               };
             },
             labelPointStyle: (item: any) => {
@@ -977,16 +977,17 @@ export function ObservatoryChart({
             title: (items: any[]) => {
               if (!items.length) return '';
               const x = items[0].parsed.x;
-              if (relActive) return formatRelativeClock(x);
-              if (range === '7d' || range === '3650d') return formatDateTime(x, true);
-              return formatTime(x, true);
+              if (relActive) return `⏱️ ${formatRelativeClock(x)}`;
+              if (range === '7d' || range === '3650d') return `📅 ${formatDateTime(x, true)}`;
+              return `🕒 ${formatTime(x, true)}`;
             },
             label: (item: any) => {
-              const label = item.dataset.label || '';
+              const rawLabel = item.dataset.label || '';
+              const cleanLabel = rawLabel.replace(/\s*\([^)]*\)$/, '');
               const val = item.parsed.y;
-              if (val === null || val === undefined) return `${label}: Inactivo`;
-              if (item.dataset.yAxisID === 'do') return `${label}: ${Number(val).toFixed(3)} mg/L`;
-              return `${label}: ${Math.round(val)} RPM`;
+              if (val === null || val === undefined) return `${cleanLabel}: Inactivo`;
+              if (item.dataset.yAxisID === 'do') return `${cleanLabel}: ${Number(val).toFixed(3)} mg/L`;
+              return `${cleanLabel}: ${Math.round(val)} RPM`;
             },
             afterBody: (items: any[]) => {
               if (!items.length) return [];
