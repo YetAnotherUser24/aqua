@@ -705,7 +705,14 @@ configure_caddy() {
 	# author's IP: Caddy then died with `bind: cannot assign requested address` on any host
 	# whose address differed, and DHCP guarantees that eventually.
 	local lan_ip
-	lan_ip="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -vE '^(127\.|100\.|::)' | head -1)"
+	local ips
+	ips="$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -vE '^(127\.|100\.|::)' || true)"
+	if [[ -n "$ips" ]]; then
+		lan_ip="$({
+			echo "$ips" | grep -E '^192\.168\.4\.1$' || true
+			echo "$ips" | grep -vE '^192\.168\.4\.1$' || true
+		} | grep -v '^$' | tr '\n' ' ' | sed 's/[[:space:]]*$//')"
+	fi
 	if [[ -z "$lan_ip" ]]; then
 		note_warn "no LAN address found; leaving Caddy's bind at 127.0.0.1 (dashboard LAN-only)"
 		lan_ip="127.0.0.1"

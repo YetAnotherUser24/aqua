@@ -38,12 +38,20 @@ log() { printf '%s\n' "$*"; }
 # deploy/install.sh and deploy/check.sh: if the three ever disagree, one of them
 # would "repair" the config into a state the next of them undoes.
 lan_ip() {
-	hostname -I 2>/dev/null | tr ' ' '\n' | grep -vE '^(127\.|100\.|::)' | head -1
+	local ips
+	ips=$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -vE '^(127\.|100\.|::)' || true)
+	if [[ -z "$ips" ]]; then
+		return
+	fi
+	{
+		echo "$ips" | grep -E '^192\.168\.4\.1$' || true
+		echo "$ips" | grep -vE '^192\.168\.4\.1$' || true
+	} | grep -v '^$' | tr '\n' ' ' | sed 's/[[:space:]]*$//'
 }
 
 current_bind() {
-	grep -oE '^[[:space:]]*bind[[:space:]]+[0-9.]+' "$CADDYFILE" 2>/dev/null \
-		| head -1 | awk '{print $2}'
+	grep -E '^[[:space:]]*bind[[:space:]]+[0-9]' "$CADDYFILE" 2>/dev/null \
+		| head -1 | sed 's/^[[:space:]]*bind[[:space:]]*//' | sed 's/[[:space:]]*$//'
 }
 
 new=$(lan_ip || true)

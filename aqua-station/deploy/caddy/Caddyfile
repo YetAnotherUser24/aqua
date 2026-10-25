@@ -29,6 +29,7 @@
 	# and accept plaintext on the LAN. The LAN carries no credentials beyond the
 	# dashboard itself, so this is a reasonable trade for a bench deployment.
 	email admin@aqua-station.local
+	skip_install_trust
 
 	# Keep the Pi from being overwhelmed by a misbehaving client.
 	servers {
@@ -117,7 +118,7 @@
 # `.local`. docs/DEPLOYMENT.md carries the one-time per-device install. The
 # Tailscale name below needs none of that, and is the better default.
 # -----------------------------------------------------------------------------
-aqua-station.local {
+aqua-station.local, 192.168.4.1 {
 	# `bind` is load-bearing here, not tidiness. Without it Caddy listens on 0.0.0.0:443,
 	# which includes the tailnet address — and `tailscale serve` then cannot take :443 on
 	# that interface. The failure is a bind error that stops Caddy entirely, taking the

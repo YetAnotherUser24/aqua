@@ -83,7 +83,7 @@ remote() { ssh "${SSH_OPTS[@]}" "$S" "$@"; }
 # ever disagree, this script would "fix" the config into a state the next install
 # undoes.
 lan_ip() {
-	remote "hostname -I 2>/dev/null | tr ' ' '\n' | grep -vE '^(127\.|100\.|::)' | head -1"
+	remote "ips=\$(hostname -I 2>/dev/null | tr ' ' '\n' | grep -vE '^(127\.|100\.|::)' || true); { echo \"\$ips\" | grep -E '^192\.168\.4\.1$' || true; echo \"\$ips\" | grep -vE '^192\.168\.4\.1$' || true; } | grep -v '^$' | head -1"
 }
 
 # -- connectivity -------------------------------------------------------------
@@ -129,13 +129,13 @@ fi
 # stops with `bind: cannot assign requested address` -- and every other unit still
 # reports healthy, so the outage looks like the web app rather than the address.
 sec "Caddy bind address"
-bound=$(remote "grep -oE '^[[:space:]]*bind[[:space:]]+[0-9.]+' /etc/caddy/Caddyfile 2>/dev/null | head -1 | awk '{print \$2}'")
+bound=$(remote "grep -E '^[[:space:]]*bind[[:space:]]+[0-9]' /etc/caddy/Caddyfile 2>/dev/null | head -1 | sed 's/^[[:space:]]*bind[[:space:]]*//' | sed 's/[[:space:]]*$//'")
 BIND_MISMATCH=0
 if [[ -z "$bound" ]]; then
 	warn "no literal bind found in /etc/caddy/Caddyfile"
 	info "Either it is unconfigured or it uses a different form; check by hand."
-elif [[ "$bound" == "$lan" ]]; then
-	ok "bound to $bound, which is this station's address"
+elif [[ " $bound " =~ [[:space:]]"$lan"[[:space:]] ]]; then
+	ok "bound to $bound, which includes this station's address ($lan)"
 else
 	BIND_MISMATCH=1
 	note_fail "bound to $bound but the station is at $lan"
