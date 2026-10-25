@@ -749,7 +749,7 @@ export function ObservatoryChart({
       animation: false as const,
       onClick: handleChartClick,
       interaction: {
-        mode: 'nearest' as const,
+        mode: 'index' as const,
         axis: 'x' as const,
         intersect: false,
       },
@@ -900,6 +900,8 @@ export function ObservatoryChart({
           },
         },
         tooltip: {
+          mode: 'index' as const,
+          intersect: false,
           backgroundColor: 'rgba(15, 23, 42, 0.95)',
           borderColor: 'rgba(56, 189, 248, 0.25)',
           borderWidth: 1,
