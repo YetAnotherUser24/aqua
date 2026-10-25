@@ -314,7 +314,9 @@ class FakeLive:
     def __init__(self) -> None:
         self.presence: list[tuple[str, bool]] = []
 
-    async def set_presence(self, role: str, *, online: bool, reason: str | None = None) -> None:
+    async def set_presence(
+        self, role: str, *, online: bool, reason: str | None = None, retained: bool = False
+    ) -> None:
         self.presence.append((role, online))
 
 

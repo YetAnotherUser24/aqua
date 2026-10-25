@@ -201,6 +201,22 @@ async def test_presence_alone_marks_a_node_online():
     assert node["age_s"] is not None and node["age_s"] < 1.0, "presence must refresh last_seen"
 
 
+async def test_retained_presence_does_not_falsely_mark_a_node_online():
+    """A historical retained presence packet replayed by the broker must not fake activity."""
+    from aqua_gateway.live.cache import LiveCache
+    from aqua_gateway.schema.registry import load_registry
+
+    live = LiveCache()
+    live.register(load_registry().for_role("od_sensor"))
+    assert live.snapshot()["nodes"]["od_sensor"]["online"] is False
+
+    await live.set_presence("od_sensor", online=True, reason="boot", retained=True)
+
+    node = live.snapshot()["nodes"]["od_sensor"]
+    assert node["online"] is False, "replayed retained presence must not mark a node online"
+    assert node["age_s"] is None, "replayed retained presence must not set last_seen"
+
+
 def test_a_slow_but_healthy_node_stays_online():
     """
     The window must not be tighter than the slowest declared cadence.

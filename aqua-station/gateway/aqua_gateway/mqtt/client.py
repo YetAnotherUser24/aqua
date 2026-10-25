@@ -187,7 +187,11 @@ class MqttIngest:
                         await self._publish_time()
 
                         async for message in client.messages:
-                            await self._dispatch(str(message.topic), message.payload)
+                            await self._dispatch(
+                                str(message.topic),
+                                message.payload,
+                                retained=bool(getattr(message, "retain", False)),
+                            )
             except aiomqtt.MqttError as exc:
                 if self._stopping.is_set():
                     return
@@ -204,7 +208,7 @@ class MqttIngest:
                 self._client = None
                 self._publisher = None
 
-    async def _dispatch(self, topic: str, payload: bytes) -> None:
+    async def _dispatch(self, topic: str, payload: bytes, *, retained: bool = False) -> None:
         """Route one message. Never raises — a malformed message must not kill the loop."""
         try:
             if (role := topics.role_from_telemetry_topic(topic)) is not None:
@@ -212,7 +216,7 @@ class MqttIngest:
             elif (role := topics.role_from_ack_topic(topic)) is not None:
                 await self._handle_ack(role, payload)
             elif (node_id := topics.node_id_from_presence_topic(topic)) is not None:
-                await self._handle_presence(node_id, payload)
+                await self._handle_presence(node_id, payload, retained=retained)
             elif topic.startswith("aqua/event/"):
                 await self._handle_node_event(topic, payload)
             else:
@@ -465,7 +469,7 @@ class MqttIngest:
             detail=body,
         )
 
-    async def _handle_presence(self, node_id: str, payload: bytes) -> None:
+    async def _handle_presence(self, node_id: str, payload: bytes, *, retained: bool = False) -> None:
         """
         Presence from Last Will & Testament.
 
@@ -489,7 +493,9 @@ class MqttIngest:
             claimed = body.get("role")
             role = claimed if isinstance(claimed, str) else None
         if role is not None:
-            await self.live.set_presence(role, online=online, reason=str(body.get("reason")))
+            await self.live.set_presence(
+                role, online=online, reason=str(body.get("reason")), retained=retained
+            )
         await self._emit(
             EventType.NODE_ONLINE if online else EventType.NODE_OFFLINE,
             node_id=node_id,

@@ -328,6 +328,7 @@ async def serve(settings: Settings) -> None:
         port=settings.api_port,
         log_level=settings.log_level.lower(),
         access_log=False,
+        timeout_graceful_shutdown=3,
         # Single worker: this process owns the MQTT session and the archive. Two
         # workers would double-subscribe and interleave writes to the same files.
         workers=1,

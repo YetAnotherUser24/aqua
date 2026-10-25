@@ -216,27 +216,27 @@ class LiveCache:
                 history = self._history.setdefault((schema.role, name), deque(maxlen=self._history_points))
                 history.append((t_dev_ms, value))
 
-    async def set_presence(self, role: str, *, online: bool, reason: str | None = None) -> None:
+    async def set_presence(
+        self, role: str, *, online: bool, reason: str | None = None, retained: bool = False
+    ) -> None:
         """
-        Update presence from MQTT Last Will & Testament.
+        Update presence from MQTT Last Will & Testament or online announcements.
 
         LWT replaces the previous 60-second heartbeat heuristic: the broker tells
         us the moment a node drops, instead of us inferring it a minute later from
         a stale timestamp.
 
-        ``last_seen`` is refreshed on an online presence, not only on telemetry. Without it a
-        node that announces itself and then sits idle -- the OD sensor in its IDLE state, which
-        publishes presence but no samples until told to monitor -- set ``online = True`` yet kept
-        ``last_seen = 0``. ``is_online()`` then computed ``age = None`` and returned False, so a
-        connected node read as offline: the gateway said down while the broker said connected.
-        Presence *is* the node being seen, so it moves the same clock telemetry does.
+        ``last_seen`` is refreshed on a LIVE online presence announcement, not on historical
+        retained messages replayed by the broker at startup. Without the ``not retained`` guard,
+        a dead node whose retained online packet outlived a broker reboot would be claimed
+        as seen in this instant, showing up as online for up to _STALE_AFTER_S seconds.
         """
         async with self._lock:
             state = self._nodes.get(role)
             if state is None:
                 return
             state.online = online
-            if online:
+            if online and not retained:
                 state.last_seen = time.time()
             if reason:
                 state.metrics.pop("_presence_reason", None)
