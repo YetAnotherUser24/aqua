@@ -7,6 +7,7 @@
 
 #include <stdint.h>
 #include <Arduino.h>
+#include "config.h"
 
 enum PumpControlMode : uint8_t {
   PUMP_CTRL_STOPPED = 0,
@@ -67,6 +68,7 @@ public:
   void setFilterAlpha(float alpha);
   void setGearRatio(float ratio);
   void setSysidMode(bool enable);
+  void setDebugStream(bool enable);
 
   // Status & Telemetry
   const PumpTelemetryData& telemetry() const { return _telem; }
@@ -81,6 +83,7 @@ public:
   bool isDoseCompleted() const { return _telem.doseCompleted; }
   bool isDoseTimedOut() const { return _telem.doseTimedOut; }
   bool isSysidActive() const { return _sysidMode; }
+  bool isDebugStreamActive() const { return _debugStream; }
 
   void printStatus();
   void printHelp();
@@ -123,6 +126,7 @@ private:
 
   // SysID and CLI internals
   bool _sysidMode = false;
+  bool _debugStream = (PUMP_SERIAL_DEBUG != 0);
   bool _testMode = false;
   uint32_t _lastTelemetryMs = 0;
   char _cliRxBuf[64];

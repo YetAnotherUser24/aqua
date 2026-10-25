@@ -127,6 +127,12 @@
 #ifndef I2C_SCL_PIN
 #define I2C_SCL_PIN             8       // SCL para AS5600 (ESP32-S3 default)
 #endif
+#ifndef PUMP_ENCODER_INVERT
+#define PUMP_ENCODER_INVERT     1       // Invertir conteo del encoder (1: velocidad positiva al dosificar hacia afuera)
+#endif
+#ifndef PUMP_SERIAL_DEBUG
+#define PUMP_SERIAL_DEBUG       0       // 0: Silencioso (no inunda el monitor con telemetria periodica); 1: Activo por defecto
+#endif
 
 #ifndef PUMP_PWM_PIN
 #define PUMP_PWM_PIN            TB6612_PWMA_PIN

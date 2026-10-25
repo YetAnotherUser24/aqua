@@ -72,7 +72,14 @@ def main():
             line = ser.readline().decode('ascii', errors='ignore').strip()
             if line.startswith("SYSID,"):
                 parts = line.split(',')
-                if len(parts) == 5:
+                if len(parts) >= 6:
+                    data_points.append({
+                        'Time_ms': parts[1],
+                        'Target_Duty': parts[2],
+                        'Compensated_Duty': parts[3],
+                        'Rad_s': parts[5]
+                    })
+                elif len(parts) == 5:
                     _, t_ms, target_duty, comp_duty, rad_s = parts
                     data_points.append({
                         'Time_ms': t_ms,

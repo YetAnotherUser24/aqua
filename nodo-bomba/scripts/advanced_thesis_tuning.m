@@ -8,17 +8,30 @@ data = readtable('data/step_response.csv');
 t = data.Time_s; t = t - t(1);
 Ts = mean(diff(t));
 
-if any(strcmp(data.Properties.VariableNames, 'RPM'))
+if any(strcmp(data.Properties.VariableNames, 'Rad_s'))
+    y = data.Rad_s;
+elseif any(strcmp(data.Properties.VariableNames, 'RPM'))
     y = data.RPM * (pi / 30);
 else
-    y = data.Rad_s;
+    y = data{:, 4};
 end
-u = data.Compensated_Duty;
+
+if any(strcmp(data.Properties.VariableNames, 'Target_Duty'))
+    u = data.Target_Duty;
+elseif any(strcmp(data.Properties.VariableNames, 'Compensated_Duty'))
+    u = data.Compensated_Duty;
+else
+    u = data{:, 2};
+end
+
+if max(u) > 1.5
+    u = u / 100.0; % Normalize to 0..1.0 SI fractional duty
+end
 
 % Create iddata object
-data_id = iddata(y, u, Ts, 'Name', 'Thruster Data');
+data_id = iddata(y, u, Ts, 'Name', 'Peristaltic Pump Data');
 data_id.InputName = 'Duty'; data_id.OutputName = 'Velocity';
-data_id.InputUnit = '%'; data_id.OutputUnit = 'rad/s';
+data_id.InputUnit = 'duty [0..1]'; data_id.OutputUnit = 'rad/s';
 data_id.TimeUnit = 's';
 
 %% 2. Phase 2: Plant Approximation (Compare Discrete Models & AIC)

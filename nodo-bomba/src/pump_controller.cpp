@@ -151,6 +151,15 @@ void PumpController::setSysidMode(bool enable) {
   }
 }
 
+void PumpController::setDebugStream(bool enable) {
+  _debugStream = enable;
+  if (_debugStream) {
+    Serial.println("[OK] Debug Stream ON (2Hz periodic telemetry active).");
+  } else {
+    Serial.println("[OK] Debug Stream OFF (Monitor quiet).");
+  }
+}
+
 void PumpController::updateAngleTracker() {
   uint16_t rawAngle = pumpEncoder().readRawAngle();
   _telem.rawAngle = rawAngle;
@@ -165,6 +174,10 @@ void PumpController::updateAngleTracker() {
   // Handle 12-bit wrap around
   if (delta > 2048) delta -= 4096;
   else if (delta < -2048) delta += 4096;
+
+#if PUMP_ENCODER_INVERT
+  delta = -delta;
+#endif
 
   _prevRawAngle = rawAngle;
   _accumTicks += delta;
@@ -357,7 +370,7 @@ void PumpController::update(uint32_t nowMs) {
                     _telem.actualRpm,
                     _telem.actualRadS,
                     _telem.dosedMl);
-    } else {
+    } else if (_debugStream) {
       const char* modeStr =
           (_telem.mode == PUMP_CTRL_STOPPED) ? "STOPPED" :
           (_telem.mode == PUMP_CTRL_OPEN_LOOP) ? "OPEN_LOOP" :
@@ -390,6 +403,7 @@ void PumpController::printHelp() {
   Serial.println("  TUNE <Kp> <Ki>      : Live update PI gains in SI units [duty/(rad/s)]");
   Serial.println("  CALIB <ml_per_rev>  : Set mL per revolution calibration factor");
   Serial.println("  SYSID ON / OFF      : Toggle 50Hz compact CSV telemetry for identification");
+  Serial.println("  DEBUG ON / OFF      : Toggle periodic 2Hz telemetry stream in serial monitor");
   Serial.println("  STATUS              : Print full diagnostic snapshot");
   Serial.println("  DIAG                : Check AS5600 magnet health, AGC gain, and raw angle stream");
   Serial.println("  DUMP                : Dump all internal AS5600 registers (ZMCO, ZPOS, MPOS, MANG, CONF)");
@@ -517,6 +531,17 @@ void PumpController::handleCliCommand(char* cmd) {
   }
   else if (strncasecmp(cmd, "SYSID OFF", 9) == 0) {
     setSysidMode(false);
+  }
+  else if (strncasecmp(cmd, "DEBUG", 5) == 0) {
+    const char* arg = cmd + 5;
+    while (*arg == ' ') arg++;
+    if (strcasecmp(arg, "ON") == 0 || strcmp(arg, "1") == 0) {
+      setDebugStream(true);
+    } else if (strcasecmp(arg, "OFF") == 0 || strcmp(arg, "0") == 0) {
+      setDebugStream(false);
+    } else {
+      setDebugStream(!_debugStream);
+    }
   }
   else if (strncasecmp(cmd, "STATUS", 6) == 0) {
     printStatus();

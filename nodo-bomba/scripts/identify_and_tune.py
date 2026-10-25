@@ -188,6 +188,11 @@ def main():
     os.makedirs(args.out_dir, exist_ok=True)
 
     # Save for pipeline CLI execution
+    import json
+    model_file = os.path.join(args.out_dir, "fopdt_model.json")
+    with open(model_file, 'w') as f:
+        json.dump({'K': K, 'tau': tau, 'theta': theta}, f, indent=2)
+
     pidtune_file = os.path.join(args.out_dir, "pidtune_gains.txt")
     with open(pidtune_file, 'w') as f:
         f.write(f"--kp {kp_simc:.6f} --ki {ki_simc:.6f} --kd 0.000000\n")
