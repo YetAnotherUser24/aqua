@@ -118,7 +118,7 @@ def main() -> int:
         print(f"  before dose   DO {do_before:.3f}  (n={len(before)})")
 
         # Mixer on: the recipe runs it during the dose, and it is what makes the sulfite act.
-        node.command("mixer", "start_mixer", target_rpm=1200)
+        node.command("mixer", "start_mixer", target_rpm=1000)
         node.command("pump", "dose", target_ml=DOSE_ML)
 
         # Let the reaction finish, then read a settled batch. The reaction is fast (seconds);

@@ -653,8 +653,8 @@ export function RecipeStudio({
 
   const triggerManual = (phaseId?: string) => {
     // "Disparar Acción" now fires the phase's *own* entry commands, held by the orchestrator
-    // since the phase was entered. When the operator has edited the setpoint (e.g. 1000 RPM
-    // instead of 1200 RPM), the edited params are forwarded so the engine applies them.
+    // since the phase was entered. When the operator has edited the setpoint (e.g. 800 RPM
+    // instead of 1000 RPM), the edited params are forwarded so the engine applies them.
     onTriggerAction(phaseId ? paramEdits[phaseId] : undefined);
   };
 

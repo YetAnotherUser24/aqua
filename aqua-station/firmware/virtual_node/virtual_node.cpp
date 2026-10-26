@@ -637,7 +637,7 @@ int main(int argc, char** argv) {
           // then `mixer_rpm` (int or float), falling back to `target_rad_s`/`speed_percent`,
           // and floors a bare start at `MIXER_DEFAULT_RPM` = 600. The simulator read a
           // `duty` key nothing sends, so every mixer command applied its default and the
-          // impeller never turned -- `planta_1_deox.p1_prep` (mixer_rpm 1200) would have
+          // impeller never turned -- `planta_1_deox.p1_prep` (mixer_rpm 1000) would have
           // "run" with a stationary mixer.
           //
           // This model drives `mixer.setDuty`, so the RPM is converted against the ESC's

@@ -20,7 +20,7 @@ flowchart TB
     SENS["nodo-sensor-od<br/>Sonda Óptica Aqualabo OPTOD<br/>RTC DS3231 · Modbus RS485"]
     AER["nodo-aerador<br/>ODrive S1 · Motor BLDC M8325s<br/>Lazo de Control 20 Hz en Core 1"]
     BOMB["nodo-bomba<br/>Bomba Peristáltica DRV8871<br/>Encoder Magnético AS5600 (100 Hz)"]
-    MIX["nodo-mezclador<br/>Propulsor Submarino BlueRobotics T-200<br/>ESC SNR8503M (1200 RPM)"]
+    MIX["nodo-mezclador<br/>Propulsor Submarino BlueRobotics T-200<br/>ESC SNR8503M (1000 RPM)"]
   end
 
   subgraph COMM["Comunicaciones"]

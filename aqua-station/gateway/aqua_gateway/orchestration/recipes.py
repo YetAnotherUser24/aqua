@@ -102,10 +102,10 @@ _PLANTA_1_DEOX = Recipe(
             condition={"kind": "do_stable", "eps_mg_l_per_min": 0.05, "window_s": 30},
             timeout_s=300,
             commands=(
-                ("mixer", "start_mixer", {"target_rpm": 1200}),
+                ("mixer", "start_mixer", {"target_rpm": 1000}),
                 ("aerator", "stop", {}),
             ),
-            params={"mixer_rpm": 1200, "warm_time_s": 60},
+            params={"mixer_rpm": 1000, "warm_time_s": 60},
         ),
         Phase(
             phase_id="p1_dose",
@@ -380,10 +380,10 @@ _PLANTA_COMBINADA_D = Recipe(
             condition={"kind": "do_stable", "eps_mg_l_per_min": 0.05, "window_s": 30},
             timeout_s=300,
             commands=(
-                ("mixer", "start_mixer", {"target_rpm": 1200}),
+                ("mixer", "start_mixer", {"target_rpm": 1000}),
                 ("aerator", "stop", {}),
             ),
-            params={"mixer_rpm": 1200, "warm_time_s": 60},
+            params={"mixer_rpm": 1000, "warm_time_s": 60},
         ),
         Phase(
             phase_id="pd_dose",

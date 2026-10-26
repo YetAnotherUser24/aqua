@@ -163,7 +163,7 @@ export function ActuatorDeck({
   snapshot: LiveSnapshot | null;
 }) {
   const [rpm, setRpm] = useState(210);
-  const [mixerRpm, setMixerRpm] = useState(1200);
+  const [mixerRpm, setMixerRpm] = useState(1000);
   const [doseMl, setDoseMl] = useState(5.0);
   const [busy, setBusy] = useState(false);
 
@@ -393,7 +393,7 @@ export function ActuatorDeck({
               void run(
                 'mixer',
                 next ? 'start_mixer' : 'stop_mixer',
-                next ? { target_rpm: mixerRpm || 1200 } : {},
+                next ? { target_rpm: mixerRpm || 1000 } : {},
               );
             },
           }}
@@ -415,7 +415,7 @@ export function ActuatorDeck({
             accent="accent-teal-500"
           />
           <div className="flex gap-1.5 font-mono text-[10px]">
-            {[0, 600, 1200, 1800, 2500].map((preset) => (
+            {[0, 600, 1000, 1800, 2500].map((preset) => (
               <button
                 key={preset}
                 type="button"

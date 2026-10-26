@@ -224,7 +224,7 @@ static bool sysidMode = false;
 void printHelp() {
     Serial.println("\n--- T-200 Thruster Controller CLI ---");
     Serial.println("  SPEED <rad/s>       : Closed-loop angular velocity (e.g. 'SPEED 150')");
-    Serial.println("  RPM <rpm>           : Closed-loop speed in RPM (e.g. 'RPM 1200')");
+    Serial.println("  RPM <rpm>           : Closed-loop speed in RPM (e.g. 'RPM 1000')");
     Serial.println("  DUTY <0.0 - 1.0>    : Open-loop throttle override (e.g. 'DUTY 0.35')");
     Serial.println("  STOP                : Safely stop thruster");
     Serial.println("  TUNE <Kp> <Ki> <Kd> : Update PID gains live (e.g. 'TUNE 0.0015 0.004 0.00005')");

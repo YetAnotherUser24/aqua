@@ -143,14 +143,14 @@ def main() -> int:
             )
 
         # -- mixer: mixer_rpm, which p1_prep sends -----------------------------
-        node.command("mixer", "set_speed", mixer_rpm=1200)
+        node.command("mixer", "set_speed", mixer_rpm=1000)
         got = node.last("mixer", 4.0)
-        print(f"  mixer   set_speed mixer_rpm=1200    -> {got}")
-        # 1200 RPM clamps to the 1000 RPM ESC ceiling -> duty 1.0 -> the model's top speed.
+        print(f"  mixer   set_speed mixer_rpm=1000    -> {got}")
+        # 1000 RPM is the ESC ceiling -> duty 1.0 -> the model's top speed.
         # Assert it moved at all: the bug was the mixer never turning.
         if not got or (got[0] or 0.0) < 100.0:
             failures.append(
-                f"mixer set_speed mixer_rpm=1200 left drv_rpm at {got[0] if got else None}; "
+                f"mixer set_speed mixer_rpm=1000 left drv_rpm at {got[0] if got else None}; "
                 "the key is not being read and the impeller never turned"
             )
 

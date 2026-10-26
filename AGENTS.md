@@ -39,7 +39,7 @@ flowchart TB
 | `nodo-aerador/` | `aerator` | ESP32-S3 + ODrive S1 UART | Mechanical aeration, closed-loop DO control (Fuzzy/PID at 20 Hz). |
 | `nodo-sensor-od/` | `od_sensor` | ESP32 + Modbus RTU RS485 | Optical DO sensing (Aqualabo OPTOD), RTC DS3231 timestamping, ESP-NOW broadcast. |
 | `nodo-bomba/` | `pump` | ESP32 + DRV8871 + AS5600 | Peristaltic volumetric dosing of $Na_2SO_3$ for chemical deoxygenation. |
-| `nodo-mezclador/` | `mixer` | ESP32-S3 + T-200 / SNR8503 | Hydrodynamic mixing ($\sim 1200\text{ RPM}$) to prevent stratification and maintain probe flow. |
+| `nodo-mezclador/` | `mixer` | ESP32-S3 + T-200 / SNR8503 | Hydrodynamic mixing ($\sim 1000\text{ RPM}$) to prevent stratification and maintain probe flow. |
 | `aqua-station/` | Gateway | Raspberry Pi 4 / Linux | Mosquitto broker, FastAPI backend, recipe orchestrator, PostgreSQL, React UI. |
 | `control-notes/` | Research | Markdown docs | Mathematical modeling, clean-water constraints, and academic control theory. |
 | `scripts/` | Tooling | Python / MATLAB | System identification, calibration, and telemetry analysis. |
