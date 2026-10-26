@@ -223,20 +223,56 @@ export function ObservatoryChart({
 
     let sorted = Array.from(byMs.values()).sort((a, b) => a.ms - b.ms);
 
-    // Continuous Zero-Order Hold (Sample-and-Hold):
-    // Real hardware nodes sample at differing cadences (OPTOD RS485 at 1 Hz, ODrive UART at 5-20 Hz).
-    // Without continuous alignment, points where only one node sampled have null for the other,
-    // causing Chart.js to show only one variable unless they coincide at the exact same millisecond.
-    // By holding the last physical measurement across the timeline, both DO and RPM are continuously
-    // present at every point, guaranteeing that the inspection box always displays all variables together.
-    let lastDo: number | null = null;
+    // 1. Linear interpolation for Dissolved Oxygen (DO):
+    // DO is a continuous physical quantity. The optical probe samples every ~5 s, while actuators
+    // sample at 1-5 Hz. Zero-order hold (sample-and-hold) causes unnatural stair-stepping.
+    // Linear interpolation between physical readings connects them smoothly and naturally.
+    const doIndices: number[] = [];
+    for (let i = 0; i < sorted.length; i++) {
+      if (sorted[i].do !== null && Number.isFinite(sorted[i].do)) {
+        doIndices.push(i);
+      }
+    }
+
+    if (doIndices.length === 1) {
+      const singleVal = sorted[doIndices[0]].do;
+      for (const pt of sorted) pt.do = singleVal;
+    } else if (doIndices.length > 1) {
+      // Fill before first sample
+      const firstVal = sorted[doIndices[0]].do;
+      for (let i = 0; i < doIndices[0]; i++) {
+        sorted[i].do = firstVal;
+      }
+      // Interpolate between samples
+      for (let k = 0; k < doIndices.length - 1; k++) {
+        const iA = doIndices[k];
+        const iB = doIndices[k + 1];
+        const msA = sorted[iA].ms;
+        const msB = sorted[iB].ms;
+        const valA = sorted[iA].do as number;
+        const valB = sorted[iB].do as number;
+        const spanMs = msB - msA;
+        if (spanMs > 0) {
+          for (let j = iA + 1; j < iB; j++) {
+            const frac = (sorted[j].ms - msA) / spanMs;
+            sorted[j].do = Number((valA + frac * (valB - valA)).toFixed(3));
+          }
+        }
+      }
+      // Fill after last sample (hold latest live reading)
+      const lastVal = sorted[doIndices[doIndices.length - 1]].do;
+      for (let i = doIndices[doIndices.length - 1] + 1; i < sorted.length; i++) {
+        sorted[i].do = lastVal;
+      }
+    }
+
+    // 2. Sample-and-Hold (Zero-Order Hold) for actuators (ODrive and mixer RPM):
+    // Actuators can step instantaneously, and high-frequency samples are synchronized
+    // across all timeline points so the multivariable inspector always displays them together.
     let lastRpm: number | null = null;
     let lastMixerRpm: number | null = null;
 
     for (const pt of sorted) {
-      if (pt.do !== null) lastDo = pt.do;
-      else if (lastDo !== null) pt.do = lastDo;
-
       if (pt.rpm !== null) lastRpm = pt.rpm;
       else if (lastRpm !== null) pt.rpm = lastRpm;
 
@@ -244,15 +280,11 @@ export function ObservatoryChart({
       else if (lastMixerRpm !== null) pt.mixerRpm = lastMixerRpm;
     }
 
-    let nextDo: number | null = null;
     let nextRpm: number | null = null;
     let nextMixerRpm: number | null = null;
 
     for (let i = sorted.length - 1; i >= 0; i--) {
       const pt = sorted[i];
-      if (pt.do !== null) nextDo = pt.do;
-      else if (nextDo !== null) pt.do = nextDo;
-
       if (pt.rpm !== null) nextRpm = pt.rpm;
       else if (nextRpm !== null) pt.rpm = nextRpm;
 
@@ -635,7 +667,8 @@ export function ObservatoryChart({
         pointStyle: 'circle' as const,
         pointRadius: 0,
         pointHoverRadius: 4,
-        tension: 0.2, // Spline cúbico suave para una curva senoidal perfectamente continua y lisa
+        tension: 0.25, // Spline cúbico suave para una curva senoidal perfectamente continua y lisa
+        cubicInterpolationMode: 'monotone' as const,
         normalized: true,
         spanGaps: true,
       });

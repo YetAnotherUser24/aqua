@@ -176,25 +176,64 @@ export function MultivariableInspector({ registry }: { registry: Registry | null
     }
     const merged = Array.from(byMs.values()).sort((a, b) => a.ms - b.ms);
 
-    // Continuous Zero-Order Hold across all active telemetry series:
-    // Ensures all selected curves have synchronized values at every point in time so
-    // the multivariable inspector tooltip always presents all variables together.
+    // Continuous Alignment across all active telemetry series:
+    // Continuous physical variables ('do', 'waterTemp') are linearly interpolated between
+    // measured points so the optical probe's readings render as a smooth curve without steps.
+    // Actuators ('odriveRpm', 'mixerRpm', 'pumpRpm') use Zero-Order Hold.
+    const continuousKeys = new Set(['do', 'waterTemp']);
     for (const def of VAR_DEFS) {
       if (!active.has(def.key)) continue;
-      let lastVal: number | null = null;
-      for (const row of merged) {
-        if (row[def.key] !== undefined && row[def.key] !== null) {
-          lastVal = row[def.key];
-        } else if (lastVal !== null) {
-          row[def.key] = lastVal;
+
+      if (continuousKeys.has(def.key)) {
+        const indices: number[] = [];
+        for (let i = 0; i < merged.length; i++) {
+          if (merged[i][def.key] !== undefined && merged[i][def.key] !== null && Number.isFinite(merged[i][def.key])) {
+            indices.push(i);
+          }
         }
-      }
-      let nextVal: number | null = null;
-      for (let i = merged.length - 1; i >= 0; i--) {
-        if (merged[i][def.key] !== undefined && merged[i][def.key] !== null) {
-          nextVal = merged[i][def.key];
-        } else if (nextVal !== null) {
-          merged[i][def.key] = nextVal;
+        if (indices.length === 1) {
+          const singleVal = merged[indices[0]][def.key];
+          for (const row of merged) row[def.key] = singleVal;
+        } else if (indices.length > 1) {
+          const firstVal = merged[indices[0]][def.key];
+          for (let i = 0; i < indices[0]; i++) merged[i][def.key] = firstVal;
+          for (let k = 0; k < indices.length - 1; k++) {
+            const iA = indices[k];
+            const iB = indices[k + 1];
+            const msA = merged[iA].ms;
+            const msB = merged[iB].ms;
+            const valA = merged[iA][def.key] as number;
+            const valB = merged[iB][def.key] as number;
+            const span = msB - msA;
+            if (span > 0) {
+              for (let j = iA + 1; j < iB; j++) {
+                const frac = (merged[j].ms - msA) / span;
+                merged[j][def.key] = Number((valA + frac * (valB - valA)).toFixed(3));
+              }
+            }
+          }
+          const lastVal = merged[indices[indices.length - 1]][def.key];
+          for (let i = indices[indices.length - 1] + 1; i < merged.length; i++) {
+            merged[i][def.key] = lastVal;
+          }
+        }
+      } else {
+        // Zero-Order Hold for discrete / actuator variables
+        let lastVal: number | null = null;
+        for (const row of merged) {
+          if (row[def.key] !== undefined && row[def.key] !== null) {
+            lastVal = row[def.key];
+          } else if (lastVal !== null) {
+            row[def.key] = lastVal;
+          }
+        }
+        let nextVal: number | null = null;
+        for (let i = merged.length - 1; i >= 0; i--) {
+          if (merged[i][def.key] !== undefined && merged[i][def.key] !== null) {
+            nextVal = merged[i][def.key];
+          } else if (nextVal !== null) {
+            merged[i][def.key] = nextVal;
+          }
         }
       }
     }
@@ -309,7 +348,8 @@ export function MultivariableInspector({ registry }: { registry: Registry | null
         borderWidth: 1.8,
         pointRadius: 0,
         pointHoverRadius: 4,
-        tension: 0.2,
+        tension: v.key === 'do' || v.key === 'waterTemp' ? 0.25 : 0.1,
+        cubicInterpolationMode: v.key === 'do' || v.key === 'waterTemp' ? ('monotone' as const) : undefined,
         spanGaps: true,
       })),
     };
