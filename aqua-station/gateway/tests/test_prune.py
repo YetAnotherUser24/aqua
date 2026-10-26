@@ -231,7 +231,7 @@ class TestPruneIntegration:
             policy=policy,
             open_files=[],
             disk_usage=disk,
-            now=NOW + 30 * SECONDS_PER_DAY,
+            now=time.time() + 30 * SECONDS_PER_DAY,
         )
 
         assert path.exists() is False, "file should have been removed from disk"

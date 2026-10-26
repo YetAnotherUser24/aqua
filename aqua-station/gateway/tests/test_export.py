@@ -874,3 +874,68 @@ def test_the_merge_window_stays_under_the_fastest_role_interval(tmp_path: Path):
     assert total == 2, "two consecutive samples of one role must never merge"
     rpms = [r["drv_rpm"] for r in csv.DictReader(out.open())]
     assert rpms == ["200", "240"], "and neither reading may be dropped"
+
+
+@pytest.mark.asyncio
+async def test_undeclared_role_with_telemetry_is_included_in_export(tmp_path: Path, registry):
+    """
+    If an experiment's recipe declared only od_sensor and pump, but the aerator was run,
+    its telemetry must NOT be discarded from the native export or aligned bundle.
+    """
+    class _Settings:
+        def __init__(self, root: Path):
+            self.archive = type("Archive", (), {"root": root})()
+            self.timezone = "UTC"
+
+    class _MockDB:
+        available = True
+
+        async def fetchrow(self, query, *args):
+            return {
+                "id": "EXP-2026-10-09-01",
+                "title": "Deox only declared",
+                "status": "completed",
+                # aerator is NOT declared here:
+                "roles": ["od_sensor", "pump"],
+                "started_at": datetime(2026, 10, 9, 12, 0, tzinfo=UTC),
+                "ended_at": datetime(2026, 10, 9, 12, 5, tzinfo=UTC),
+                "calibration": {},
+            }
+
+        async def fetch(self, query, *args):
+            return []
+
+    root = tmp_path / "telemetry"
+    # Write sensor data
+    _archive(
+        root,
+        "od_sensor",
+        [{"role": "od_sensor", "t_dev_ms": str(MINUTE_MS), "t_rel_ms": "0", "t_src": "rtc", "seq": "1", "od_do_mg_l": "7.0"}],
+    )
+    # Write aerator data even though it was not declared
+    _archive(
+        root,
+        "aerator",
+        [{"role": "aerator", "t_dev_ms": str(MINUTE_MS + 200), "t_rel_ms": "200", "t_src": "espnow", "seq": "1", "drv_rpm": "300"}],
+    )
+
+    out_native = tmp_path / "out_native"
+    report = await flat.build_flat_export(
+        _Settings(root),
+        manifest=None,
+        db=_MockDB(),
+        registry=registry,
+        experiment_id="EXP-2026-10-09-01",
+        out_dir=out_native,
+        compress=False,
+    )
+
+    assert "aerator" in report.roles_present, "aerator must be included because it had telemetry"
+    assert report.per_role_rows["aerator"] == 1
+    assert "pump" in report.roles_missing, "declared role without telemetry is noted missing"
+
+    with (out_native / "telemetry_native.csv").open() as fh:
+        reader = list(csv.DictReader(fh))
+    assert len(reader) == 2
+    assert any(r["drv_rpm"] == "300" for r in reader), "aerator columns and data must be present"
+

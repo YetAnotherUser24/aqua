@@ -135,7 +135,8 @@ export default function DashboardPage() {
   const startWithDraft = useCallback(
     async (draft: ExperimentDraft) => {
       const recipeId = shownRecipe?.recipe_id ?? 'planta_2_step';
-      const roles = shownRecipe?.roles ?? ['od_sensor', 'aerator'];
+      // Include all bench roles so every active node's telemetry is captured and tracked
+      const roles = Array.from(new Set([...(shownRecipe?.roles ?? ['od_sensor', 'aerator']), 'od_sensor', 'aerator', 'mixer', 'pump']));
       setComposerBusy(true);
       try {
         const experiment = await createExperiment({

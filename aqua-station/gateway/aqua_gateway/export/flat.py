@@ -129,6 +129,7 @@ def _write_wide_csv(
     tz_name: str = "America/Lima",
     t0_ms: int | None,
     merge_ms: int = DEFAULT_MERGE_MS,
+    declared: Sequence[str] | None = None,
 ) -> tuple[dict[str, int], list[str], int]:
     """
     Write one wide row per *instant*, every role's fields as columns.
@@ -214,7 +215,8 @@ def _write_wide_csv(
         if count:
             per_role[role] = count
         else:
-            missing.append(role)
+            if declared is None or role in declared:
+                missing.append(role)
             log.warning("no native rows for role", extra={"role": role})
 
     # One pass over the sorted samples, opening a new group whenever the next stamp is more
@@ -309,10 +311,13 @@ async def build_flat_export(
 
     report = FlatReport(experiment_id=experiment_id, out_dir=out_dir)
 
-    declared = experiment.get("roles") or []
-    roles = [role for role in declared if role in registry.roles] or list(registry.roles)
+    declared_raw = experiment.get("roles") or []
+    declared_roles = [role for role in declared_raw if role in registry.roles]
+    # Check declared roles first, and also check all registry roles so telemetry from
+    # unlisted or manually-commanded actuators (e.g. aerator or mixer) is never silently dropped.
+    roles = list(dict.fromkeys(declared_roles + list(registry.roles)))
 
-    # The union of every role's field names, in a stable order: registry order for known
+    # The union of every candidate role's field names, in a stable order: registry order for known
     # roles, then any extra columns the archive carries. Built first so the header is
     # written once and every row can be emitted without knowing what came before.
     columns = list(_PREFIX_COLUMNS)
@@ -344,6 +349,7 @@ async def build_flat_export(
         ended=ended,
         tz_name=settings.timezone,
         t0_ms=t0_ms,
+        declared=declared_roles if declared_roles else None,
     )
 
     if not per_role_rows:

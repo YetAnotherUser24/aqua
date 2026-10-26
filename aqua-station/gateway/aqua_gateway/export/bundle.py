@@ -368,11 +368,11 @@ async def build_bundle(
     report = BundleReport(experiment_id=experiment_id, out_dir=out_dir, grid_seconds=grid_seconds)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    # Which roles take part: recorded on the experiment, falling back to whatever the
-    # registry knows. The experiment's list is preferred because it is the historical
-    # record — a role added later must not silently appear in an older experiment.
-    declared = experiment.get("roles") or []
-    roles = [role for role in declared if role in registry.roles] or list(registry.roles)
+    # Which roles take part: declared roles, plus any registered roles with active archive data,
+    # so an actuator that was operated outside the recipe (or during manual steps) is included.
+    declared_raw = experiment.get("roles") or []
+    declared_roles = [role for role in declared_raw if role in registry.roles]
+    roles = list(dict.fromkeys(declared_roles + list(registry.roles)))
 
     offsets = await load_clock_offsets(db, started, ended)
     grid = build_grid(started, ended, grid_seconds)
@@ -388,8 +388,9 @@ async def build_bundle(
             rows.extend(read_archive_csv(path))
 
         if not rows:
-            report.roles_missing.append(role)
-            report.sources_unavailable.append(role)
+            if not declared_roles or role in declared_roles:
+                report.roles_missing.append(role)
+                report.sources_unavailable.append(role)
             log.warning("no local archive data for role", extra={"role": role})
             continue
 
