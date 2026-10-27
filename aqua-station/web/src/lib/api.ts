@@ -323,6 +323,59 @@ export function setPhaseMode(
   return request<RunStateResponse>(`/api/state/phase-mode?${params.toString()}`, { method: 'POST' });
 }
 
+// ---------------------------------------------------------------------------
+// DO Closed-Loop Control (Manual & Tuning)
+// ---------------------------------------------------------------------------
+
+export interface DOControlParams {
+  setpoint_mg_l: number;
+  kp?: number;
+  ki?: number;
+  kd?: number;
+  beta?: number;
+  tt?: number;
+  tau_lag?: number;
+  mode?: 'pid' | 'fuzzy';
+  experiment_id?: string | null;
+  requested_by?: string;
+}
+
+export function postControlDO(params: DOControlParams): Promise<Record<string, unknown>> {
+  return request('/api/control/do', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export function postControlDOStop(requested_by = 'operator:web'): Promise<Record<string, unknown>> {
+  const p = new URLSearchParams({ requested_by });
+  return request(`/api/control/do/stop?${p.toString()}`, {
+    method: 'POST',
+  });
+}
+
+export function getControlDO(): Promise<{
+  defaults: {
+    setpoint_mg_l: number;
+    kp: number;
+    ki: number;
+    kd: number;
+    beta: number;
+    tt: number;
+    tau_lag: number;
+    mode: string;
+  };
+  current: {
+    do_mg_l: number | null;
+    rpm: number | null;
+    ctl_mode: string;
+    running: boolean;
+    failsafe: boolean;
+  };
+}> {
+  return request('/api/control/do');
+}
+
 export function getRecipes(): Promise<RecipesResponse> {
   return request<RecipesResponse>('/api/recipes');
 }

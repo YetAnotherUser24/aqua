@@ -13,6 +13,7 @@ action.
 
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import shutil
@@ -102,7 +103,24 @@ class ExperimentCreateRequest(BaseModel):
     #: will read, or it is lost the moment ``_begin`` seeds from the recipe. Only phases the
     #: operator actually changed need appear; the rest default to the recipe's own mode.
     phase_modes: dict[str, str] = Field(default_factory=dict)
+    #: Per-phase parameters chosen *before* launch, keyed by ``phase_id``.
+    phase_params: dict[str, dict[str, Any]] = Field(default_factory=dict)
     created_by: str = "operator:web"
+
+
+class DOControlRequest(BaseModel):
+    """Manual DO closed-loop control launch request."""
+
+    setpoint_mg_l: float = Field(default=6.00, ge=0.0, le=14.0, description="DO target in mg/L")
+    kp: float = Field(default=221.65, ge=0.0, description="Proportional gain")
+    ki: float = Field(default=1.915, ge=0.0, description="Integral gain")
+    kd: float = Field(default=0.0, ge=0.0, description="Derivative gain")
+    beta: float = Field(default=0.35, ge=0.0, le=1.0, description="Setpoint weighting factor (2-DOF)")
+    tt: float = Field(default=100.0, ge=0.1, description="Anti-windup tracking time constant (s)")
+    tau_lag: float = Field(default=30.0, ge=0.0, description="Predictive coasting horizon (s)")
+    mode: str = Field(default="pid", description="Control mode: 'pid' or 'fuzzy'")
+    experiment_id: str | None = None
+    requested_by: str = "operator:manual"
 
 
 class MilestoneRequest(BaseModel):
@@ -786,7 +804,7 @@ def create_app(gateway: "Gateway") -> FastAPI:
                     phase.phase_id,
                     phase.num,
                     body.phase_modes.get(phase.phase_id, phase.mode),
-                    json.dumps(dict(phase.params)),
+                    json.dumps({**dict(phase.params), **body.phase_params.get(phase.phase_id, {})}),
                 )
                 for phase in recipe.phases
             ],
@@ -1392,6 +1410,162 @@ def create_app(gateway: "Gateway") -> FastAPI:
                 }
                 for recipe in RECIPES.values()
             ]
+        }
+
+    # -- DO closed-loop manual control -------------------------------------
+
+    @app.post("/api/control/do")
+    async def post_control_do(body: DOControlRequest) -> dict[str, Any]:
+        """
+        Manually launch closed-loop DO control with configurable parameters.
+
+        Issues set_config (mode, target_do, kp, ki, kd, beta, tt, tau_lag)
+        and arms the aerator motor in closed-loop control mode.
+        """
+        if "aerator" not in gateway.registry.roles:
+            raise HTTPException(status_code=404, detail="aerator role not in registry")
+
+        schema = gateway.registry.for_role("aerator")
+        valid_modes = {"pid", "fuzzy"}
+        if body.mode not in valid_modes:
+            raise HTTPException(status_code=400, detail=f"invalid mode {body.mode!r}; valid: {sorted(valid_modes)}")
+
+        config_payload = {
+            "mode": body.mode,
+            "target_do": body.setpoint_mg_l,
+            "setpoint_mg_l": body.setpoint_mg_l,
+            "kp": body.kp,
+            "ki": body.ki,
+            "kd": body.kd,
+            "beta": body.beta,
+            "tt": body.tt,
+            "tau_lag": body.tau_lag,
+        }
+        cmd_config = await gateway.commands.issue(
+            role="aerator",
+            action="set_config",
+            target=config_payload,
+            experiment_id=body.experiment_id,
+            requested_by=body.requested_by,
+            node_id=schema.node_id,
+        )
+
+        await asyncio.sleep(0.05)
+
+        cmd_start = await gateway.commands.issue(
+            role="aerator",
+            action="start",
+            target={},
+            experiment_id=body.experiment_id,
+            requested_by=body.requested_by,
+            node_id=schema.node_id,
+        )
+
+        await gateway.events.emit(
+            Event.make(
+                EventType.COMMAND_ISSUED,
+                source=Source.UI,
+                node_id=schema.node_id,
+                experiment_id=body.experiment_id,
+                detail={
+                    "control": "do_closed_loop",
+                    "mode": body.mode,
+                    "setpoint_mg_l": body.setpoint_mg_l,
+                    "kp": body.kp,
+                    "ki": body.ki,
+                    "kd": body.kd,
+                    "beta": body.beta,
+                    "tt": body.tt,
+                    "tau_lag": body.tau_lag,
+                },
+            ),
+            live=gateway.live,
+        )
+
+        return {
+            "status": "running",
+            "control": "do_closed_loop",
+            "mode": body.mode,
+            "setpoint_mg_l": body.setpoint_mg_l,
+            "params": {
+                "kp": body.kp,
+                "ki": body.ki,
+                "kd": body.kd,
+                "beta": body.beta,
+                "tt": body.tt,
+                "tau_lag": body.tau_lag,
+            },
+            "commands": {
+                "set_config": cmd_config.id,
+                "start": cmd_start.id,
+            },
+        }
+
+    @app.post("/api/control/do/stop")
+    async def post_control_do_stop(
+        requested_by: str = Query(default="operator:manual"),
+        experiment_id: str | None = Query(default=None),
+    ) -> dict[str, Any]:
+        """Stop and disarm the closed-loop DO control, returning the aerator to manual mode."""
+        if "aerator" not in gateway.registry.roles:
+            raise HTTPException(status_code=404, detail="aerator role not in registry")
+
+        schema = gateway.registry.for_role("aerator")
+        cmd_stop = await gateway.commands.issue(
+            role="aerator",
+            action="stop",
+            target={},
+            experiment_id=experiment_id,
+            requested_by=requested_by,
+            node_id=schema.node_id,
+        )
+        await asyncio.sleep(0.05)
+        cmd_mode = await gateway.commands.issue(
+            role="aerator",
+            action="set_mode",
+            target={"mode": "manual"},
+            experiment_id=experiment_id,
+            requested_by=requested_by,
+            node_id=schema.node_id,
+        )
+        return {
+            "status": "stopped",
+            "mode": "manual",
+            "commands": {"stop": cmd_stop.id, "set_mode": cmd_mode.id},
+        }
+
+    @app.get("/api/control/do")
+    async def get_control_do() -> dict[str, Any]:
+        """Get the current DO control status, live readings, and default parameter set."""
+        snap = gateway.live.snapshot()
+        nodes = snap.get("nodes") or {}
+        aerator = nodes.get("aerator") or {}
+        aerator_metrics = aerator.get("metrics") or {}
+        od_sensor = nodes.get("od_sensor") or {}
+        od_metrics = od_sensor.get("metrics") or {}
+
+        live_do = od_metrics.get("od_do_mg_l")
+        if live_do is None:
+            live_do = aerator_metrics.get("peer_do_mg_l")
+
+        return {
+            "defaults": {
+                "setpoint_mg_l": 6.00,
+                "kp": 221.65,
+                "ki": 1.915,
+                "kd": 0.0,
+                "beta": 0.35,
+                "tt": 100.0,
+                "tau_lag": 30.0,
+                "mode": "pid",
+            },
+            "current": {
+                "do_mg_l": live_do,
+                "rpm": aerator_metrics.get("drv_rpm"),
+                "ctl_mode": aerator_metrics.get("ctl_mode", "manual"),
+                "running": aerator_metrics.get("drv_running", False),
+                "failsafe": aerator_metrics.get("ctl_failsafe", False),
+            },
         }
 
     return app

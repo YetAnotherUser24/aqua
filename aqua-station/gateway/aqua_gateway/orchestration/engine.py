@@ -663,6 +663,16 @@ class Orchestrator:
                         cmd_target["step_rpm"] = step_rpm
                         cmd_target["target_rpm"] = step_rpm
                         cmd_target["speed_percent"] = round((float(step_rpm) / 600.0) * 100)
+                elif role == "aerator" and action in ("set_config", "set_mode"):
+                    for key in ("target_do", "setpoint_mg_l", "kp", "ki", "kd", "beta", "tt", "tau_lag", "mode"):
+                        if key in effective_params:
+                            cmd_target[key] = effective_params[key]
+                    if "ctrl_type" in effective_params:
+                        cmd_target["mode"] = effective_params["ctrl_type"]
+                    if "setpoint_mg_l" in cmd_target and "target_do" not in cmd_target:
+                        cmd_target["target_do"] = cmd_target["setpoint_mg_l"]
+                    if "target_do" in cmd_target and "setpoint_mg_l" not in cmd_target:
+                        cmd_target["setpoint_mg_l"] = cmd_target["target_do"]
                 elif role == "mixer" and action == "start_mixer":
                     mixer_rpm = effective_params.get("mixer_rpm")
                     if mixer_rpm is not None:
@@ -886,9 +896,17 @@ class Orchestrator:
         # from the recipe default. Fetching only ``phase_id, status`` was why a pre-launch mode
         # could never survive to the run.
         phases = await self.gateway.db.fetch(
-            "SELECT phase_id, mode, status FROM experiment_phases WHERE experiment_id = $1",
+            "SELECT phase_id, mode, status, params FROM experiment_phases WHERE experiment_id = $1",
             experiment_id,
         )
+        for p in phases:
+            raw_params = p.get("params")
+            if raw_params:
+                try:
+                    loaded = json.loads(raw_params) if isinstance(raw_params, str) else dict(raw_params)
+                    self._param_overrides.setdefault(p["phase_id"], {}).update(loaded)
+                except Exception:
+                    pass
         return recipe_id, phases
 
     async def _mark_experiment(

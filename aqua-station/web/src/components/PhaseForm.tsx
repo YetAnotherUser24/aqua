@@ -153,20 +153,23 @@ export const PHASE_FORMS: Record<string, ParamControl[]> = {
   // -- Protocolo C — Lazo cerrado --------------------------------------------
   cl_config: [
     { kind: 'section', label: 'Consigna & Algoritmo' },
-    { kind: 'number', key: 'setpoint_mg_l', label: 'Setpoint Exacto de DO (SP)', unit: 'mg/L', min: 2, max: 8.5, step: 0.05 },
+    { kind: 'number', key: 'setpoint_mg_l', label: 'Setpoint Exacto de DO (SP)', unit: 'mg/L', min: 0.5, max: 12.0, step: 0.05 },
     {
       kind: 'select',
       key: 'ctrl_type',
       label: 'Algoritmo de Control',
       options: [
-        { value: 'pid', label: 'PID (Firmware ODrive a 20 Hz)' },
+        { value: 'pid', label: 'PID 2-DOF (Firmware ODrive a 20 Hz)' },
         { value: 'on_off', label: 'On-Off (Banda histéresis ±0.2 mg/L)' },
         { value: 'fuzzy', label: 'Lógica Difusa / Fuzzy (Experimental)' },
       ],
     },
-    { kind: 'number', key: 'kp', label: 'Ganancia Proporcional (Kp)', min: 0, max: 5, step: 0.01 },
-    { kind: 'number', key: 'ki', label: 'Ganancia Integral (Ki)', min: 0, max: 2, step: 0.001 },
-    { kind: 'number', key: 'kd', label: 'Ganancia Derivativa (Kd)', min: 0, max: 1, step: 0.001 },
+    { kind: 'number', key: 'kp', label: 'Ganancia Proporcional (Kp)', min: 0, max: 2000, step: 0.1 },
+    { kind: 'number', key: 'ki', label: 'Ganancia Integral (Ki)', min: 0, max: 50, step: 0.001 },
+    { kind: 'number', key: 'kd', label: 'Ganancia Derivativa (Kd)', min: 0, max: 10, step: 0.001 },
+    { kind: 'number', key: 'beta', label: 'Ponderación Consigna (beta, 2-DOF)', min: 0.0, max: 1.0, step: 0.05 },
+    { kind: 'number', key: 'tt', label: 'Constante Anti-Windup Tt', unit: 's', min: 1.0, max: 500.0, step: 5.0 },
+    { kind: 'number', key: 'tau_lag', label: 'Horizonte Predictivo tau_lag', unit: 's', min: 0.0, max: 120.0, step: 5.0 },
     { kind: 'toggle', key: 'mixer_toggle', label: 'Mezclador T-200 Auxiliar', on: 'ENCENDIDO', off: 'APAGADO (Protocolo base)' },
   ],
   cl_run: [

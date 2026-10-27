@@ -17,8 +17,8 @@
  */
 
 import { useState } from 'react';
-import { AlertTriangle, Fan, Play, RotateCw, Syringe, Wrench } from 'lucide-react';
-import { postCommand } from '@/lib/api';
+import { Activity, AlertTriangle, ChevronDown, ChevronUp, Fan, Play, RotateCw, Sliders, Syringe, Wrench } from 'lucide-react';
+import { postCommand, postControlDO, postControlDOStop } from '@/lib/api';
 import type { LiveSnapshot, Registry } from '@/lib/types';
 import { readField } from '@/lib/registry';
 import { formatNumber } from '@/lib/format';
@@ -167,11 +167,28 @@ export function ActuatorDeck({
   const [doseMl, setDoseMl] = useState(5.0);
   const [busy, setBusy] = useState(false);
 
+  // Lazo cerrado OD manual
+  const [controlTab, setControlTab] = useState<'manual' | 'closed_loop'>('manual');
+  const [targetDo, setTargetDo] = useState(6.0);
+  const [doKp, setDoKp] = useState(221.65);
+  const [doKi, setDoKi] = useState(1.915);
+  const [doKd, setDoKd] = useState(0.0);
+  const [doBeta, setDoBeta] = useState(0.35);
+  const [doTt, setDoTt] = useState(100.0);
+  const [doTauLag, setDoTauLag] = useState(30.0);
+  const [doMode, setDoMode] = useState<'pid' | 'fuzzy'>('pid');
+  const [showTuning, setShowTuning] = useState(false);
+  const [doFeedback, setDoFeedback] = useState<string | null>(null);
+
   const measuredRpm = readField(registry, snapshot, 'aerator', 'drv_rpm');
   const measuredMixer = readField(registry, snapshot, 'mixer', 'drv_rpm');
   const dosed = readField(registry, snapshot, 'pump', 'pump_dosed_ml');
   const rawMeniscus = snapshot?.nodes?.['pump']?.metrics?.['pump_meniscus_retracted'];
   const meniscusRetracted = typeof rawMeniscus === 'boolean' ? rawMeniscus : null;
+
+  const measuredDo = readField(registry, snapshot, 'od_sensor', 'od_do_mg_l');
+  const peerDo = readField(registry, snapshot, 'aerator', 'peer_do_mg_l');
+  const currentDo = measuredDo.value ?? peerDo.value;
 
   // Measured state, read off the node.
   //
@@ -188,6 +205,9 @@ export function ActuatorDeck({
     ? Boolean(aerator.metrics['drv_running'])
     : (measuredRpm.value ?? 0) > RUNNING_RPM;
   const measuredOdriveOn = Boolean(aerator?.online) && aeratorArmed;
+
+  const aeratorCtlMode = aerator?.metrics?.['ctl_mode'] as string | undefined;
+  const isClosedLoopActive = aeratorArmed && (aeratorCtlMode === 'pid' || aeratorCtlMode === 'fuzzy');
 
   const aeratorState = typeof aerator?.metrics?.['drv_state'] === 'number' ? Number(aerator.metrics['drv_state']) : null;
   const aeratorStatus = typeof aerator?.metrics?.['drv_status'] === 'number' ? Number(aerator.metrics['drv_status']) : null;
@@ -225,6 +245,44 @@ export function ActuatorDeck({
     setBusy(false);
   };
 
+  const handleStartDOControl = async () => {
+    setBusy(true);
+    setDoFeedback(null);
+    try {
+      await postControlDO({
+        setpoint_mg_l: targetDo,
+        kp: doKp,
+        ki: doKi,
+        kd: doKd,
+        beta: doBeta,
+        tt: doTt,
+        tau_lag: doTauLag,
+        mode: doMode,
+        requested_by: 'operator:deck',
+      });
+      odriveSwitch.set(true);
+      setDoFeedback(`Control ${doMode.toUpperCase()} iniciado a ${targetDo.toFixed(2)} mg/L`);
+    } catch (err) {
+      setDoFeedback(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleStopDOControl = async () => {
+    setBusy(true);
+    setDoFeedback(null);
+    try {
+      await postControlDOStop('operator:deck');
+      odriveSwitch.set(false);
+      setDoFeedback('Control de OD detenido (modo manual)');
+    } catch (err) {
+      setDoFeedback(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const has = (role: string) => Boolean(registry?.roles?.[role]);
   const readyCount = [has('aerator'), has('mixer'), has('pump')].filter(Boolean).length;
 
@@ -247,18 +305,24 @@ export function ActuatorDeck({
           accent="bg-amber-950/60 border-amber-800 text-telemetry-motor"
           power={{
             on: odriveSwitch.value,
-            accent: 'bg-amber-500',
+            accent: isClosedLoopActive ? 'bg-cyan-500' : 'bg-amber-500',
             pending: odriveSwitch.pending,
             onToggle: () => {
-              // Flip the switch now, then send. The switch reconciles to the node's tachometer
-              // as soon as it agrees, or reverts if the command is never confirmed.
               const next = !odriveSwitch.value;
               odriveSwitch.set(next);
-              void run(
-                'aerator',
-                next ? 'set_speed' : 'stop',
-                next ? { speed_percent: Math.round((rpm / 600) * 100) } : {},
-              );
+              if (controlTab === 'closed_loop') {
+                if (next) {
+                  void handleStartDOControl();
+                } else {
+                  void handleStopDOControl();
+                }
+              } else {
+                void run(
+                  'aerator',
+                  next ? 'set_speed' : 'stop',
+                  next ? { speed_percent: Math.round((rpm / 600) * 100) } : {},
+                );
+              }
             },
           }}
         >
@@ -271,9 +335,17 @@ export function ActuatorDeck({
                 <span className="text-xs font-bold text-slate-100">{odriveHuman.badgeText}</span>
               </div>
             </div>
-            <span className={cn('text-[10px] px-2 py-0.5 rounded border font-mono shrink-0', odriveHuman.badgeClass)}>
-              {odriveHuman.stateLabel}
-            </span>
+            <div className="flex items-center gap-1.5 shrink-0">
+              {isClosedLoopActive && (
+                <span className="text-[10px] px-2 py-0.5 rounded border border-cyan-700 bg-cyan-950/80 text-cyan-300 font-mono flex items-center gap-1 animate-pulse">
+                  <Activity className="w-2.5 h-2.5" />
+                  {aeratorCtlMode?.toUpperCase()}
+                </span>
+              )}
+              <span className={cn('text-[10px] px-2 py-0.5 rounded border font-mono', odriveHuman.badgeClass)}>
+                {odriveHuman.stateLabel}
+              </span>
+            </div>
           </div>
 
           {/* Banner de diagnóstico / alerta de fallas */}
@@ -316,64 +388,323 @@ export function ActuatorDeck({
             </div>
           ) : null}
 
-          <div className="flex justify-between text-[11px] font-mono text-slate-400">
-            <span>
-              Consigna: <strong className="text-telemetry-motor">{rpm} RPM</strong>
-            </span>
-            <span>
-              Medido: <strong className="text-slate-200">{formatNumber(measuredRpm.value, 0)}</strong>
-            </span>
+          {/* Selector de Modo: Manual RPM vs Lazo Cerrado OD */}
+          <div className="grid grid-cols-2 gap-1 p-1 bg-scada-surface rounded-lg border border-scada-border text-xs">
+            <button
+              type="button"
+              onClick={() => setControlTab('manual')}
+              className={cn(
+                'py-1.5 px-2 rounded-md font-bold transition flex items-center justify-center gap-1.5',
+                controlTab === 'manual'
+                  ? 'bg-amber-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              )}
+            >
+              <Fan className="w-3.5 h-3.5" />
+              Manual (RPM)
+            </button>
+            <button
+              type="button"
+              onClick={() => setControlTab('closed_loop')}
+              className={cn(
+                'py-1.5 px-2 rounded-md font-bold transition flex items-center justify-center gap-1.5 relative',
+                controlTab === 'closed_loop'
+                  ? 'bg-cyan-600 text-white shadow-sm'
+                  : 'text-slate-400 hover:text-slate-200'
+              )}
+            >
+              <Activity className="w-3.5 h-3.5" />
+              Lazo Cerrado OD
+              {isClosedLoopActive && (
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse ml-0.5" />
+              )}
+            </button>
           </div>
-          <Slider
-            value={rpm}
-            min={0}
-            max={600}
-            step={10}
-            onChange={setRpm}
-            accent="accent-amber-500"
-          />
-          <div className="flex gap-1.5 font-mono text-[10px]">
-            {[0, 150, 300, 450, 600].map((preset) => (
-              <button
-                key={preset}
-                type="button"
-                onClick={() => {
-                  setRpm(preset);
-                }}
-                className={cn(
-                  'flex-1 py-1 rounded bg-scada-elevated hover:bg-slate-700 border text-slate-300 transition',
-                  rpm === preset ? 'border-amber-500 text-amber-300 font-bold' : 'border-scada-border',
+
+          {controlTab === 'manual' ? (
+            <div className="space-y-2.5">
+              <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                <span>
+                  Consigna: <strong className="text-telemetry-motor">{rpm} RPM</strong>
+                </span>
+                <span>
+                  Medido: <strong className="text-slate-200">{formatNumber(measuredRpm.value, 0)}</strong>
+                </span>
+              </div>
+              <Slider
+                value={rpm}
+                min={0}
+                max={600}
+                step={10}
+                onChange={setRpm}
+                accent="accent-amber-500"
+              />
+              <div className="flex gap-1.5 font-mono text-[10px]">
+                {[0, 150, 300, 450, 600].map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => {
+                      setRpm(preset);
+                    }}
+                    className={cn(
+                      'flex-1 py-1 rounded bg-scada-elevated hover:bg-slate-700 border text-slate-300 transition',
+                      rpm === preset ? 'border-amber-500 text-amber-300 font-bold' : 'border-scada-border',
+                    )}
+                  >
+                    {preset}
+                  </button>
+                ))}
+              </div>
+              <div className="flex gap-2 pt-0.5">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    odriveSwitch.set(true);
+                    void run('aerator', 'set_speed', { speed_percent: Math.round((rpm / 600) * 100) });
+                  }}
+                  className="flex-1 py-1.5 rounded-lg text-white text-xs font-bold bg-amber-600 hover:bg-amber-500 disabled:opacity-50 transition shadow-sm"
+                >
+                  Aplicar {rpm} RPM ({Math.round((rpm / 600) * 100)}%)
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || !odriveSwitch.value}
+                  onClick={() => {
+                    odriveSwitch.set(false);
+                    void run('aerator', 'stop', {});
+                  }}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-rose-950/80 text-slate-300 hover:text-rose-300 border border-slate-700 hover:border-rose-800 disabled:opacity-40 transition"
+                  title="Desarma el motor y conmuta el nodo a telemetría IDLE (20 s)"
+                >
+                  Detener
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3 pt-0.5">
+              {/* Resumen en tiempo real */}
+              <div className="grid grid-cols-3 gap-2 p-2 rounded-lg bg-scada-surface border border-scada-border text-center font-mono">
+                <div className="p-1 rounded bg-scada-well">
+                  <span className="text-[9px] text-slate-400 block">OD Medido</span>
+                  <span className="text-xs font-bold text-cyan-400">
+                    {currentDo != null ? `${formatNumber(currentDo, 2)} mg/L` : '—'}
+                  </span>
+                </div>
+                <div className="p-1 rounded bg-scada-well">
+                  <span className="text-[9px] text-slate-400 block">Consigna</span>
+                  <span className="text-xs font-bold text-emerald-400">
+                    {targetDo.toFixed(2)} mg/L
+                  </span>
+                </div>
+                <div className="p-1 rounded bg-scada-well">
+                  <span className="text-[9px] text-slate-400 block">Motor</span>
+                  <span className="text-xs font-bold text-slate-200">
+                    {formatNumber(measuredRpm.value, 0)} RPM
+                  </span>
+                </div>
+              </div>
+
+              {/* Slider de Consigna OD y Presets */}
+              <div className="space-y-1.5">
+                <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                  <span>Consigna Oxígeno Disuelto:</span>
+                  <strong className="text-cyan-300">{targetDo.toFixed(2)} mg/L</strong>
+                </div>
+                <Slider
+                  value={targetDo}
+                  min={0.5}
+                  max={12.0}
+                  step={0.1}
+                  onChange={setTargetDo}
+                  accent="accent-cyan-500"
+                />
+                <div className="flex gap-1.5 font-mono text-[10px]">
+                  {[4.0, 5.0, 6.0, 7.0, 8.0].map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => setTargetDo(preset)}
+                      className={cn(
+                        'flex-1 py-1 rounded bg-scada-elevated hover:bg-slate-700 border text-slate-300 transition',
+                        Math.abs(targetDo - preset) < 0.05
+                          ? 'border-cyan-500 text-cyan-300 font-bold'
+                          : 'border-scada-border'
+                      )}
+                    >
+                      {preset.toFixed(1)}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* Selector de Modo Algorítmico */}
+              <div className="flex items-center justify-between text-xs font-mono">
+                <span className="text-[11px] text-slate-400">Algoritmo:</span>
+                <div className="flex gap-1">
+                  <button
+                    type="button"
+                    onClick={() => setDoMode('pid')}
+                    className={cn(
+                      'px-2.5 py-1 rounded border text-[11px] transition',
+                      doMode === 'pid'
+                        ? 'bg-cyan-950/80 border-cyan-500 text-cyan-300 font-bold'
+                        : 'bg-scada-surface border-scada-border text-slate-400 hover:text-slate-200'
+                    )}
+                  >
+                    PID 2-DOF
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setDoMode('fuzzy')}
+                    className={cn(
+                      'px-2.5 py-1 rounded border text-[11px] transition',
+                      doMode === 'fuzzy'
+                        ? 'bg-teal-950/80 border-teal-500 text-teal-300 font-bold'
+                        : 'bg-scada-surface border-scada-border text-slate-400 hover:text-slate-200'
+                    )}
+                  >
+                    Fuzzy Logic
+                  </button>
+                </div>
+              </div>
+
+              {/* Sección colapsable de sintonía */}
+              <div className="border border-scada-border rounded-lg bg-scada-surface/60 overflow-hidden">
+                <button
+                  type="button"
+                  onClick={() => setShowTuning(!showTuning)}
+                  className="w-full px-2.5 py-1.5 flex items-center justify-between text-xs text-slate-300 hover:bg-scada-elevated transition"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Sliders className="w-3.5 h-3.5 text-cyan-400" />
+                    <span className="font-mono text-[11px]">Sintonía y Safeguards (Zero-Overshoot)</span>
+                  </div>
+                  {showTuning ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </button>
+
+                {showTuning && (
+                  <div className="p-2.5 border-t border-scada-border space-y-2 bg-scada-well/50 text-xs font-mono">
+                    <div className="grid grid-cols-3 gap-2">
+                      <div>
+                        <label className="text-[9px] text-slate-400 block">Kp (Ganancia)</label>
+                        <input
+                          type="number"
+                          step={1}
+                          value={doKp}
+                          onChange={(e) => setDoKp(Number(e.target.value))}
+                          className="w-full bg-scada-elevated text-slate-100 p-1 rounded border border-scada-border focus:border-cyan-500 text-xs font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-slate-400 block">Ki (Integral)</label>
+                        <input
+                          type="number"
+                          step={0.05}
+                          value={doKi}
+                          onChange={(e) => setDoKi(Number(e.target.value))}
+                          className="w-full bg-scada-elevated text-slate-100 p-1 rounded border border-scada-border focus:border-cyan-500 text-xs font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-slate-400 block">Kd (Derivativo)</label>
+                        <input
+                          type="number"
+                          step={0.1}
+                          value={doKd}
+                          onChange={(e) => setDoKd(Number(e.target.value))}
+                          className="w-full bg-scada-elevated text-slate-100 p-1 rounded border border-scada-border focus:border-cyan-500 text-xs font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-3 gap-2 pt-1">
+                      <div>
+                        <label className="text-[9px] text-slate-400 block" title="Ponderación de consigna (0.2 a 0.5)">
+                          β (Beta 2-DOF)
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          max={1}
+                          step={0.05}
+                          value={doBeta}
+                          onChange={(e) => setDoBeta(Number(e.target.value))}
+                          className="w-full bg-scada-elevated text-slate-100 p-1 rounded border border-scada-border focus:border-cyan-500 text-xs font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-slate-400 block" title="Constante de tiempo de anti-windup (s)">
+                          Tt (Anti-windup s)
+                        </label>
+                        <input
+                          type="number"
+                          min={1}
+                          step={5}
+                          value={doTt}
+                          onChange={(e) => setDoTt(Number(e.target.value))}
+                          className="w-full bg-scada-elevated text-slate-100 p-1 rounded border border-scada-border focus:border-cyan-500 text-xs font-mono"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-slate-400 block" title="Horizonte de frenado predictivo por retención de burbujas (s)">
+                          τ_lag (Coasting s)
+                        </label>
+                        <input
+                          type="number"
+                          min={0}
+                          step={5}
+                          value={doTauLag}
+                          onChange={(e) => setDoTauLag(Number(e.target.value))}
+                          className="w-full bg-scada-elevated text-slate-100 p-1 rounded border border-scada-border focus:border-cyan-500 text-xs font-mono"
+                        />
+                      </div>
+                    </div>
+
+                    <p className="text-[9px] text-slate-400 leading-tight pt-1">
+                      ASCE/EWRI 2-22: β frena con anticipación para Mp=0.0%. τ_lag compensa retención de microburbujas y retardo sensor OPTOD.
+                    </p>
+                  </div>
                 )}
-              >
-                {preset}
-              </button>
-            ))}
-          </div>
-          <div className="flex gap-2 pt-0.5">
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => {
-                odriveSwitch.set(true);
-                void run('aerator', 'set_speed', { speed_percent: Math.round((rpm / 600) * 100) });
-              }}
-              className="flex-1 py-1.5 rounded-lg text-white text-xs font-bold bg-amber-600 hover:bg-amber-500 disabled:opacity-50 transition shadow-sm"
-            >
-              Aplicar {rpm} RPM ({Math.round((rpm / 600) * 100)}%)
-            </button>
-            <button
-              type="button"
-              disabled={busy || !odriveSwitch.value}
-              onClick={() => {
-                odriveSwitch.set(false);
-                void run('aerator', 'stop', {});
-              }}
-              className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-rose-950/80 text-slate-300 hover:text-rose-300 border border-slate-700 hover:border-rose-800 disabled:opacity-40 transition"
-              title="Desarma el motor y conmuta el nodo a telemetría IDLE (20 s)"
-            >
-              Detener
-            </button>
-          </div>
+              </div>
+
+              {/* Botones de acción */}
+              <div className="flex gap-2 pt-0.5">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={handleStartDOControl}
+                  className="flex-1 py-1.5 px-3 rounded-lg text-white text-xs font-bold bg-cyan-600 hover:bg-cyan-500 disabled:opacity-50 transition shadow-sm flex items-center justify-center gap-1.5"
+                >
+                  <Activity className="w-3.5 h-3.5" />
+                  Lanzar Control de OD ({targetDo.toFixed(1)} mg/L)
+                </button>
+                <button
+                  type="button"
+                  disabled={busy || (!odriveSwitch.value && !isClosedLoopActive)}
+                  onClick={handleStopDOControl}
+                  className="px-3 py-1.5 rounded-lg text-xs font-bold bg-slate-800 hover:bg-rose-950/80 text-slate-300 hover:text-rose-300 border border-slate-700 hover:border-rose-800 disabled:opacity-40 transition"
+                  title="Detiene el lazo cerrado y pasa a modo manual"
+                >
+                  Detener
+                </button>
+              </div>
+
+              {doFeedback && (
+                <div className="text-[11px] font-mono px-2.5 py-1.5 rounded bg-slate-800/80 border border-slate-700 text-cyan-300 flex items-center justify-between">
+                  <span>{doFeedback}</span>
+                  <button
+                    type="button"
+                    onClick={() => setDoFeedback(null)}
+                    className="text-slate-400 hover:text-slate-200 text-xs ml-2"
+                  >
+                    ×
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
         </Panel>
       ) : null}
 
