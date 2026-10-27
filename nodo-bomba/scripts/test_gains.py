@@ -25,6 +25,8 @@ def find_com_port():
         return ports[0].device
     return None
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 def main():
     parser = argparse.ArgumentParser(description="Peristaltic Pump PID Gain Tester")
     parser.add_argument('--port', type=str, help='Serial/COM port. Auto-detects if omitted.')
@@ -33,7 +35,7 @@ def main():
     parser.add_argument('--kd', type=float, default=0.0, help='Derivative Gain (Kd, default 0.0)')
     parser.add_argument('--rpm', type=float, default=60.0, help='Target RPM for step response. Default: 60')
     parser.add_argument('--duration', type=float, default=8.0, help='Duration to record (s). Default: 8.0')
-    parser.add_argument('--output', type=str, default='scripts/data/closed_loop_test.csv', help='Output CSV file')
+    parser.add_argument('--output', type=str, default=os.path.join(SCRIPT_DIR, 'data', 'closed_loop_test.csv'), help='Output CSV file')
     args = parser.parse_args()
 
     port = args.port or find_com_port()
@@ -125,6 +127,46 @@ def main():
             })
 
     print(f"[OK] Closed-loop validation data saved to {args.output}")
+
+    # Save run metadata sidecar with controller parameters
+    import json
+    meta_path = os.path.splitext(args.output)[0] + "_meta.json"
+    run_meta = {
+        "timestamp": time.strftime('%Y-%m-%dT%H:%M:%S'),
+        "kp": args.kp,
+        "ki": args.ki,
+        "kd": args.kd,
+        "target_rpm": args.rpm,
+        "duration_s": args.duration,
+        "samples": len(data_points),
+        "csv_file": os.path.basename(args.output)
+    }
+    with open(meta_path, 'w') as mf:
+        json.dump(run_meta, mf, indent=2)
+    print(f"[OK] Controller parameters saved to {meta_path}")
+
+    # Append to run history ledger
+    history_file = os.path.join(os.path.dirname(args.output), '..', 'results', 'run_history.csv')
+    history_file = os.path.abspath(history_file)
+    os.makedirs(os.path.dirname(history_file), exist_ok=True)
+    file_exists = os.path.exists(history_file)
+    with open(history_file, 'a', newline='') as hf:
+        hwriter = csv.writer(hf)
+        if not file_exists:
+            hwriter.writerow(['Timestamp', 'Run_Type', 'Target_RPM', 'Kp', 'Ki', 'Kd', 'Duration_s', 'Samples', 'CSV_File'])
+        run_type = os.path.splitext(os.path.basename(args.output))[0]
+        hwriter.writerow([
+            run_meta['timestamp'],
+            run_type,
+            f"{args.rpm:.1f}",
+            f"{args.kp:.6f}",
+            f"{args.ki:.6f}",
+            f"{args.kd:.6f}",
+            f"{args.duration:.1f}",
+            len(data_points),
+            args.output
+        ])
+    print(f"[OK] Appended run entry to {history_file}")
 
 if __name__ == '__main__':
     main()

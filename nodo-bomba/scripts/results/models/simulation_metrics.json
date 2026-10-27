@@ -1,0 +1,50 @@
+{
+  "plant": {
+    "K": 338.0992,
+    "tau": 0.1406,
+    "theta": 0.01
+  },
+  "target_rpm": 1000.0,
+  "controllers": {
+    "Python SIMC (Zero-OS)": {
+      "kp": 0.00378,
+      "ki": 0.026888,
+      "kd": 0.0,
+      "rise_time_s": 0.2,
+      "settling_time_s": 0.4,
+      "overshoot_pct": 0.0,
+      "ess_rpm": 0.0,
+      "peak_duty_pct": 45.2
+    },
+    "Python ITAE (Fast)": {
+      "kp": 0.019517,
+      "ki": 0.141346,
+      "kd": 0.0,
+      "rise_time_s": 0.04,
+      "settling_time_s": 0.33,
+      "overshoot_pct": 18.8,
+      "ess_rpm": 0.0,
+      "peak_duty_pct": 100.0
+    },
+    "MATLAB pidtune": {
+      "kp": 0.003083,
+      "ki": 0.070976,
+      "kd": 0.0,
+      "rise_time_s": 0.09,
+      "settling_time_s": 0.56,
+      "overshoot_pct": 20.4,
+      "ess_rpm": 0.0,
+      "peak_duty_pct": 58.1
+    },
+    "MATLAB PSO (Pure ITAE)": {
+      "kp": 0.019517,
+      "ki": 0.141346,
+      "kd": 0.0,
+      "rise_time_s": 0.04,
+      "settling_time_s": 0.33,
+      "overshoot_pct": 18.8,
+      "ess_rpm": 0.0,
+      "peak_duty_pct": 100.0
+    }
+  }
+}

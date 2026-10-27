@@ -1,6 +1,14 @@
 % advanced_thesis_tuning.m
 % Implements Phase 2 and Phase 3 of the System ID Plan
-clearvars -except force_model_idx; clc; close all;
+clearvars -except force_model_idx; clc;
+try
+    close all force;
+catch
+end
+try
+    set(groot, 'DefaultFigureVisible', 'off');
+catch
+end
 
 %% 1. Load and Prepare Data
 disp('Loading System ID Data...');
@@ -128,9 +136,17 @@ disp('Using strictly DISCRETE control (no d2c conversion needed!)');
     function J = itae_cost_discrete(K, P, Ts)
         C = pid(K(1), K(2), 0, 'Ts', Ts, 'IFormula', 'BackwardEuler');
         T = feedback(C * P, 1);
+        if ~isstable(T)
+            J = 1e6;
+            return;
+        end
         t_sim = 0:Ts:5;
         try
             [y_sim, ~] = step(T, t_sim);
+            if any(isnan(y_sim)) || any(isinf(y_sim))
+                J = 1e6;
+                return;
+            end
             e = 1 - y_sim;
             J = sum(t_sim(:) .* abs(e(:))) * Ts;
         catch
@@ -142,15 +158,23 @@ disp('Using strictly DISCRETE control (no d2c conversion needed!)');
     function J = custom_cost_discrete(K, P, Ts)
         C = pid(K(1), K(2), 0, 'Ts', Ts, 'IFormula', 'BackwardEuler');
         T = feedback(C * P, 1);
+        if ~isstable(T)
+            J = 1e6;
+            return;
+        end
         t_sim = 0:Ts:5;
         try
-            si = stepinfo(T, 'SettlingTimeThreshold', 0.05);
             [y_sim, ~] = step(T, t_sim);
+            if any(isnan(y_sim)) || any(isinf(y_sim))
+                J = 1e6;
+                return;
+            end
             
-            OS = si.Overshoot;
-            if isnan(OS), OS = 100; end
+            % Compute peak overshoot directly from simulated response (no stepinfo warnings)
+            peak_val = max(y_sim);
+            OS = max(0, (peak_val - 1.0) * 100);
             
-            % If it overshoots by more than 2%, massive penalty!
+            % Strict penalty for overshoot (essential for clean-water zero-overshoot imperative)
             if OS > 2.0
                 penalty = 1000 * OS;
             else
@@ -209,25 +233,51 @@ if ~exist('results/figures/pso', 'dir'), mkdir('results/figures/pso'); end
 saveas(fig2, 'results/figures/pso/optimization_comparison.png');
 disp('Saved comparison plot to results/figures/pso/optimization_comparison.png');
 
-% Use PSO ITAE as the official export (Standard Benchmark)
-Kp_opt = K_pso_itae(1);
-Ki_opt = K_pso_itae(2);
+% Controller Selection: Default to Custom (Overshoot-Constrained PSO)
+% for physical hardware compliance (ASCE 2-22 zero overshoot imperative).
+if ~exist('use_itae_export', 'var')
+    use_itae_export = false;
+end
+
+if use_itae_export
+    Kp_opt = K_pso_itae(1);
+    Ki_opt = K_pso_itae(2);
+    C_opt = C_pso_itae;
+    opt_name = 'ITAE PSO (Standard)';
+else
+    Kp_opt = K_pso_custom(1);
+    Ki_opt = K_pso_custom(2);
+    C_opt = C_pso_custom;
+    opt_name = 'Custom Overshoot-Constrained PSO';
+end
 Kd_opt = 0;
 
 fprintf('\n==================================================\n');
-fprintf('OPTIMAL PI GAINS (ITAE PSO):\n');
+fprintf('OPTIMAL PI GAINS (%s):\n', opt_name);
 fprintf('Kp = %g\n', Kp_opt);
 fprintf('Ki = %g\n', Ki_opt);
 fprintf('Kd = %g\n', Kd_opt);
+fprintf('--------------------------------------------------\n');
+fprintf('Benchmark Comparison:\n');
+fprintf('  fminsearch (ITAE):  Kp = %.6f, Ki = %.6f\n', K_fmin(1), K_fmin(2));
+fprintf('  PSO (Pure ITAE):    Kp = %.6f, Ki = %.6f\n', K_pso_itae(1), K_pso_itae(2));
+fprintf('  PSO (Custom Low-OS): Kp = %.6f, Ki = %.6f\n', K_pso_custom(1), K_pso_custom(2));
 fprintf('==================================================\n');
 
 fid = fopen('results/models/pso_gains.txt', 'w');
-fprintf(fid, '%g,%g,%g\n', Kp_opt, Ki_opt, Kd_opt);
+fprintf(fid, '--kp %.6f --ki %.6f --kd %.6f\n', Kp_opt, Ki_opt, Kd_opt);
 fclose(fid);
+
+fid_itae = fopen('results/models/pso_itae_gains.txt', 'w');
+fprintf(fid_itae, '--kp %.6f --ki %.6f --kd %.6f\n', K_pso_itae(1), K_pso_itae(2), 0.0);
+fclose(fid_itae);
+
+fid_cust = fopen('results/models/pso_custom_gains.txt', 'w');
+fprintf(fid_cust, '--kp %.6f --ki %.6f --kd %.6f\n', K_pso_custom(1), K_pso_custom(2), 0.0);
+fclose(fid_cust);
 disp('Saved gains to results/models/pso_gains.txt for easy copying!');
 
-% Save the model and ITAE optimal controller for plot_validation
-C_opt = C_pso_itae;
+% Save the model and optimal controller for plot_validation
 P = best_model;
 sys_tf = sys_fopdt; % Keep FOPDT for reference
 C = C_opt;

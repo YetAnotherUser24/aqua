@@ -1,0 +1,10 @@
+{
+  "timestamp": "2026-10-26T21:52:00",
+  "kp": 0.00378,
+  "ki": 0.026888,
+  "kd": 0.0,
+  "target_rpm": 2000.0,
+  "duration_s": 8.0,
+  "samples": 426,
+  "csv_file": "closed_loop_py.csv"
+}

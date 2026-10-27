@@ -1,0 +1,62 @@
+{
+  "closed_loop_py": {
+    "timestamp": "2026-10-26T21:52:01",
+    "gains": {
+      "timestamp": "2026-10-26T21:52:00",
+      "kp": 0.00378,
+      "ki": 0.026888,
+      "kd": 0.0,
+      "target_rpm": 2000.0,
+      "duration_s": 8.0,
+      "samples": 426,
+      "csv_file": "closed_loop_py.csv"
+    },
+    "target_rpm": 2000.0,
+    "rise_time_s": 0.18,
+    "settling_time_s": 7.442,
+    "overshoot_pct": 28.38,
+    "steady_state_error_rpm": 0.2762,
+    "csv_file": "scripts/data/closed_loop_py.csv",
+    "png_file": "scripts/results/figures/closed_loop_validation.png"
+  },
+  "closed_loop_pso": {
+    "timestamp": "2026-10-26T21:52:14",
+    "gains": {
+      "timestamp": "2026-10-26T21:52:12",
+      "kp": 0.019517,
+      "ki": 0.141346,
+      "kd": 0.0,
+      "target_rpm": 2000.0,
+      "duration_s": 8.0,
+      "samples": 426,
+      "csv_file": "closed_loop_pso.csv"
+    },
+    "target_rpm": 2000.0,
+    "rise_time_s": 0.16,
+    "settling_time_s": 8.0,
+    "overshoot_pct": 29.41,
+    "steady_state_error_rpm": 24.5448,
+    "csv_file": "scripts/data/closed_loop_pso.csv",
+    "png_file": "scripts/results/figures/pso/closed_loop_validation.png"
+  },
+  "closed_loop_pidtune": {
+    "timestamp": "2026-10-26T21:52:26",
+    "gains": {
+      "timestamp": "2026-10-26T21:52:25",
+      "kp": 0.003083,
+      "ki": 0.070976,
+      "kd": 0.0,
+      "target_rpm": 2000.0,
+      "duration_s": 8.0,
+      "samples": 425,
+      "csv_file": "closed_loop_pidtune.csv"
+    },
+    "target_rpm": 2000.0,
+    "rise_time_s": 0.16,
+    "settling_time_s": 7.901,
+    "overshoot_pct": 29.35,
+    "steady_state_error_rpm": 0.9255,
+    "csv_file": "scripts/data/closed_loop_pidtune.csv",
+    "png_file": "scripts/results/figures/pidtune/closed_loop_validation.png"
+  }
+}

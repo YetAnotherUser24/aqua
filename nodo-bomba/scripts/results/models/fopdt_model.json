@@ -1,5 +1,33 @@
 {
-  "K": 339.1006041666667,
-  "tau": 0.11999999999999994,
-  "theta": 0.020000000000000073
+  "identified_at": "2026-10-26T20:37:57",
+  "input_dataset": "step_response.csv",
+  "K": 338.0992,
+  "tau": 0.1406,
+  "theta": 0.0100,
+  "r2": 0.9978,
+  "rmse": 2.9285,
+  "aic": 554.0,
+  "plant": {
+    "K": 338.0992,
+    "tau": 0.1406,
+    "theta": 0.0100,
+    "r2": 0.9978,
+    "rmse": 2.9285,
+    "aic": 554.0,
+    "formula": "G(s) = 338.099 / (0.141s + 1) * exp(-0.010s)"
+  },
+  "controllers": {
+    "simc": {
+      "kp": 0.003780,
+      "ki": 0.026888,
+      "kd": 0.0,
+      "formula": "SIMC (Skogestad IMC) - Zero Overshoot (ASCE 2-22)"
+    },
+    "itae": {
+      "kp": 0.019517,
+      "ki": 0.141346,
+      "kd": 0.0,
+      "formula": "ITAE Optimal Tracking"
+    }
+  }
 }

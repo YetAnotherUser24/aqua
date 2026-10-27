@@ -7,13 +7,31 @@ and compares measured velocity against the fitted FOPDT plant model.
 import os
 import sys
 import argparse
+import csv
 import numpy as np
-import pandas as pd
 import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from scipy.signal import lsim, lti
+
+
+def read_csv_data(filepath):
+    data = {}
+    with open(filepath, 'r', newline='') as f:
+        reader = csv.DictReader(f)
+        for row in reader:
+            for k, v in row.items():
+                if k is None:
+                    continue
+                k_clean = k.strip()
+                if k_clean not in data:
+                    data[k_clean] = []
+                try:
+                    data[k_clean].append(float(v.strip()))
+                except (ValueError, AttributeError):
+                    data[k_clean].append(0.0)
+    return {k: np.array(v) for k, v in data.items()}
 
 
 def simulate_fopdt(t, u, K, tau, theta):
@@ -32,16 +50,18 @@ def simulate_fopdt(t, u, K, tau, theta):
     return y
 
 
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+
 def main():
     parser = argparse.ArgumentParser(
         description="Plot System Identification Fit"
     )
     parser.add_argument(
-        "--input", default="scripts/data/step_response.csv", help="Input CSV"
+        "--input", default=os.path.join(SCRIPT_DIR, "data", "step_response.csv"), help="Input CSV"
     )
     parser.add_argument(
         "--output",
-        default="scripts/results/figures/sysid_identification.png",
+        default=os.path.join(SCRIPT_DIR, "results", "figures", "sysid_identification.png"),
         help="Output PNG",
     )
     parser.add_argument("--k", type=float, default=None, help="Plant gain K")
@@ -57,36 +77,43 @@ def main():
         print(f"Error: input file {args.input} not found.")
         sys.exit(1)
 
-    df = pd.read_csv(args.input)
-    t = (
-        df["Time_s"].values
-        if "Time_s" in df.columns
-        else (df["Time_ms"].values - df["Time_ms"].iloc[0]) / 1000.0
-    )
+    cols = read_csv_data(args.input)
+    if not cols:
+        print(f"Error: input file {args.input} is empty or unreadable.")
+        sys.exit(1)
 
-    if "Target_Duty" in df.columns:
-        duty = df["Target_Duty"].values.astype(float).copy()
-    elif "Compensated_Duty" in df.columns:
-        duty = df["Compensated_Duty"].values.astype(float).copy()
+    if "Time_s" in cols:
+        t = cols["Time_s"]
+    elif "Time_ms" in cols:
+        t = (cols["Time_ms"] - cols["Time_ms"][0]) / 1000.0
     else:
-        duty = df.iloc[:, 1].values.astype(float).copy()
+        t = np.arange(len(next(iter(cols.values())))) * 0.02
 
-    if np.max(duty) > 1.05:
+    if "Target_Duty" in cols:
+        duty = cols["Target_Duty"].copy()
+    elif "Compensated_Duty" in cols:
+        duty = cols["Compensated_Duty"].copy()
+    elif "Duty_Pct" in cols:
+        duty = cols["Duty_Pct"].copy() / 100.0
+    else:
+        duty = next(iter(cols.values())).copy()
+
+    if len(duty) > 0 and np.max(duty) > 1.05:
         duty = duty / 100.0
 
-    if "Rad_s" in df.columns and df["Rad_s"].max() > 0.05:
-        meas = df["Rad_s"].values
+    if "Rad_s" in cols and np.max(cols["Rad_s"]) > 0.05:
+        meas = cols["Rad_s"]
         unit_str = "rad/s"
-    elif "RPM" in df.columns:
-        meas = df["RPM"].values
+    elif "RPM" in cols:
+        meas = cols["RPM"]
         unit_str = "RPM"
     else:
         meas = np.zeros_like(t)
-        unit_str = "RPM"
+        unit_str = "rad/s"
 
     # Default model parameters if not passed: check fopdt_model.json
     if args.k is None:
-        model_file = "scripts/results/models/fopdt_model.json"
+        model_file = os.path.join(SCRIPT_DIR, "results", "models", "fopdt_model.json")
         if os.path.isfile(model_file):
             import json
 
@@ -161,17 +188,18 @@ def main():
         f"Velocity ({unit_str})", fontsize=11, fontweight="bold"
     )
     axes[1].grid(True, linestyle="--", alpha=0.6)
-    axes[1].legend(loc="upper right", frameon=True)
+    axes[1].legend(loc="lower right", frameon=True)
 
     # Metrics annotation box
     metrics_text = f"Plant Parameters:\n  Gain K = {K:.3f}\n  Tau = {tau:.3f} s\n  Deadtime = {theta * 1000:.1f} ms\nFit Quality:\n  R² = {r2:.4f}\n  RMSE = {rmse:.3f} {unit_str}"
     axes[1].text(
-        0.02,
+        0.98,
         0.95,
         metrics_text,
         transform=axes[1].transAxes,
         fontsize=10,
         verticalalignment="top",
+        horizontalalignment="right",
         bbox=dict(
             boxstyle="round,pad=0.5",
             facecolor="#f8f9fa",

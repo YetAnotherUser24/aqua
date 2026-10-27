@@ -40,7 +40,7 @@ if any(strcmp(data.Properties.VariableNames, 'Setpoint_RPM'))
     target_rpm = max(data.Setpoint_RPM);
     fprintf('Auto-detected Setpoint: %.1f RPM\n', target_rpm);
 elseif ~exist('target_rpm', 'var')
-    target_rpm = 1500; % Fallback
+    target_rpm = 60.0; % Fallback for peristaltic dosing pump
 end
 
 target_vel = target_rpm * (pi/30);

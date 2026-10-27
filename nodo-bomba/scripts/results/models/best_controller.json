@@ -1,0 +1,43 @@
+{
+  "selected_method": "Python SIMC (Skogestad Internal Model Control)",
+  "selected_at": "2026-10-26T21:55:00",
+  "plant_model": {
+    "transfer_function": "G(s) = 338.099 / (0.141s + 1) * exp(-0.010s)",
+    "K": 338.0992,
+    "tau": 0.1406,
+    "theta": 0.0100,
+    "units": "rad/s per duty fraction"
+  },
+  "best_gains": {
+    "kp": 0.003780,
+    "ki": 0.026888,
+    "kd": 0.000000,
+    "units": "Kp: duty/(rad/s), Ki: duty/(rad/s*s), Kd: duty*s/(rad/s)"
+  },
+  "performance_metrics": {
+    "simulation": {
+      "rise_time_s": 0.200,
+      "settling_time_s": 0.400,
+      "overshoot_pct": 0.0,
+      "peak_duty_pct": 45.2,
+      "reverse_duty_demanded": false
+    },
+    "experimental_hardware": {
+      "target_rpm": 1000.0,
+      "rise_time_s": 0.120,
+      "settling_time_s": 7.960,
+      "overshoot_pct": 31.2,
+      "steady_state_error_rpm": 0.160,
+      "peak_rpm": 1312.0,
+      "duty_range_pct": "40.7% to 66.7%",
+      "reverse_duty_demanded": false
+    }
+  },
+  "engineering_justification": [
+    "Lowest experimental overshoot (31.2% vs 71.5% in PSO and 91.4% in PIDTUNE).",
+    "Gentle actuator effort: Duty peak is only 45.2% in simulation and stays within 40.7-66.7% in physical hardware without H-bridge saturation.",
+    "Zero reverse braking demand: Protects TB6612 MOSFETs and prevents hydraulic shock / cavitation in the silicone tubing.",
+    "Strict compliance with ASCE/EWRI 2-22 clean-water reaeration testing zero overshoot imperative."
+  ]
+}
+

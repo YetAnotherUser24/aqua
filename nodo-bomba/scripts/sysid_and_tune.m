@@ -1,6 +1,14 @@
 % sysid_and_tune.m
 % Peristaltic Pump: System Identification (ARX & FOPDT) and PI Tuning via pidtune
-clear; clc; close all;
+clear; clc;
+try
+    close all force;
+catch
+end
+try
+    set(groot, 'DefaultFigureVisible', 'off');
+catch
+end
 
 %% 1. Load Data
 disp('Loading step_response.csv...');
