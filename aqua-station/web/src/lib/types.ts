@@ -253,7 +253,15 @@ export const SUPERSEDING_ACTIONS = [
   'set_state',
   'start',
   'stop',
+  'start_mixer',
+  'stop_mixer',
   'dose',
+  'prime',
+  'drain',
+  'suckback',
+  'retract',
+  'force_off',
+  'set_meniscus',
 ] as const;
 
 // ---------------------------------------------------------------------------

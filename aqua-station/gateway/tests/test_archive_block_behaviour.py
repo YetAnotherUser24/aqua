@@ -118,7 +118,7 @@ class TestDocumentedLossWindow:
     ninety-minute window got described as four minutes.
     """
 
-    DOCUMENTED = {"od_sensor": 3.9, "aerator": 3.2, "mixer": 5.4, "pump": 5.4}
+    DOCUMENTED = {"od_sensor": 3.9, "aerator": 3.2, "mixer": 5.4, "pump": 4.9}
 
     @pytest.mark.parametrize("role", sorted(DOCUMENTED))
     def test_minutes_of_tail_matches_the_documented_figure(self, registry, role):

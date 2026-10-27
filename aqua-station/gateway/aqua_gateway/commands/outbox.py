@@ -71,7 +71,15 @@ SUPERSEDING_ACTIONS: frozenset[str] = frozenset(
         "set_config",
         "start",
         "stop",
+        "start_mixer",
+        "stop_mixer",
         "dose",
+        "prime",
+        "drain",
+        "suckback",
+        "retract",
+        "force_off",
+        "set_meniscus",
         "set_recipe",
     }
 )

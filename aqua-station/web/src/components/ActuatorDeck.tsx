@@ -170,7 +170,8 @@ export function ActuatorDeck({
   const measuredRpm = readField(registry, snapshot, 'aerator', 'drv_rpm');
   const measuredMixer = readField(registry, snapshot, 'mixer', 'drv_rpm');
   const dosed = readField(registry, snapshot, 'pump', 'pump_dosed_ml');
-  const meniscusRetracted = readField(registry, snapshot, 'pump', 'pump_meniscus_retracted');
+  const rawMeniscus = snapshot?.nodes?.['pump']?.metrics?.['pump_meniscus_retracted'];
+  const meniscusRetracted = typeof rawMeniscus === 'boolean' ? rawMeniscus : null;
 
   // Measured state, read off the node.
   //
@@ -469,13 +470,13 @@ export function ActuatorDeck({
           accent="bg-purple-950/60 border-purple-800 text-telemetry-pump"
           badge={
             <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${
-              meniscusRetracted.value === true
+              meniscusRetracted === true
                 ? 'text-emerald-300 bg-emerald-950/80 border-emerald-800'
-                : meniscusRetracted.value === false
+                : meniscusRetracted === false
                 ? 'text-amber-300 bg-amber-950/80 border-amber-800'
                 : 'text-purple-300 bg-purple-950 border-purple-800'
             }`}>
-              {meniscusRetracted.value === true ? 'Menisco Retraído (-15mm)' : meniscusRetracted.value === false ? 'Línea Enrasada' : 'Calibrado'}
+              {meniscusRetracted === true ? 'Menisco Retraído (-15mm)' : meniscusRetracted === false ? 'Línea Enrasada' : 'Calibrado'}
             </span>
           }
         >

@@ -83,6 +83,8 @@ class EventType(str, Enum):
     # -- actuator
     ACTUATOR_START = "actuator_start"
     ACTUATOR_STOP = "actuator_stop"
+    START_MIXER = "start_mixer"
+    STOP_MIXER = "stop_mixer"
     SETPOINT_CHANGE = "setpoint_change"
     SPEED_REACHED = "speed_reached"
     DIRECTION_CHANGE = "direction_change"
@@ -92,10 +94,16 @@ class EventType(str, Enum):
     # -- dosing
     DOSE_STARTED = "dose_started"
     DOSE_COMPLETED = "dose_completed"
+    DOSE_FINISHED = "dose_finished"
     DOSE_TIMEOUT = "dose_timeout"
     DOSE_ABORTED = "dose_aborted"
     DOSE_CALIBRATION_CHANGED = "dose_calibration_changed"
     DOSE_VOLUME_UNREACHABLE = "dose_volume_unreachable"
+    PRIME_STARTED = "prime_started"
+    PRIME_COMPLETED = "prime_completed"
+    DRAIN_STARTED = "drain_started"
+    DRAIN_COMPLETED = "drain_completed"
+    FAULT = "fault"
 
     # -- hardware faults
     OVER_CURRENT = "over_current"
@@ -208,6 +216,7 @@ _DEFAULT_SEVERITY: dict[EventType, Severity] = {
     EventType.SD_WRITE_ERROR: Severity.CRITICAL,
     EventType.PROBE_REMOVED: Severity.CRITICAL,
     EventType.ACTUATOR_FAULT: Severity.CRITICAL,
+    EventType.FAULT: Severity.CRITICAL,
     EventType.ESC_FAULT: Severity.CRITICAL,
     EventType.OVER_CURRENT: Severity.CRITICAL,
     EventType.OVER_VOLTAGE: Severity.CRITICAL,
