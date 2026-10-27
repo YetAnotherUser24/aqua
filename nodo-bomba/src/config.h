@@ -69,10 +69,10 @@
    Tailscale interface. If it is ever exposed further, these must become real
    credentials AND the TLS port, not just a password over 1883. */
 #ifndef AQUA_MQTT_USER
-#define AQUA_MQTT_USER            ""
+#define AQUA_MQTT_USER            "pump"
 #endif
 #ifndef AQUA_MQTT_PASSWORD
-#define AQUA_MQTT_PASSWORD        ""
+#define AQUA_MQTT_PASSWORD        "3BVLCc0DB2gOfyByhaXkVfCk"
 #endif
 #ifndef AQUA_MQTT_KEEPALIVE_S
 #define AQUA_MQTT_KEEPALIVE_S     30
