@@ -157,15 +157,17 @@
 #endif
 
 /* ------------------- Retracción Anti-Goteo (Suck-Back) -------------- */
-// Vueltas en reversa al terminar una inyección para retraer el menisco 2-5 mm y evitar goteo y cristalización en la punta
+// Vueltas en reversa al terminar una inyección para retraer el menisco 15-20 mm dentro de la boquilla
+// Nota: El encoder está en el eje del motor (0.03488 mL/rev). 4.5 vueltas = ~0.15 mL (~15-20 mm en manguera de 3 mm)
+// absorbiendo también el juego mecánico (backlash) de la caja reductora.
 #ifndef SUCKBACK_REVS
-#define SUCKBACK_REVS           0.35f   // ~0.35 vueltas (retrae ~3-5 mm en manguera de 3 mm)
+#define SUCKBACK_REVS           4.5f    // 4.5 vueltas en eje motor (~0.15 mL de retracción efectiva)
 #endif
 #ifndef SUCKBACK_RAD_S
-#define SUCKBACK_RAD_S          3.665f  // Velocidad suave de retracción en rad/s (~35 RPM)
+#define SUCKBACK_RAD_S          20.94f  // Velocidad suave de retracción en rad/s (200 RPM en eje motor)
 #endif
 #ifndef SUCKBACK_RPM
-#define SUCKBACK_RPM            35.0f   // Alias en RPM
+#define SUCKBACK_RPM            200.0f  // Alias en RPM
 #endif
 
 /* ------------------- Control de Velocidad (PID en rad/s) ------------ */
@@ -180,21 +182,21 @@
 #define PUMP_MIN_DUTY_PERCENT   10.0f   // Umbral de stiction para empezar a girar
 #endif
 #ifndef DOSE_TARGET_RAD_S
-#define DOSE_TARGET_RAD_S       6.283f  // Velocidad objetivo dosificación (~60 RPM en cabezal)
+#define DOSE_TARGET_RAD_S       104.72f // Velocidad objetivo dosificación (~1000 RPM en eje motor)
 #endif
 #ifndef DOSE_TARGET_RPM
-#define DOSE_TARGET_RPM         60.0f   // Alias en RPM
+#define DOSE_TARGET_RPM         1000.0f // Alias en RPM (punto de operación lineal y estable)
 #endif
 
 // Ganancias canónicas del lazo de velocidad PI en unidades SI: duty/(rad/s) y duty/(rad/s * s)
 #ifndef PUMP_PID_KP
-#define PUMP_PID_KP             0.0056f // duty / (rad/s)  (Sintonizado analíticamente SIMC)
+#define PUMP_PID_KP             0.003780f // duty / (rad/s)  (Sintonizado analíticamente SIMC en eje motor)
 #endif
 #ifndef PUMP_PID_KI
-#define PUMP_PID_KI             0.0314f // duty / (rad/s * s)
+#define PUMP_PID_KI             0.026888f // duty / (rad/s * s)
 #endif
 #ifndef PUMP_PID_KD
-#define PUMP_PID_KD             0.0000f // Pure PI (Kd=0 para evitar amplificación de ruido)
+#define PUMP_PID_KD             0.000000f // Pure PI: KD forbidden for discrete ticks
 #endif
 #ifndef PUMP_PID_MAX_SLEW
 #define PUMP_PID_MAX_SLEW       3.0f    // Slew rate max (duty fraction/segundo)
@@ -203,7 +205,7 @@
 /* ------------------- Calibración de dosificación -------------------- */
 // Volumen entregado por revolución del cabezal peristáltico (mL/rev). Calibrar en banco.
 #ifndef ML_PER_REV
-#define ML_PER_REV              1.00f
+#define ML_PER_REV              0.03488f // Calibrado gravimétricamente a 1000 RPM (0.03488 mL/rev, error < 0.1%)
 #endif
 // Duty PWM de respaldo en caso de emergencia/modo abierto (%)
 #ifndef DOSE_DUTY_PERCENT

@@ -18,9 +18,9 @@ enum PumpControlMode : uint8_t {
 };
 
 struct PumpPidParams {
-  float Kp = 0.0056f;               // Sintonizado analíticamente (SIMC): duty / (rad/s)
-  float Ki = 0.0314f;               // Lazo PI puro: duty / (rad/s * s)
-  float Kd = 0.0000f;               // Sin derivada para evitar amplificación de ruido
+  float Kp = 0.003780f;             // Sintonizado óptimo SIMC para eje motor: duty / (rad/s)
+  float Ki = 0.026888f;             // Lazo PI puro: duty / (rad/s * s)
+  float Kd = 0.000000f;             // Sin derivada para evitar amplificación de ruido
   float Ts = 0.01f;                 // 100 Hz loop (10 ms)
   float maxSlewRate = 3.0f;         // Limitador de slew rate de aceleración (duty/s)
   float minDuty = 0.10f;            // Umbral de stiction (10% duty para vencer pellizco)
@@ -69,6 +69,11 @@ public:
   void setGearRatio(float ratio);
   void setSysidMode(bool enable);
   void setDebugStream(bool enable);
+  void loadFromNvs();
+  void saveToNvs();
+  void resetNvsDefaults();
+  bool isMeniscusRetracted() const { return _meniscusRetracted; }
+  void setMeniscusRetracted(bool retracted);
 
   // Status & Telemetry
   const PumpTelemetryData& telemetry() const { return _telem; }
@@ -123,6 +128,7 @@ private:
   // Suck-back internals (H-Bridge reverse)
   float _suckbackTargetRevs = 0.0f;
   float _suckbackStartRev = 0.0f;
+  bool _meniscusRetracted = true;   // True if meniscus is parked ~15-20mm inside nozzle
 
   // SysID and CLI internals
   bool _sysidMode = false;

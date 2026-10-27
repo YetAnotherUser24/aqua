@@ -9,6 +9,7 @@
 
 #include <math.h>
 #include <Wire.h>
+#include <Preferences.h>
 
 namespace {
 constexpr float TWO_PI_F = 6.283185307179586f;
@@ -30,6 +31,59 @@ PumpController::PumpController() {
   _telem.mode = PUMP_CTRL_STOPPED;
 }
 
+void PumpController::loadFromNvs() {
+  Preferences prefs;
+  if (prefs.begin("pump_ctrl", true)) {
+    if (prefs.isKey("kp")) _params.Kp = prefs.getFloat("kp", _params.Kp);
+    if (prefs.isKey("ki")) _params.Ki = prefs.getFloat("ki", _params.Ki);
+    if (prefs.isKey("kd")) _params.Kd = prefs.getFloat("kd", _params.Kd);
+    if (prefs.isKey("ml_rev")) _mlPerRev = prefs.getFloat("ml_rev", _mlPerRev);
+    if (prefs.isKey("gear")) _gearRatio = prefs.getFloat("gear", _gearRatio);
+    if (prefs.isKey("alpha")) _filterAlpha = prefs.getFloat("alpha", _filterAlpha);
+    if (prefs.isKey("retracted")) _meniscusRetracted = prefs.getBool("retracted", _meniscusRetracted);
+    prefs.end();
+  }
+}
+
+void PumpController::saveToNvs() {
+  Preferences prefs;
+  if (prefs.begin("pump_ctrl", false)) {
+    prefs.putFloat("kp", _params.Kp);
+    prefs.putFloat("ki", _params.Ki);
+    prefs.putFloat("kd", _params.Kd);
+    prefs.putFloat("ml_rev", _mlPerRev);
+    prefs.putFloat("gear", _gearRatio);
+    prefs.putFloat("alpha", _filterAlpha);
+    prefs.putBool("retracted", _meniscusRetracted);
+    prefs.end();
+  }
+}
+
+void PumpController::setMeniscusRetracted(bool retracted) {
+  if (_meniscusRetracted == retracted) return; // Skip redundant flash write
+  _meniscusRetracted = retracted;
+  Preferences prefs;
+  if (prefs.begin("pump_ctrl", false)) {
+    prefs.putBool("retracted", _meniscusRetracted);
+    prefs.end();
+  }
+}
+
+void PumpController::resetNvsDefaults() {
+  Preferences prefs;
+  if (prefs.begin("pump_ctrl", false)) {
+    prefs.clear();
+    prefs.end();
+  }
+  _params.Kp = PUMP_PID_KP;
+  _params.Ki = PUMP_PID_KI;
+  _params.Kd = 0.0000f;
+  _mlPerRev = ML_PER_REV;
+  _gearRatio = 1.0f;
+  _filterAlpha = 0.08f;
+  _meniscusRetracted = true;
+}
+
 void PumpController::init(float mlPerRev, uint32_t doseTimeoutMs) {
   _mlPerRev = mlPerRev;
   _doseTimeoutMs = doseTimeoutMs;
@@ -39,6 +93,8 @@ void PumpController::init(float mlPerRev, uint32_t doseTimeoutMs) {
   _params.Kd = 0.0000f; // Pure PI: derivative action causes chattering on discrete AS5600 ticks
   _params.minDuty = PUMP_MIN_DUTY_PERCENT / 100.0f;
   _params.maxSlewRate = PUMP_PID_MAX_SLEW;
+
+  loadFromNvs();
 
   stop();
 }
@@ -65,6 +121,11 @@ void PumpController::setTargetRadS(float rad_s) {
     return;
   }
 
+  // Forward rotation flushes nozzle to the tip
+  if (rad_s > 0.05f) {
+    setMeniscusRetracted(false);
+  }
+
   _telem.targetRadS = rad_s;
   _telem.targetRpm = rad_s * RAD_S_TO_RPM;
   _telem.mode = PUMP_CTRL_CLOSED_LOOP;
@@ -76,6 +137,9 @@ void PumpController::setTargetRpm(float rpm) {
 
 void PumpController::setOpenLoopDuty(float dutyFraction) {
   dutyFraction = constrain(dutyFraction, -1.0f, 1.0f);
+  if (dutyFraction > 0.01f) {
+    setMeniscusRetracted(false);
+  }
   _telem.mode = PUMP_CTRL_OPEN_LOOP;
   _telem.targetRpm = 0.0f;
   _telem.targetRadS = 0.0f;
@@ -90,7 +154,16 @@ void PumpController::startDose(float targetMl, float rad_s) {
   if (fabsf(rad_s) <= 0.05f) rad_s = DOSE_TARGET_RAD_S;
   if (fabsf(rad_s) > PUMP_MAX_RAD_S) rad_s = PUMP_MAX_RAD_S;
 
-  _telem.dosedMl = 0.0f;
+  // If meniscus is parked inside nozzle, pre-charge offset so the prime volume is not counted in delivery
+  if (_meniscusRetracted && SUCKBACK_REVS > 0.01f) {
+    _telem.dosedMl = -(SUCKBACK_REVS * _mlPerRev);
+    Serial.printf("[DOSE] Priming meniscus compensation: %.3f mL (%.2f revs) before volume tally\n",
+                  -_telem.dosedMl, SUCKBACK_REVS);
+  } else {
+    _telem.dosedMl = 0.0f;
+  }
+  setMeniscusRetracted(false); // Nozzle is fluid-filled during forward dosing
+
   _telem.targetMl = targetMl;
   _telem.doseCompleted = false;
   _telem.doseTimedOut = false;
@@ -124,21 +197,25 @@ void PumpController::tunePid(float kp, float ki, float kd) {
   _params.Ki = ki;
   _params.Kd = kd;
   _integral = 0.0f;
+  saveToNvs();
 }
 
 void PumpController::setMlPerRev(float mlPerRev) {
   if (mlPerRev > 0.001f) {
     _mlPerRev = mlPerRev;
+    saveToNvs();
   }
 }
 
 void PumpController::setFilterAlpha(float alpha) {
   _filterAlpha = constrain(alpha, 0.01f, 1.0f);
+  saveToNvs();
 }
 
 void PumpController::setGearRatio(float ratio) {
   if (ratio > 0.01f) {
     _gearRatio = ratio;
+    saveToNvs();
   }
 }
 
@@ -288,7 +365,7 @@ void PumpController::updatePid(uint32_t nowMs) {
 
       // Trigger automatic anti-drip suck-back if configured with H-Bridge
       if (SUCKBACK_REVS > 0.01f) {
-        triggerSuckback(SUCKBACK_REVS, SUCKBACK_RPM);
+        triggerSuckback(SUCKBACK_REVS, SUCKBACK_RAD_S);
       } else {
         stop();
       }
@@ -301,7 +378,8 @@ void PumpController::updatePid(uint32_t nowMs) {
     float revsDone = _suckbackStartRev - _telem.totalRevolutions;
     if (revsDone >= _suckbackTargetRevs) {
       stop();
-      Serial.printf("[SUCK-BACK COMPLETE] Meniscus retracted %.2f revs. Motor stopped.\n", revsDone);
+      setMeniscusRetracted(true);
+      Serial.printf("[SUCK-BACK COMPLETE] Meniscus retracted %.2f revs. Motor stopped. (State: RETRACTED)\n", revsDone);
       return;
     }
   }
@@ -377,13 +455,14 @@ void PumpController::update(uint32_t nowMs) {
           (_telem.mode == PUMP_CTRL_CLOSED_LOOP) ? "SPEED_PI" :
           (_telem.mode == PUMP_CTRL_SUCKBACK) ? "SUCK_BACK" : "DOSING";
 
-      Serial.printf("[PUMP] Mode: %-9s | Speed: %6.2f / %6.2f rad/s (%5.1f RPM) | Flow: %5.2f mL/m | Duty: %+5.1f%% | Vol: %5.2f / %5.2f mL\n",
-                    modeStr,
+      Serial.printf("[TELEMETRY] Measured: %6.2f rad/s (%5.1f RPM) | Target: %6.2f rad/s (%5.1f RPM) | Err: %+5.2f rad/s | Duty: %+5.1f%% | Flow: %5.2f mL/m | Vol: %5.2f / %5.2f mL\n",
                     _telem.actualRadS,
-                    _telem.targetRadS,
                     _telem.actualRpm,
-                    _telem.flowRateMlMin,
+                    _telem.targetRadS,
+                    _telem.targetRpm,
+                    _telem.targetRadS - _telem.actualRadS,
                     _telem.dutyPercent,
+                    _telem.flowRateMlMin,
                     _telem.dosedMl,
                     _telem.targetMl);
     }
@@ -392,22 +471,23 @@ void PumpController::update(uint32_t nowMs) {
 
 void PumpController::printHelp() {
   Serial.println("\n--- AquaControl: Peristaltic Pump Controller CLI (TB6612FNG Driver) ---");
-  Serial.println("  SPEED <rad/s>       : Closed-loop angular velocity (e.g. 'SPEED 20.0')");
-  Serial.println("  RPM <rpm>           : Closed-loop speed in RPM (e.g. 'RPM 120')");
-  Serial.println("  <number>            : Shorthand to set rad/s directly (e.g. '15' or '-10')");
-  Serial.println("  DUTY <-1.0 - 1.0>   : Open-loop throttle override (e.g. 'DUTY 0.25')");
-  Serial.println("  DOSE <ml> [rad_s]   : Dose specified volume with short-brake and suck-back");
-  Serial.println("  SUCKBACK [rev] [w]  : Trigger anti-drip meniscus retraction (default 0.35 rev)");
-  Serial.println("  REVERSE [rad/s]     : Spin pump in reverse (drain line back to reagent)");
-  Serial.println("  STOP                : Safely stop the pump (engages active Short brake)");
-  Serial.println("  TUNE <Kp> <Ki>      : Live update PI gains in SI units [duty/(rad/s)]");
+  Serial.println("  SPEED <rad/s>       : Closed-loop angular velocity (e.g. 'SPEED 6.28')");
+  Serial.println("  RPM <rpm>           : Closed-loop speed in mechanical RPM (e.g. 'RPM 60')");
+  Serial.println("  <number>            : Shorthand: typing a raw number sets closed-loop RPM directly");
+  Serial.println("  DUTY <-1.0 - 1.0>   : Open-loop throttle override (e.g. 'DUTY 0.25' or 'DUTY 25%')");
+  Serial.println("  DOSE <ml> [rpm]     : Dose volume (mL) with short-brake and auto suck-back");
+  Serial.println("  SUCKBACK [rev] [rpm]: Trigger anti-drip meniscus retraction (default 0.35 rev)");
+  Serial.println("  REVERSE [rpm]       : Spin pump in reverse (drain line back to bottle)");
+  Serial.println("  STOP                : Safely stop the pump (engages active Short Brake)");
+  Serial.println("  TUNE <Kp> <Ki> [Kd] : Live update PI gains in SI units [duty/(rad/s)]");
   Serial.println("  CALIB <ml_per_rev>  : Set mL per revolution calibration factor");
-  Serial.println("  SYSID ON / OFF      : Toggle 50Hz compact CSV telemetry for identification");
-  Serial.println("  DEBUG ON / OFF      : Toggle periodic 2Hz telemetry stream in serial monitor");
+  Serial.println("  MENISCUS [RETRACT|FLUSH]: Query or override nozzle meniscus state in NVS");
+  Serial.println("  SYSID ON / OFF      : Toggle 50 Hz CSV streaming for system identification");
+  Serial.println("  DEBUG ON / OFF      : Toggle periodic 2 Hz telemetry stream in serial monitor");
   Serial.println("  STATUS              : Print full diagnostic snapshot");
   Serial.println("  DIAG                : Check AS5600 magnet health, AGC gain, and raw angle stream");
-  Serial.println("  DUMP                : Dump all internal AS5600 registers (ZMCO, ZPOS, MPOS, MANG, CONF)");
-  Serial.println("  RESET_SENSOR        : Restore AS5600 registers to factory default (full 360 deg, zero offsets)");
+  Serial.println("  DUMP                : Dump all internal AS5600 registers");
+  Serial.println("  RESET_SENSOR        : Restore AS5600 registers to factory default");
   Serial.println("  FILTER <FAST|BALANCED|SMOOTH|alpha> : Set velocity filter responsiveness");
   Serial.println("  GEAR <ratio>        : Set reduction ratio (e.g. 'GEAR 30.0' for 1:30 gearbox)");
   Serial.println("  HELP                : Display this menu");
@@ -448,7 +528,10 @@ void PumpController::printStatus() {
   Serial.printf("  Driver Hardware: TB6612FNG [STBY=%d, AIN2=%d, AIN1=%d, PWMA=%d] @ 12V\n",
                 TB6612_STBY_PIN, TB6612_AIN2_PIN, TB6612_AIN1_PIN, TB6612_PWMA_PIN);
   Serial.printf("  Calibration:     %.4f mL/rev\n", _mlPerRev);
-  Serial.printf("  PI Parameters:   Kp=%.6f, Ki=%.6f, Kd=%.6f, Int=%.4f\n",
+  Serial.printf("  Meniscus State:  %s [Auto-offset: %.3f mL (%.2f revs)]\n",
+                _meniscusRetracted ? "RETRACTED (Dry Nozzle, Compensating)" : "FLUSH (At Tip, Ready)",
+                SUCKBACK_REVS * _mlPerRev, SUCKBACK_REVS);
+  Serial.printf("  PI Parameters:   Kp=%.6f, Ki=%.6f, Kd=%.6f, Int=%.4f [Persisted in Flash NVS]\n",
                 _params.Kp, _params.Ki, _params.Kd, _integral);
   Serial.println("=============================================\n");
 }
@@ -473,17 +556,19 @@ void PumpController::handleCliCommand(char* cmd) {
   }
   else if (strncasecmp(cmd, "REVERSE", 7) == 0) {
     float val = atof(cmd + 7);
-    if (val <= 0.0f) val = SUCKBACK_RAD_S;
-    setTargetRadS(-val);
-    Serial.printf("[OK] Reversing at %.2f rad/s (%.1f RPM) (Drain / Reverse Flow)\n", -_telem.targetRadS, -_telem.targetRpm);
+    if (val <= 0.0f) val = SUCKBACK_RPM;
+    float rad_s = (val > 25.0f) ? (val * RPM_TO_RAD_S) : val;
+    setTargetRadS(-rad_s);
+    Serial.printf("[OK] Reversing at %.1f RPM (%.2f rad/s) (Drain / Reverse Flow)\n", -_telem.targetRpm, -_telem.targetRadS);
   }
   else if (strncasecmp(cmd, "SUCKBACK", 8) == 0 || strncasecmp(cmd, "RETRACT", 7) == 0) {
     float revs = SUCKBACK_REVS;
-    float rad_s = SUCKBACK_RAD_S;
+    float spd = SUCKBACK_RPM;
     char* arg = cmd + ((strncasecmp(cmd, "SUCKBACK", 8) == 0) ? 8 : 7);
-    int matched = sscanf(arg, "%f %f", &revs, &rad_s);
+    int matched = sscanf(arg, "%f %f", &revs, &spd);
     if (revs <= 0.0f) revs = SUCKBACK_REVS;
-    if (matched < 2 || rad_s <= 0.0f) rad_s = SUCKBACK_RAD_S;
+    if (matched < 2 || spd <= 0.0f) spd = SUCKBACK_RPM;
+    float rad_s = (spd > 25.0f) ? (spd * RPM_TO_RAD_S) : spd;
     triggerSuckback(revs, rad_s);
   }
   else if (strncasecmp(cmd, "DUTY", 4) == 0) {
@@ -496,25 +581,37 @@ void PumpController::handleCliCommand(char* cmd) {
   }
   else if (strncasecmp(cmd, "DOSE", 4) == 0) {
     float ml = 0.0f;
-    float rad_s = DOSE_TARGET_RAD_S;
-    int matched = sscanf(cmd + 4, "%f %f", &ml, &rad_s);
+    float spd = DOSE_TARGET_RPM;
+    int matched = sscanf(cmd + 4, "%f %f", &ml, &spd);
     if (matched >= 1 && ml > 0.0f) {
-      if (matched < 2 || rad_s <= 0.0f) rad_s = DOSE_TARGET_RAD_S;
+      float rad_s;
+      if (matched < 2 || spd <= 0.0f) {
+        rad_s = DOSE_TARGET_RAD_S;
+      } else if (spd > 25.0f) {
+        rad_s = spd * RPM_TO_RAD_S;
+      } else {
+        rad_s = spd;
+      }
       startDose(ml, rad_s);
-      Serial.printf("[OK] Starting Dose of %.2f mL at %.2f rad/s (%.1f RPM) with auto suck-back\n",
-                    ml, _telem.targetRadS, _telem.targetRpm);
+      Serial.printf("[OK] Starting Dose of %.2f mL at %.1f RPM (%.2f rad/s) with auto suck-back\n",
+                    ml, _telem.targetRpm, _telem.targetRadS);
     } else {
-      Serial.println("[ERROR] Usage: DOSE <target_ml> [target_rad_s]");
+      Serial.println("[ERROR] Usage: DOSE <target_ml> [target_rpm]");
     }
+  }
+  else if (strncasecmp(cmd, "TUNE DEFAULT", 12) == 0 || strncasecmp(cmd, "RESET_GAINS", 11) == 0) {
+    resetNvsDefaults();
+    Serial.printf("[OK] Restored factory default gains (NVS cleared): Kp=%.6f, Ki=%.6f, Kd=%.6f\n",
+                  _params.Kp, _params.Ki, _params.Kd);
   }
   else if (strncasecmp(cmd, "TUNE", 4) == 0) {
     float kp = 0, ki = 0, kd = 0;
     int matched = sscanf(cmd + 4, "%f %f %f", &kp, &ki, &kd);
     if (matched >= 2) {
       tunePid(kp, ki, (matched == 3) ? kd : 0.0f);
-      Serial.printf("[OK] PI Tuned: Kp=%.6f, Ki=%.6f, Kd=%.6f\n", _params.Kp, _params.Ki, _params.Kd);
+      Serial.printf("[OK] PI Tuned & Saved to Flash (NVS): Kp=%.6f, Ki=%.6f, Kd=%.6f\n", _params.Kp, _params.Ki, _params.Kd);
     } else {
-      Serial.println("[ERROR] Usage: TUNE <Kp> <Ki> [Kd]");
+      Serial.println("[ERROR] Usage: TUNE <Kp> <Ki> [Kd] (or 'TUNE DEFAULT')");
     }
   }
   else if (strncasecmp(cmd, "CALIB", 5) == 0) {
@@ -524,6 +621,22 @@ void PumpController::handleCliCommand(char* cmd) {
       Serial.printf("[OK] Calibration set to %.4f mL/rev\n", _mlPerRev);
     } else {
       Serial.println("[ERROR] Invalid calibration factor");
+    }
+  }
+  else if (strncasecmp(cmd, "MENISCUS", 8) == 0) {
+    char* arg = cmd + 8;
+    while (*arg == ' ') arg++;
+    if (strncasecmp(arg, "RETRACT", 7) == 0 || strcmp(arg, "1") == 0 || strncasecmp(arg, "ON", 2) == 0) {
+      setMeniscusRetracted(true);
+      Serial.printf("[OK] Meniscus State: RETRACTED (Next DOSE will prime %.3f mL / %.2f revs first).\n",
+                    SUCKBACK_REVS * _mlPerRev, SUCKBACK_REVS);
+    } else if (strncasecmp(arg, "FLUSH", 5) == 0 || strcmp(arg, "0") == 0 || strncasecmp(arg, "OFF", 3) == 0) {
+      setMeniscusRetracted(false);
+      Serial.println("[OK] Meniscus State: FLUSH (Next DOSE will count immediately from zero).");
+    } else {
+      Serial.printf("[MENISCUS] State: %s | Auto-offset: %.3f mL (%.2f revs)\n",
+                    _meniscusRetracted ? "RETRACTED (Offset Active)" : "FLUSH (At Tip, No Offset)",
+                    SUCKBACK_REVS * _mlPerRev, SUCKBACK_REVS);
     }
   }
   else if (strncasecmp(cmd, "SYSID ON", 8) == 0) {
@@ -675,11 +788,11 @@ void PumpController::handleCliCommand(char* cmd) {
     printHelp();
   }
   else {
-    // Numeric shorthand fallback: treat as rad/s (canonical SI)
+    // Numeric shorthand fallback: treat as RPM (matching nodo-mezclador UX)
     float val = atof(cmd);
-    if (fabsf(val) > 0.0f && fabsf(val) <= PUMP_MAX_RAD_S) {
-      setTargetRadS(val);
-      Serial.printf("[OK] Set Closed-Loop Target: %.2f rad/s (%.1f RPM)\n", _telem.targetRadS, _telem.targetRpm);
+    if (fabsf(val) > 0.0f && fabsf(val) <= PUMP_MAX_RPM) {
+      setTargetRpm(val);
+      Serial.printf("[OK] Set Closed-Loop Target: %.1f RPM (%.2f rad/s)\n", _telem.targetRpm, _telem.targetRadS);
     } else {
       Serial.println("[ERROR] Unknown command. Type 'HELP' for options.");
     }

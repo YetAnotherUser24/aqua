@@ -49,7 +49,7 @@ def query_pump_revolutions(ser):
 def main():
     parser = argparse.ArgumentParser(description="Peristaltic Pump Flow/Velocity Calibration")
     parser.add_argument('--port', type=str, help='Serial/COM port (e.g., /dev/ttyACM0 or COM3)')
-    parser.add_argument('--rpms', type=str, default='25,50,75,100,120', help='Comma-separated RPM test points')
+    parser.add_argument('--rpms', type=str, default='600,800,1000,1200,1400', help='Comma-separated RPM test points (default: 600,800,1000,1200,1400)')
     parser.add_argument('--duration', type=float, default=60.0, help='Duration of each run in seconds (default 60s)')
     parser.add_argument('--density', type=float, default=1.00, help='Solution density in g/mL (water=1.00, 10%% Na2SO3 ~1.08)')
     parser.add_argument('--output', type=str, default='scripts/data/flow_calibration.csv', help='Output CSV path')
