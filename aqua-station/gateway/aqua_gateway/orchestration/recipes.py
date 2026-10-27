@@ -330,9 +330,18 @@ _CLOSED_LOOP = Recipe(
             # the UI to fix the node.
             commands=(
                 ("aerator", "set_mode", {"mode": "pid"}),
-                ("aerator", "set_config", {"target_do": 6.00, "setpoint_mg_l": 6.00}),
+                ("aerator", "set_config", {
+                    "target_do": 6.00,
+                    "setpoint_mg_l": 6.00,
+                    "kp": 221.65,
+                    "ki": 1.915,
+                    "kd": 0.0,
+                    "beta": 0.35,
+                    "tt": 100.0,
+                    "tau_lag": 30.0,
+                }),
             ),
-            params={"setpoint_mg_l": 6.00, "kp": 0.10, "ki": 0.02, "kd": 0.0},
+            params={"setpoint_mg_l": 6.00, "kp": 221.65, "ki": 1.915, "kd": 0.0, "beta": 0.35, "tt": 100.0, "tau_lag": 30.0},
         ),
         Phase(
             phase_id="cl_run",
@@ -342,7 +351,7 @@ _CLOSED_LOOP = Recipe(
             condition_text="Tiempo transcurrido ≥ duración fijada (600 s)",
             condition={"kind": "elapsed", "seconds": 600},
             timeout_s=600,
-            commands=(("aerator", "start", {"speed_percent": 40}),),
+            commands=(("aerator", "start", {}),),
             params={"run_time_s": 600},
         ),
         Phase(
