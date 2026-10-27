@@ -19,6 +19,10 @@ ControlEngine::ControlEngine() {
 
 void ControlEngine::configure(const ControlConfig& config) {
   portENTER_CRITICAL(&_mux);
+  if (_config.mode != config.mode) {
+    _integral = 0.0f;
+    _lastSampleMs = 0;
+  }
   _config = config;
   if (_config.max_rpm < _config.min_rpm) _config.max_rpm = _config.min_rpm + 500.0f;
   _config.manual_throttle_pct = constrain(_config.manual_throttle_pct, 0.0f, 100.0f);
@@ -80,6 +84,11 @@ bool ControlEngine::isExperimentLogging() {
 void ControlEngine::setArmed(bool armed) {
   portENTER_CRITICAL(&_mux);
   _isArmed = armed;
+  if (!armed) {
+    _integral = 0.0f;
+    _lastCommandedRpm = 0.0f;
+    _lastSampleMs = 0;
+  }
   portEXIT_CRITICAL(&_mux);
 }
 
@@ -91,12 +100,14 @@ bool ControlEngine::isArmed() {
   return armed;
 }
 
-void ControlEngine::updateProcessVariable(float measuredDoMgL, float waterTempC) {  portENTER_CRITICAL(&_mux);
+void ControlEngine::updateProcessVariable(float measuredDoMgL, float waterTempC) {
+  portENTER_CRITICAL(&_mux);
   _lastMeasuredDo = measuredDoMgL;
   _lastWaterTemp = waterTempC;
   _lastPacketTimeMs = millis();
   _hasFirstSample = true;
   _failsafeActive = false;
+  _newSampleAvailable = true;
   portEXIT_CRITICAL(&_mux);
 }
 
@@ -141,6 +152,7 @@ float ControlEngine::computeOutputRpm(unsigned long nowMs) {
   bool hasSample;
   unsigned long lastPacketMs;
   bool eStop;
+  bool isNewSample;
 
   portENTER_CRITICAL(&_mux);
   cfg = _config;
@@ -148,10 +160,13 @@ float ControlEngine::computeOutputRpm(unsigned long nowMs) {
   hasSample = _hasFirstSample;
   lastPacketMs = _lastPacketTimeMs;
   eStop = _emergencyStopActive;
+  isNewSample = _newSampleAvailable;
+  _newSampleAvailable = false;
   portEXIT_CRITICAL(&_mux);
 
   // 2. Emergency stop has top priority
   if (eStop) {
+    _lastCommandedRpm = 0.0f;
     return 0.0f;
   }
 
@@ -161,7 +176,8 @@ float ControlEngine::computeOutputRpm(unsigned long nowMs) {
     _failsafeActive = false;
     portEXIT_CRITICAL(&_mux);
     float throttle = cfg.manual_throttle_pct / 100.0f;
-    return constrain(throttle * cfg.max_rpm, cfg.min_rpm, cfg.max_rpm);
+    _lastCommandedRpm = constrain(throttle * cfg.max_rpm, cfg.min_rpm, cfg.max_rpm);
+    return _lastCommandedRpm;
   }
 
   // 4. Safe startup: keep motor at 0 RPM until first valid sensor packet arrives
@@ -169,14 +185,16 @@ float ControlEngine::computeOutputRpm(unsigned long nowMs) {
     portENTER_CRITICAL(&_mux);
     _failsafeActive = true;
     portEXIT_CRITICAL(&_mux);
+    _lastCommandedRpm = 0.0f;
     return 0.0f;
   }
 
-  // 5. Watchdog if sensor link drops out during operation
+  // 5. Watchdog if sensor link drops out during operation (> 35s)
   if (nowMs - lastPacketMs > FAILSAFE_TIMEOUT_MS) {
     portENTER_CRITICAL(&_mux);
     _failsafeActive = true;
     portEXIT_CRITICAL(&_mux);
+    _lastCommandedRpm = cfg.failsafe_rpm;
     return cfg.failsafe_rpm;
   }
 
@@ -184,52 +202,83 @@ float ControlEngine::computeOutputRpm(unsigned long nowMs) {
   _failsafeActive = false;
   portEXIT_CRITICAL(&_mux);
 
-  // 5. Timing calculation
-  if (_lastComputeMs == 0) {
-    _lastComputeMs = nowMs;
-    return cfg.min_rpm;
-  }
-  float dt = (nowMs - _lastComputeMs) / 1000.0f;
-  _lastComputeMs = nowMs;
-  if (dt <= 0.0001f || dt > 5.0f) {
-    dt = CONTROL_LOOP_INTERVAL_MS / 1000.0f;
-  }
-
-  // 6. Error calculation (positive error means DO is too low -> need more aeration)
-  float error = cfg.target_do_mg_l - measuredDo;
-  float dError = (error - _prevError) / dt;
-  _prevError = error;
-
-  float outputRpm = 0.0f;
-  if (cfg.mode == MODE_PID) {
-    outputRpm = runPid(error, dError, dt, cfg);
-  } else if (cfg.mode == MODE_FUZZY) {
-    outputRpm = runFuzzy(error, dError, cfg);
+  // 6. Timing and discrete calculation
+  if (_lastSampleMs == 0) {
+    _lastSampleMs = nowMs;
+    _prevDoSample = measuredDo;
+    _prevError = cfg.target_do_mg_l - measuredDo;
+    if (cfg.mode == MODE_PID) {
+      _lastCommandedRpm = runPid(measuredDo, 5.0f, cfg);
+    } else if (cfg.mode == MODE_FUZZY) {
+      _lastCommandedRpm = runFuzzy(_prevError, 0.0f, cfg);
+    }
+    return constrain(_lastCommandedRpm, cfg.min_rpm, cfg.max_rpm);
   }
 
-  return constrain(outputRpm, cfg.min_rpm, cfg.max_rpm);
+  // Execute control update on new sample or if outer sampling period elapsed (Ts >= 5.0s)
+  if (isNewSample || (nowMs - _lastSampleMs >= 5000UL)) {
+    float dt = (nowMs - _lastSampleMs) / 1000.0f;
+    _lastSampleMs = nowMs;
+    if (dt <= 0.001f || dt > 15.0f) {
+      dt = 5.0f;
+    }
+
+    if (cfg.mode == MODE_PID) {
+      _lastCommandedRpm = runPid(measuredDo, dt, cfg);
+    } else if (cfg.mode == MODE_FUZZY) {
+      float error = cfg.target_do_mg_l - measuredDo;
+      float dError = (error - _prevError) / dt;
+      _lastCommandedRpm = runFuzzy(error, dError, cfg);
+    }
+
+    _prevDoSample = measuredDo;
+    _prevError = cfg.target_do_mg_l - measuredDo;
+  }
+
+  // Zero-order hold (ZOH) between samples
+  return constrain(_lastCommandedRpm, cfg.min_rpm, cfg.max_rpm);
 }
 
 /**
- * PID con anti-windup por saturación de la integral (I_max = max_rpm / Ki).
+ * 2-DOF PI con Anti-Windup por Back-Calculation y Frenado Predictivo (Script ganador).
  *
- * `dError` llega ya calculado con el `_prevError` ANTERIOR. Es imprescindible pasarlo como
- * parámetro: si se recalculara aquí dentro leyendo `_prevError`, el término derivativo sería
- * siempre cero, porque `computeOutputRpm()` actualiza `_prevError` antes de invocar al PID.
+ * Ecuaciones discretas (Ts = 5.0 s):
+ *  1. Predictor: C_pred = C_meas + tau_lag * (dC/dt).
+ *     Si C_pred >= SP y dC/dt > 0: frenado a 0 RPM y drenado de integral (prevención sobreimpulso limpio).
+ *  2. Consigna ponderada en P: e_P = beta * SP - C_meas (beta = 0.35 para eliminar el proportional kick).
+ *  3. Acción proporcional: u_unsat = Kp * e_P + I(k-1).
+ *  4. Saturación física: u_sat = sat(u_unsat, min_rpm, max_rpm).
+ *  5. Integración con Back-Calculation:
+ *     I(k) = I(k-1) + Ki * e * dt + (dt / Tt) * (u_sat - u_unsat)
  */
-float ControlEngine::runPid(float error, float dError, float dt, const ControlConfig& cfg) {
-  float pTerm = cfg.kp * error;
+float ControlEngine::runPid(float measuredDo, float dt, const ControlConfig& cfg) {
+  float dC_dt = (dt > 0.001f) ? ((measuredDo - _prevDoSample) / dt) : 0.0f;
+  float cPred = measuredDo + cfg.tau_lag * dC_dt;
 
-  // Integral with anti-windup clamping
-  _integral += error * dt;
-  float maxIntegral = cfg.max_rpm / (cfg.ki > 0.001f ? cfg.ki : 1.0f);
-  _integral = constrain(_integral, -maxIntegral, maxIntegral);
-  float iTerm = cfg.ki * _integral;
+  // 1. Corte preventivo por inercia química y retardo de transporte
+  if (cPred >= cfg.target_do_mg_l && dC_dt > 0.0001f) {
+    _integral = fmaxf(0.0f, _integral - 50.0f * dt);
+    return 0.0f;
+  }
 
-  // Derivative: usa el dError real (antes quedaba anulado por el orden de actualización)
-  float dTerm = cfg.kd * dError;
+  // 2. Error convencional y error de acción proporcional ponderada (2-DOF)
+  float error = cfg.target_do_mg_l - measuredDo;
+  float error_p = (cfg.beta * cfg.target_do_mg_l) - measuredDo;
 
-  return pTerm + iTerm + dTerm;
+  float u_unsat = (cfg.kp * error_p) + _integral;
+  if (cfg.kd > 0.0001f) {
+    u_unsat -= cfg.kd * dC_dt; // Derivada sobre la medición (Derivative on PV)
+  }
+
+  // 3. Saturación
+  float u_sat = constrain(u_unsat, cfg.min_rpm, cfg.max_rpm);
+
+  // 4. Actualización integral con Back-Calculation anti-windup
+  float tt = (cfg.tt > 0.1f) ? cfg.tt : 100.0f;
+  _integral += (cfg.ki * error * dt) + ((u_sat - u_unsat) * (dt / tt));
+  _integral = constrain(_integral, -2.0f * cfg.max_rpm, 2.0f * cfg.max_rpm);
+
+  return u_sat;
 }
 
 float ControlEngine::runFuzzy(float error, float dError, const ControlConfig& cfg) {

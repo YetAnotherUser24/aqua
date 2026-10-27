@@ -22,7 +22,7 @@
 #define AQUA_STATIC_IP          192, 168, 4, 10
 #endif
 #ifndef AQUA_STATIC_GATEWAY
-#define AQUA_STATIC_GATEWAY     0, 0, 0, 0
+#define AQUA_STATIC_GATEWAY     192, 168, 4, 1
 #endif
 #ifndef AQUA_STATIC_SUBNET
 #define AQUA_STATIC_SUBNET      255, 255, 255, 0

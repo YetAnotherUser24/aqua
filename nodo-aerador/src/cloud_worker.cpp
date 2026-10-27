@@ -190,12 +190,15 @@ static void loadPersistedConfig(ControlEngine& engine) {
   if (s_prefs.isKey("kp")) cfg.kp = s_prefs.getFloat("kp", cfg.kp);
   if (s_prefs.isKey("ki")) cfg.ki = s_prefs.getFloat("ki", cfg.ki);
   if (s_prefs.isKey("kd")) cfg.kd = s_prefs.getFloat("kd", cfg.kd);
+  if (s_prefs.isKey("beta")) cfg.beta = s_prefs.getFloat("beta", cfg.beta);
+  if (s_prefs.isKey("tt")) cfg.tt = s_prefs.getFloat("tt", cfg.tt);
+  if (s_prefs.isKey("tau_lag")) cfg.tau_lag = s_prefs.getFloat("tau_lag", cfg.tau_lag);
   if (s_prefs.isKey("failsafe_rpm")) cfg.failsafe_rpm = s_prefs.getFloat("failsafe_rpm", cfg.failsafe_rpm);
   s_prefs.end();
 
   engine.configure(cfg);
-  remoteLogPrintf("[NVS] Loaded config: mode=%d | target_do=%.2f | kp=%.1f ki=%.2f kd=%.1f\n",
-                cfg.mode, cfg.target_do_mg_l, cfg.kp, cfg.ki, cfg.kd);
+  remoteLogPrintf("[NVS] Loaded config: mode=%d | target_do=%.2f | kp=%.1f ki=%.2f beta=%.2f tt=%.1f\n",
+                cfg.mode, cfg.target_do_mg_l, cfg.kp, cfg.ki, cfg.beta, cfg.tt);
 }
 
 static void savePersistedConfig(const ControlConfig& cfg) {
@@ -205,6 +208,9 @@ static void savePersistedConfig(const ControlConfig& cfg) {
   s_prefs.putFloat("kp", cfg.kp);
   s_prefs.putFloat("ki", cfg.ki);
   s_prefs.putFloat("kd", cfg.kd);
+  s_prefs.putFloat("beta", cfg.beta);
+  s_prefs.putFloat("tt", cfg.tt);
+  s_prefs.putFloat("tau_lag", cfg.tau_lag);
   s_prefs.putFloat("failsafe_rpm", cfg.failsafe_rpm);
   s_prefs.end();
   remoteLogPrintf("[NVS] Persisted updated control parameters to Flash.\n");
@@ -421,6 +427,7 @@ static bool executeCommandBody(const String& payload, WiFiClientSecure& client) 
   {
     String cmdId;
     String cmdType;
+    String action = "";
     float speedPct = 0.0f;
     bool hasCmd = false;
     bool isEmergency = false;
@@ -452,7 +459,7 @@ static bool executeCommandBody(const String& payload, WiFiClientSecure& client) 
         hasCmd = true;
 
         JsonObject p = cmd["payload"];
-        String action = "";
+        action = "";
         if (!p.isNull() && p["action"].is<const char*>()) action = p["action"].as<String>();
         if (action.length() == 0) action = cmdType;
 
@@ -473,6 +480,14 @@ static bool executeCommandBody(const String& payload, WiFiClientSecure& client) 
           motorModeStr = p["motor_mode"].is<const char*>() ? p["motor_mode"].as<String>() : String("");
           if (p.containsKey("motor_target_do")) motorTargetDo = p["motor_target_do"].as<float>();
           if (p.containsKey("motor_throttle_pct")) motorThrottlePct = p["motor_throttle_pct"].as<float>();
+          if (p.containsKey("target_do")) cfg.target_do_mg_l = p["target_do"].as<float>();
+          if (p.containsKey("setpoint_mg_l")) cfg.target_do_mg_l = p["setpoint_mg_l"].as<float>();
+          if (p.containsKey("kp")) cfg.kp = p["kp"].as<float>();
+          if (p.containsKey("ki")) cfg.ki = p["ki"].as<float>();
+          if (p.containsKey("kd")) cfg.kd = p["kd"].as<float>();
+          if (p.containsKey("beta")) cfg.beta = p["beta"].as<float>();
+          if (p.containsKey("tt")) cfg.tt = p["tt"].as<float>();
+          if (p.containsKey("tau_lag")) cfg.tau_lag = p["tau_lag"].as<float>();
         } else if (isModeAction) {
           if (!p.isNull()) {
             if (p.containsKey("mode")) {
@@ -482,9 +497,13 @@ static bool executeCommandBody(const String& payload, WiFiClientSecure& client) 
               else if (m == "manual") cfg.mode = MODE_MANUAL;
             }
             if (p.containsKey("target_do")) cfg.target_do_mg_l = p["target_do"].as<float>();
+            if (p.containsKey("setpoint_mg_l")) cfg.target_do_mg_l = p["setpoint_mg_l"].as<float>();
             if (p.containsKey("kp")) cfg.kp = p["kp"].as<float>();
             if (p.containsKey("ki")) cfg.ki = p["ki"].as<float>();
             if (p.containsKey("kd")) cfg.kd = p["kd"].as<float>();
+            if (p.containsKey("beta")) cfg.beta = p["beta"].as<float>();
+            if (p.containsKey("tt")) cfg.tt = p["tt"].as<float>();
+            if (p.containsKey("tau_lag")) cfg.tau_lag = p["tau_lag"].as<float>();
             if (p.containsKey("manual_throttle_pct")) cfg.manual_throttle_pct = p["manual_throttle_pct"].as<float>();
           }
         } else if (action == "emergency_stop" || cmdType == "emergency_stop") {
@@ -527,13 +546,13 @@ static bool executeCommandBody(const String& payload, WiFiClientSecure& client) 
         // (seguro) y hay que liberarlo de forma explícita con `clear_estop` (botón REANUDAR).
         if (activate && motorModeStr == "pid") {
           s_engine->setArmed(true);
-          ControlConfig m = s_engine->getConfig();
+          ControlConfig m = cfg;
           m.mode = MODE_PID;
           if (motorTargetDo >= 0.0f) m.target_do_mg_l = motorTargetDo;
           s_engine->configure(m);
           savePersistedConfig(m);
-          remoteLogPrintf("[Cloud] Motor ARMED in PID (setpoint=%.3f mg/L)\n",
-                          m.target_do_mg_l);
+          remoteLogPrintf("[Cloud] Motor ARMED in PID (setpoint=%.3f mg/L | beta=%.2f tt=%.1f)\n",
+                          m.target_do_mg_l, m.beta, m.tt);
         } else if (activate && motorModeStr == "manual") {
           s_engine->setArmed(true);
           ControlConfig m = s_engine->getConfig();
@@ -582,7 +601,11 @@ static bool executeCommandBody(const String& payload, WiFiClientSecure& client) 
         acknowledgeCommand(client, cmdId, true, 0.0f);
       } else if (isThrottle) {
         s_engine->setArmed(true);
-        s_engine->setManualThrottle(speedPct);
+        if ((action == "start" || cmdType == "start") && (cfg.mode == MODE_PID || cfg.mode == MODE_FUZZY)) {
+          remoteLogPrintf("[Cloud] Motor ARMED in closed-loop mode (%d)\n", (int)cfg.mode);
+        } else {
+          s_engine->setManualThrottle(speedPct);
+        }
         acknowledgeCommand(client, cmdId, true, speedPct);
       } else if (cmdType == "reboot") {
         acknowledgeCommand(client, cmdId, true, 0.0f);

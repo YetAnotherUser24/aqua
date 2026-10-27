@@ -9,15 +9,18 @@ enum ControlMode {
 
 struct ControlConfig {
   ControlMode mode = MODE_PID;
-  float target_do_mg_l = 7.5f;
-  float kp = 100.0f;
-  float ki = 1.5f;
-  float kd = 10.0f;
+  float target_do_mg_l = 6.0f;
+  float kp = 221.65f;
+  float ki = 1.915f;
+  float kd = 0.0f;
+  float beta = 0.35f;             // Ponderación de consigna (Script ganador)
+  float tt = 100.0f;              // Constante de tiempo de Back-Calculation (s)
+  float tau_lag = 30.0f;          // Horizonte de frenado predictivo (s)
   float min_rpm = 0.0f;
   float max_rpm = 600.0f;
   float failsafe_rpm = 0.0f;
   float manual_throttle_pct = 0.0f;
-  uint32_t config_version = 1;
+  uint32_t config_version = 2;
 };
 
 class ControlEngine {
@@ -67,11 +70,15 @@ private:
   bool _experimentLogging = false;
   bool _isArmed = false;
 
-  // PID State (accessed only from Core 1)
+  // PID & Discrete State (accessed only from Core 1)
   float _integral = 0.0f;
   float _prevError = 0.0f;
+  float _prevDoSample = 0.0f;
+  float _lastCommandedRpm = 0.0f;
   unsigned long _lastComputeMs = 0;
+  unsigned long _lastSampleMs = 0;
+  bool _newSampleAvailable = false;
 
-  float runPid(float error, float dError, float dt, const ControlConfig& cfg);
+  float runPid(float measuredDo, float dt, const ControlConfig& cfg);
   float runFuzzy(float error, float dError, const ControlConfig& cfg);
 };
