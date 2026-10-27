@@ -287,7 +287,7 @@ static void applyCommand(const String& cmdId, const String& action, JsonObjectCo
     else if (target["volume_ml"].is<float>()) targetMl = target["volume_ml"].as<float>();
     else if (target["target_volume_ml"].is<float>()) targetMl = target["target_volume_ml"].as<float>();
     if (targetMl > 0.0f) {
-      g_pumpCtrl.startDose(targetMl, DOSE_TARGET_RPM);
+      g_pumpCtrl.startDose(targetMl, DOSE_TARGET_RAD_S);
       cmd.mode = PUMP_DOSE;
       cmd.target_ml = targetMl;
       setCommand(cmd);
@@ -300,7 +300,7 @@ static void applyCommand(const String& cmdId, const String& action, JsonObjectCo
     float vol = 25.0f;
     if (target["volume_ml"].is<float>()) vol = target["volume_ml"].as<float>();
     else if (target["target_ml"].is<float>()) vol = target["target_ml"].as<float>();
-    g_pumpCtrl.startDose(vol, DOSE_TARGET_RPM);
+    g_pumpCtrl.startDose(vol, DOSE_TARGET_RAD_S);
     cmd.mode = PUMP_DOSE;
     cmd.target_ml = vol;
     setCommand(cmd);

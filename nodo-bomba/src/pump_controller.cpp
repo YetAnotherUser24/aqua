@@ -151,7 +151,12 @@ void PumpController::setOpenLoopDuty(float dutyFraction) {
 
 void PumpController::startDose(float targetMl, float rad_s) {
   if (targetMl <= 0.0f) return;
-  if (fabsf(rad_s) <= 0.05f) rad_s = DOSE_TARGET_RAD_S;
+  if (fabsf(rad_s) <= 0.05f) {
+    rad_s = DOSE_TARGET_RAD_S;
+  } else if (fabsf(rad_s) > PUMP_MAX_RAD_S) {
+    // Caller passed speed in RPM (e.g. DOSE_TARGET_RPM = 1000.0f); convert to canonical rad/s
+    rad_s = rad_s * RPM_TO_RAD_S;
+  }
   if (fabsf(rad_s) > PUMP_MAX_RAD_S) rad_s = PUMP_MAX_RAD_S;
 
   // If meniscus is parked inside nozzle, pre-charge offset so the prime volume is not counted in delivery
