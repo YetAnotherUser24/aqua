@@ -178,6 +178,21 @@ void PumpController::startDose(float targetMl, float rad_s) {
   _telem.mode = PUMP_CTRL_DOSE;
   _integral = 0.0f;
   _prevOutput = 0.0f;
+
+  // Dynamic watchdog timeout: calculate required delivery duration with 50% safety margin + 30s grace
+  float revPerSec = fabsf(rad_s) / TWO_PI_F;
+  float mlPerSec = revPerSec * _mlPerRev;
+  if (mlPerSec > 0.001f) {
+    float expectedSec = targetMl / mlPerSec;
+    uint32_t calcTimeoutMs = static_cast<uint32_t>((expectedSec * 1.5f + 30.0f) * 1000.0f);
+    _doseTimeoutMs = (calcTimeoutMs > DOSE_TIMEOUT_MS) ? calcTimeoutMs : DOSE_TIMEOUT_MS;
+  } else {
+    _doseTimeoutMs = DOSE_TIMEOUT_MS;
+  }
+
+  Serial.printf("[DOSE] Target: %.2f mL @ %.1f rad/s (%.0f RPM) | Timeout Watchdog: %.1fs\n",
+                targetMl, rad_s, rad_s * RAD_S_TO_RPM, (float)_doseTimeoutMs / 1000.0f);
+
   _doseStartMs = millis();
 }
 

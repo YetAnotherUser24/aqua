@@ -28,9 +28,9 @@ import { cn } from './ui';
 
 /** Send a command, ignoring a refusal — the live view reconciles the screen either way, and a
  *  per-click error toast for a superseded setpoint would be noise. */
-async function send(role: string, action: string, target: Record<string, unknown>): Promise<void> {
+async function send(role: string, action: string, target: Record<string, unknown>, deadline_s = 300): Promise<void> {
   try {
-    await postCommand({ role, action, target, deadline_s: 120, requested_by: 'operator:web' });
+    await postCommand({ role, action, target, deadline_s, requested_by: 'operator:web' });
   } catch {
     /* the next live frame shows the truth */
   }
@@ -825,7 +825,7 @@ export function ActuatorDeck({
               <input
                 type="number"
                 min={0.5}
-                max={50}
+                max={200}
                 step={0.5}
                 value={doseMl}
                 onChange={(e) => setDoseMl(Number(e.target.value))}
