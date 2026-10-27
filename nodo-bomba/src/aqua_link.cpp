@@ -337,13 +337,14 @@ static size_t buildFields(const Queued& entry, aqua::FieldValue* out) {
   out[n++] = aqua::FieldValue::text(aqua::pump_fields::kMode, modeName(st.mode));
   out[n++] = aqua::FieldValue::flag(aqua::pump_fields::kDoseCompleted, st.dose_completed);
   out[n++] = aqua::FieldValue::flag(aqua::pump_fields::kDoseTimedOut, st.dose_timed_out);
+  out[n++] = aqua::FieldValue::flag(aqua::pump_fields::kMeniscusRetracted, st.meniscus_retracted);
   out[n++] = aqua::FieldValue::integer(aqua::pump_fields::kStatus, (long)st.status_code);
   return n;
 }
 
 static_assert(aqua::AQUA_ENVELOPE_BATCH_LIMIT > 0, "batch limit must allow at least one");
-/** 9 fields per sample; sized rather than counted inline so a new field is a compile error. */
-static aqua::FieldValue s_fields[9];
+/** 10 fields per sample; sized rather than counted inline so a new field is a compile error. */
+static aqua::FieldValue s_fields[10];
 
 /* ------------------------------- Public -------------------------------- */
 

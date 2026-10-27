@@ -145,6 +145,7 @@ roles:
          legacy_map: {0: idle, 1: dose, 2: manual}}
       - {name: pump_dose_completed,  type: bool,  legacy_source: dose_completed}
       - {name: pump_dose_timed_out,  type: bool,  legacy_source: dose_timed_out}
+      - {name: pump_meniscus_retracted, type: bool, note: "true if meniscus is parked 15-20mm inside nozzle"}
       - {name: drv_status,           type: int,   unit: null}
 
 # ------------------------------------------------------------------------------

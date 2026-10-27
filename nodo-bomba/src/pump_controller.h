@@ -14,7 +14,8 @@ enum PumpControlMode : uint8_t {
   PUMP_CTRL_OPEN_LOOP = 1,
   PUMP_CTRL_CLOSED_LOOP = 2,
   PUMP_CTRL_DOSE = 3,
-  PUMP_CTRL_SUCKBACK = 4
+  PUMP_CTRL_SUCKBACK = 4,
+  PUMP_CTRL_DRAIN = 5
 };
 
 struct PumpPidParams {
@@ -63,6 +64,7 @@ public:
   void setOpenLoopDuty(float dutyFraction); // [-1.0, 1.0]
   void startDose(float targetMl, float rad_s = 6.283f);
   void triggerSuckback(float revs = 0.35f, float rad_s = 3.665f);
+  void startDrain(float durationS = 35.0f, float rpm = 1000.0f);
   void tunePid(float kp, float ki, float kd = 0.0f); // Kp in duty/(rad/s), Ki in duty/(rad/s*s)
   void setMlPerRev(float mlPerRev);
   void setFilterAlpha(float alpha);
@@ -129,6 +131,8 @@ private:
   float _suckbackTargetRevs = 0.0f;
   float _suckbackStartRev = 0.0f;
   bool _meniscusRetracted = true;   // True if meniscus is parked ~15-20mm inside nozzle
+  uint32_t _drainDurationMs = 0;
+  uint32_t _drainStartMs = 0;
 
   // SysID and CLI internals
   bool _sysidMode = false;

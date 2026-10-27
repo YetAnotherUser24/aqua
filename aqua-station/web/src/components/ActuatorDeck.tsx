@@ -170,6 +170,7 @@ export function ActuatorDeck({
   const measuredRpm = readField(registry, snapshot, 'aerator', 'drv_rpm');
   const measuredMixer = readField(registry, snapshot, 'mixer', 'drv_rpm');
   const dosed = readField(registry, snapshot, 'pump', 'pump_dosed_ml');
+  const meniscusRetracted = readField(registry, snapshot, 'pump', 'pump_meniscus_retracted');
 
   // Measured state, read off the node.
   //
@@ -467,8 +468,14 @@ export function ActuatorDeck({
           subtitle="Planta 1 • AS5600 12-bit"
           accent="bg-purple-950/60 border-purple-800 text-telemetry-pump"
           badge={
-            <span className="text-[9px] font-mono text-purple-300 px-1.5 py-0.5 rounded bg-purple-950 border border-purple-800">
-              Calibrado
+            <span className={`text-[9px] font-mono px-1.5 py-0.5 rounded border ${
+              meniscusRetracted.value === true
+                ? 'text-emerald-300 bg-emerald-950/80 border-emerald-800'
+                : meniscusRetracted.value === false
+                ? 'text-amber-300 bg-amber-950/80 border-amber-800'
+                : 'text-purple-300 bg-purple-950 border-purple-800'
+            }`}>
+              {meniscusRetracted.value === true ? 'Menisco Retraído (-15mm)' : meniscusRetracted.value === false ? 'Línea Enrasada' : 'Calibrado'}
             </span>
           }
         >
@@ -502,16 +509,39 @@ export function ActuatorDeck({
               <Play className="w-3.5 h-3.5 fill-white" /> Dosificar
             </button>
           </div>
-          <div className="flex justify-between items-center text-[10px] text-slate-400 pt-1 border-t border-scada-border">
-            <span>Purgado de tubería química:</span>
-            <button
-              type="button"
-              onClick={() => void run('pump', 'force_off', {})}
-              className="text-sky-400 hover:underline"
-              title="Detiene y purga la línea de dosificación"
-            >
-              Purgar Tubería
-            </button>
+          <div className="flex flex-col gap-1.5 pt-2 border-t border-scada-border">
+            <div className="flex justify-between items-center text-[10px] text-slate-400">
+              <span>Gestión de línea:</span>
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => run('pump', 'prime', { volume_ml: 25 })}
+                  className="px-2 py-1 bg-sky-950 hover:bg-sky-900 border border-sky-800 text-sky-300 rounded text-[10px] font-mono transition disabled:opacity-50"
+                  title="Purga 25 mL al descarte (llena 17.5 mL de manguera) y retrae automáticamente el menisco"
+                >
+                  Cebar (25mL)
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => run('pump', 'suckback', {})}
+                  className="px-2 py-1 bg-purple-950 hover:bg-purple-900 border border-purple-800 text-purple-300 rounded text-[10px] font-mono transition disabled:opacity-50"
+                  title="Retrae 4.5 vueltas (15 mm) para evitar goteo y cristalización"
+                >
+                  Suck-Back
+                </button>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => run('pump', 'drain', { duration_s: 35 })}
+                  className="px-2 py-1 bg-rose-950 hover:bg-rose-900 border border-rose-800 text-rose-300 rounded text-[10px] font-mono transition disabled:opacity-50"
+                  title="Gira 35 s en reversa para vaciar los 17.5 mL de reactivo al frasco al terminar la jornada"
+                >
+                  Drenar (35s)
+                </button>
+              </div>
+            </div>
           </div>
         </Panel>
       ) : null}

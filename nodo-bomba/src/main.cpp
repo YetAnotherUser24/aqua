@@ -116,6 +116,7 @@ static void dosingLoop() {
   st.dose_completed = telem.doseCompleted;
   st.dose_timed_out = telem.doseTimedOut;
   st.status_code = telem.statusCode;
+  st.meniscus_retracted = g_pumpCtrl.isMeniscusRetracted();
 
   if (telem.mode == PUMP_CTRL_DOSE) {
     st.mode = PUMP_DOSE;
@@ -295,6 +296,42 @@ static void applyCommand(const String& cmdId, const String& action, JsonObjectCo
       Serial.printf("[Cmd] Dosing %.2f mL (Controlled %.1f RPM)\n", targetMl, DOSE_TARGET_RPM);
       postPumpEvent("dose_started", 0.0f, targetMl, "ok");
     }
+  } else if (action == "prime") {
+    float vol = 25.0f;
+    if (target["volume_ml"].is<float>()) vol = target["volume_ml"].as<float>();
+    else if (target["target_ml"].is<float>()) vol = target["target_ml"].as<float>();
+    g_pumpCtrl.startDose(vol, DOSE_TARGET_RPM);
+    cmd.mode = PUMP_DOSE;
+    cmd.target_ml = vol;
+    setCommand(cmd);
+    doseEndReported = false;
+    handled = true;
+    Serial.printf("[Cmd] Priming line with %.2f mL (Waste purge + auto suck-back)\n", vol);
+    postPumpEvent("prime_started", 0.0f, vol, "ok");
+  } else if (action == "drain") {
+    float sec = 35.0f;
+    float spd = 1000.0f;
+    if (target["duration_s"].is<float>()) sec = target["duration_s"].as<float>();
+    if (target["rpm"].is<float>()) spd = target["rpm"].as<float>();
+    g_pumpCtrl.startDrain(sec, spd);
+    cmd.mode = PUMP_MANUAL_ON;
+    setCommand(cmd);
+    handled = true;
+    Serial.printf("[Cmd] Draining line for %.1f s at %.1f RPM (Recovery to bottle)\n", sec, spd);
+    postPumpEvent("drain_started", 0.0f, sec, "ok");
+  } else if (action == "suckback" || action == "retract") {
+    g_pumpCtrl.triggerSuckback(SUCKBACK_REVS, SUCKBACK_RAD_S);
+    handled = true;
+    Serial.printf("[Cmd] Manual Suck-Back: retracting %.2f revs at %.1f RPM\n", SUCKBACK_REVS, SUCKBACK_RPM);
+  } else if (action == "set_meniscus" || action == "meniscus") {
+    bool retracted = true;
+    if (target["retracted"].is<bool>()) retracted = target["retracted"].as<bool>();
+    else if (target["state"].is<const char*>()) {
+      retracted = (strcasecmp(target["state"].as<const char*>(), "flush") != 0);
+    }
+    g_pumpCtrl.setMeniscusRetracted(retracted);
+    handled = true;
+    Serial.printf("[Cmd] Meniscus state override: %s\n", retracted ? "RETRACTED" : "FLUSH");
   } else if (action == "force_on") {
     g_pumpCtrl.setTargetRpm(DOSE_TARGET_RPM);
     cmd.mode = PUMP_MANUAL_ON;

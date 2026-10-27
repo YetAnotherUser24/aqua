@@ -192,6 +192,23 @@ void PumpController::triggerSuckback(float revs, float rad_s) {
                 revs, _telem.targetRadS, _telem.targetRpm);
 }
 
+void PumpController::startDrain(float durationS, float rpm) {
+  if (durationS <= 0.1f) {
+    stop();
+    return;
+  }
+  _telem.mode = PUMP_CTRL_DRAIN;
+  _drainDurationMs = (uint32_t)(durationS * 1000.0f);
+  _drainStartMs = millis();
+  _telem.targetRadS = -fabsf(rpm * RPM_TO_RAD_S);
+  _telem.targetRpm = _telem.targetRadS * RAD_S_TO_RPM;
+  _integral = 0.0f;
+  _prevOutput = 0.0f;
+  setMeniscusRetracted(false); // Line is being drained
+  Serial.printf("[DRAIN] Draining line in reverse for %.1f s at %.1f RPM (~%.1f mL)\n",
+                durationS, -_telem.targetRpm, (rpm / 60.0f) * _mlPerRev * durationS);
+}
+
 void PumpController::tunePid(float kp, float ki, float kd) {
   _params.Kp = kp;
   _params.Ki = ki;
@@ -384,6 +401,17 @@ void PumpController::updatePid(uint32_t nowMs) {
     }
   }
 
+  // Drain completion check (Timed reverse)
+  if (_telem.mode == PUMP_CTRL_DRAIN) {
+    if ((nowMs - _drainStartMs) >= _drainDurationMs) {
+      stop();
+      setMeniscusRetracted(false);
+      Serial.printf("[DRAIN COMPLETE] Line drained for %.1f s. Motor stopped. (State: DRAINED)\n",
+                    (float)_drainDurationMs / 1000.0f);
+      return;
+    }
+  }
+
   // Closed-loop PI execution (direction-aware)
   float errorRadS = _telem.targetRadS - _telem.actualRadS;
 
@@ -476,7 +504,9 @@ void PumpController::printHelp() {
   Serial.println("  <number>            : Shorthand: typing a raw number sets closed-loop RPM directly");
   Serial.println("  DUTY <-1.0 - 1.0>   : Open-loop throttle override (e.g. 'DUTY 0.25' or 'DUTY 25%')");
   Serial.println("  DOSE <ml> [rpm]     : Dose volume (mL) with short-brake and auto suck-back");
-  Serial.println("  SUCKBACK [rev] [rpm]: Trigger anti-drip meniscus retraction (default 0.35 rev)");
+  Serial.println("  PRIME [ml] [rpm]    : Purge line with 25 mL into waste beaker and auto suck-back");
+  Serial.println("  DRAIN [sec] [rpm]   : Drain 17.5 mL line back into bottle (default 35s at 1000 RPM)");
+  Serial.println("  SUCKBACK [rev] [rpm]: Trigger anti-drip meniscus retraction (default 4.5 rev)");
   Serial.println("  REVERSE [rpm]       : Spin pump in reverse (drain line back to bottle)");
   Serial.println("  STOP                : Safely stop the pump (engages active Short Brake)");
   Serial.println("  TUNE <Kp> <Ki> [Kd] : Live update PI gains in SI units [duty/(rad/s)]");
@@ -598,6 +628,24 @@ void PumpController::handleCliCommand(char* cmd) {
     } else {
       Serial.println("[ERROR] Usage: DOSE <target_ml> [target_rpm]");
     }
+  }
+  else if (strncasecmp(cmd, "PRIME", 5) == 0) {
+    float vol = 25.0f;
+    float spd = DOSE_TARGET_RPM;
+    int matched = sscanf(cmd + 5, "%f %f", &vol, &spd);
+    if (vol <= 0.0f) vol = 25.0f;
+    if (matched < 2 || spd <= 0.0f) spd = DOSE_TARGET_RPM;
+    float rad_s = (spd > 25.0f) ? (spd * RPM_TO_RAD_S) : spd;
+    Serial.printf("[PRIME] Priming line with %.1f mL at %.1f RPM into waste beaker...\n", vol, spd);
+    startDose(vol, rad_s);
+  }
+  else if (strncasecmp(cmd, "DRAIN", 5) == 0) {
+    float sec = 35.0f;
+    float spd = 1000.0f;
+    int matched = sscanf(cmd + 5, "%f %f", &sec, &spd);
+    if (sec <= 0.0f) sec = 35.0f;
+    if (matched < 2 || spd <= 0.0f) spd = 1000.0f;
+    startDrain(sec, spd);
   }
   else if (strncasecmp(cmd, "TUNE DEFAULT", 12) == 0 || strncasecmp(cmd, "RESET_GAINS", 11) == 0) {
     resetNvsDefaults();

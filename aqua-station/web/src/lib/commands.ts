@@ -56,7 +56,10 @@ export const ROLE_COMMANDS: Record<string, readonly RoleCommand[]> = {
     { action: 'set_state', target: { mixer: 'on', target_rpm: 600 } },
   ],
   pump: [
-    { action: 'dose', target: { target_ml: 30 } },
+    { action: 'dose', target: { target_ml: 38 } },
+    { action: 'prime', target: { volume_ml: 25 } },
+    { action: 'drain', target: { duration_s: 35 } },
+    { action: 'suckback', target: {} },
     { action: 'stop', target: {} },
     { action: 'force_off', target: {} },
   ],

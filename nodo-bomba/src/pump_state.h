@@ -30,4 +30,5 @@ struct PumpState {
   uint32_t status_code;
   bool dose_completed;
   bool dose_timed_out;
+  bool meniscus_retracted;
 };

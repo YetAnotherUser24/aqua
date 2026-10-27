@@ -447,6 +447,7 @@ constexpr const char* kRpm = "pump_rpm";
 constexpr const char* kMode = "pump_mode";
 constexpr const char* kDoseCompleted = "pump_dose_completed";
 constexpr const char* kDoseTimedOut = "pump_dose_timed_out";
+constexpr const char* kMeniscusRetracted = "pump_meniscus_retracted";
 constexpr const char* kStatus = "drv_status";
 
 constexpr const char* kModeIdle = "idle";
