@@ -39,7 +39,7 @@ from typing import Any
 from ..archive.manifest import Manifest
 from ..db.engine import Database
 from ..schema.registry import SchemaRegistry
-from .bundle import role_files
+from .bundle import role_files, wide_column
 
 log = logging.getLogger("aqua.export.flat")
 
@@ -130,6 +130,7 @@ def _write_wide_csv(
     t0_ms: int | None,
     merge_ms: int = DEFAULT_MERGE_MS,
     declared: Sequence[str] | None = None,
+    authoritative_role: str | None = None,
 ) -> tuple[dict[str, int], list[str], int]:
     """
     Write one wide row per *instant*, every role's fields as columns.
@@ -175,6 +176,13 @@ def _write_wide_csv(
     start_ms = int(started.timestamp() * 1000) if started else None
     end_ms = int(ended.timestamp() * 1000) if ended else None
 
+    if authoritative_role is None:
+        if hasattr(registry, "authoritative_role_for"):
+            do_owner = registry.authoritative_role_for("dissolved_oxygen")
+            authoritative_role = do_owner.role if do_owner else None
+        elif hasattr(registry, "roles") and "od_sensor" in registry.roles:
+            authoritative_role = "od_sensor"
+
     for role in roles:
         schema = registry.roles.get(role)
         if schema is None:
@@ -205,10 +213,11 @@ def _write_wide_csv(
             for field_def in schema.fields:
                 value = row.get(field_def.name)
                 if value not in (None, ""):
-                    # Field names are unique per role in the registry, which is what makes one
-                    # flat column set possible. `od_sensor`'s own fields stay unprefixed while
-                    # a peer echo (`peer_do_mg_l`) keeps its own name, so the two never collide.
-                    fields[field_def.name] = value
+                    # Non-authoritative roles are prefixed (e.g. `aerator_drv_rpm`, `mixer_drv_rpm`)
+                    # to prevent cross-node collisions when distinct actuators share field names.
+                    # The authoritative DO sensor's fields stay unprefixed (`od_do_mg_l`).
+                    col_name = wide_column(role, field_def.name, authoritative_role)
+                    fields[col_name] = value
             samples.append((ts, role, fields))
             count += 1
 
@@ -317,9 +326,18 @@ async def build_flat_export(
     # unlisted or manually-commanded actuators (e.g. aerator or mixer) is never silently dropped.
     roles = list(dict.fromkeys(declared_roles + list(registry.roles)))
 
-    # The union of every candidate role's field names, in a stable order: registry order for known
+    authoritative_role = None
+    if hasattr(registry, "authoritative_role_for"):
+        do_owner = registry.authoritative_role_for("dissolved_oxygen")
+        authoritative_role = do_owner.role if do_owner else None
+    elif hasattr(registry, "roles") and "od_sensor" in registry.roles:
+        authoritative_role = "od_sensor"
+
+    # The union of every candidate role's column names, in a stable order: registry order for known
     # roles, then any extra columns the archive carries. Built first so the header is
     # written once and every row can be emitted without knowing what came before.
+    # Non-authoritative roles are prefixed (e.g. aerator_drv_rpm, mixer_drv_rpm) using wide_column
+    # to eliminate cross-role collisions while keeping od_sensor's authoritative fields bare.
     columns = list(_PREFIX_COLUMNS)
     # How far apart the stamps of a merged row were, empty for a single sample. Last of the
     # group columns so the readings stay adjacent, and present unconditionally so a reader
@@ -330,8 +348,9 @@ async def build_flat_export(
         if schema is None:
             continue
         for field_def in schema.fields:
-            if field_def.name not in columns:
-                columns.append(field_def.name)
+            col_name = wide_column(role, field_def.name, authoritative_role)
+            if col_name not in columns:
+                columns.append(col_name)
 
     telemetry_path = out_dir / "telemetry_native.csv"
 
@@ -350,6 +369,7 @@ async def build_flat_export(
         tz_name=settings.timezone,
         t0_ms=t0_ms,
         declared=declared_roles if declared_roles else None,
+        authoritative_role=authoritative_role,
     )
 
     if not per_role_rows:
@@ -449,7 +469,7 @@ def write_manifest(
         "warnings": report.warnings,
         "notes": [
             "Wide: one row per *instant*, sorted ascending. Every role's fields are columns on "
-            "that row, so od_do_mg_l and drv_rpm sit on the same line when the two nodes "
+            "that row, so od_do_mg_l and aerator_drv_rpm sit on the same line when the two nodes "
             "reported the same moment.",
             f"Instants are merged within {DEFAULT_MERGE_MS} ms: the nodes do not share a clock, "
             "so the same physical moment arrives as stamps a few ms apart. When a row combines "
@@ -471,8 +491,11 @@ def write_manifest(
             "both roles reported the same (merged) instant.",
             "t_rel_ms is milliseconds since the experiment's started_at; the source "
             "t_dev_ms is preserved verbatim and no clock offset was applied.",
-            "Dissolved oxygen comes from the authoritative od_sensor role; peer_* columns on "
-            "other roles are their own control-loop input and must not be averaged with it.",
+            "Dissolved oxygen and water temperature come from the authoritative od_sensor role "
+            "and stay bare (e.g. od_do_mg_l); actuator and auxiliary roles are prefixed with their "
+            "role name (e.g. aerator_drv_rpm, mixer_drv_rpm, pump_pump_dosed_ml) to guarantee "
+            "unambiguous, collision-free columns.",
+            "peer_* columns on other roles are their own control-loop input and must not be averaged with it.",
         ],
     }
     path.write_text(json.dumps(document, indent=2, default=str), encoding="utf-8")

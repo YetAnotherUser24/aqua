@@ -645,7 +645,7 @@ def test_wide_export_puts_both_roles_on_one_row_per_instant(tmp_path: Path):
 
     out = tmp_path / "wide.csv"
     registry = load_registry()
-    columns = ["role", "t_dev_ms", "t_rel_ms", "t_src", "seq", "od_do_mg_l", "drv_rpm"]
+    columns = ["role", "t_dev_ms", "t_rel_ms", "t_src", "seq", "od_do_mg_l", "aerator_drv_rpm"]
     per_role, missing, total = flat._write_wide_csv(
         out,
         root=tmp_path,
@@ -668,13 +668,13 @@ def test_wide_export_puts_both_roles_on_one_row_per_instant(tmp_path: Path):
         "rows must be sorted ascending, though the archive was not"
     )
     # The whole feature, asserted: one row carries both roles' fields.
-    assert rows[0]["od_do_mg_l"] == "7.4" and rows[0]["drv_rpm"] == "0", (
+    assert rows[0]["od_do_mg_l"] == "7.4" and rows[0]["aerator_drv_rpm"] == "0", (
         "the instants both roles reported must share a row"
     )
-    assert rows[1]["drv_rpm"] == "120" and not rows[1]["od_do_mg_l"], (
+    assert rows[1]["aerator_drv_rpm"] == "120" and not rows[1]["od_do_mg_l"], (
         "an instant only the aerator reported leaves the sensor column EMPTY, not repeated"
     )
-    assert rows[2]["od_do_mg_l"] == "7.3" and rows[2]["drv_rpm"] == "240"
+    assert rows[2]["od_do_mg_l"] == "7.3" and rows[2]["aerator_drv_rpm"] == "240"
 
 
 def test_a_value_is_never_carried_into_the_next_row(tmp_path: Path):
@@ -729,14 +729,14 @@ def test_a_value_is_never_carried_into_the_next_row(tmp_path: Path):
         root=tmp_path,
         roles=["od_sensor", "aerator"],
         registry=load_registry(),
-        columns=["role", "t_dev_ms", "t_rel_ms", "t_src", "seq", "od_do_mg_l", "drv_rpm"],
+        columns=["role", "t_dev_ms", "t_rel_ms", "t_src", "seq", "od_do_mg_l", "aerator_drv_rpm"],
         started=datetime(2026, 10, 9, 12, 0, tzinfo=UTC),
         ended=datetime(2026, 10, 9, 13, 0, tzinfo=UTC),
         t0_ms=MINUTE_MS,
     )
 
     rows = list(csv.DictReader(out.open()))
-    assert rows[1]["drv_rpm"] == "240", "the aerator's own reading is there"
+    assert rows[1]["aerator_drv_rpm"] == "240", "the aerator's own reading is there"
     assert rows[1]["od_do_mg_l"] == "", (
         "the sensor did not report at this instant, so its cell must be empty -- filling it would invent a reading"
     )
@@ -799,7 +799,7 @@ def test_a_merged_row_reports_its_spread_even_when_it_is_zero(tmp_path: Path):
         root=tmp_path,
         roles=["od_sensor", "aerator"],
         registry=load_registry(),
-        columns=["role", "t_dev_ms", "t_rel_ms", "t_src", "seq", "merge_spread_ms", "od_do_mg_l", "drv_rpm"],
+        columns=["role", "t_dev_ms", "t_rel_ms", "t_src", "seq", "merge_spread_ms", "od_do_mg_l", "aerator_drv_rpm"],
         started=datetime(2026, 10, 9, 12, 0, tzinfo=UTC),
         ended=datetime(2026, 10, 9, 13, 0, tzinfo=UTC),
         t0_ms=MINUTE_MS,
@@ -866,13 +866,13 @@ def test_the_merge_window_stays_under_the_fastest_role_interval(tmp_path: Path):
         root=tmp_path,
         roles=["aerator"],
         registry=registry,
-        columns=["role", "t_dev_ms", "t_rel_ms", "t_src", "seq", "merge_spread_ms", "drv_rpm"],
+        columns=["role", "t_dev_ms", "t_rel_ms", "t_src", "seq", "merge_spread_ms", "aerator_drv_rpm"],
         started=datetime(2026, 10, 9, 12, 0, tzinfo=UTC),
         ended=datetime(2026, 10, 9, 13, 0, tzinfo=UTC),
         t0_ms=MINUTE_MS,
     )
     assert total == 2, "two consecutive samples of one role must never merge"
-    rpms = [r["drv_rpm"] for r in csv.DictReader(out.open())]
+    rpms = [r["aerator_drv_rpm"] for r in csv.DictReader(out.open())]
     assert rpms == ["200", "240"], "and neither reading may be dropped"
 
 
@@ -937,5 +937,123 @@ async def test_undeclared_role_with_telemetry_is_included_in_export(tmp_path: Pa
     with (out_native / "telemetry_native.csv").open() as fh:
         reader = list(csv.DictReader(fh))
     assert len(reader) == 2
-    assert any(r["drv_rpm"] == "300" for r in reader), "aerator columns and data must be present"
+    assert any(r.get("aerator_drv_rpm") == "300" for r in reader), "aerator columns and data must be present"
+
+
+@pytest.mark.asyncio
+async def test_flat_export_disambiguates_actuator_fields_aerator_and_mixer(tmp_path: Path, registry):
+    """
+    Aerator and mixer both define `drv_rpm`, `drv_rpm_target`, `drv_running`, `drv_status`.
+    Native export must keep them in distinct columns (`aerator_drv_rpm`, `mixer_drv_rpm`)
+    so mixer speed (e.g. 1000 RPM) does not corrupt or overwrite aerator speed (e.g. 230 RPM).
+    """
+    class _Settings:
+        def __init__(self, root: Path):
+            self.archive = type("Archive", (), {"root": root})()
+            self.timezone = "UTC"
+
+    class _MockDB:
+        available = True
+
+        async def fetchrow(self, query, *args):
+            return {
+                "id": "EXP-2026-10-09-02",
+                "title": "Aerator + Mixer test",
+                "status": "completed",
+                "roles": ["od_sensor", "aerator", "mixer"],
+                "started_at": datetime(2026, 10, 9, 12, 0, tzinfo=UTC),
+                "ended_at": datetime(2026, 10, 9, 12, 5, tzinfo=UTC),
+                "calibration": {},
+            }
+
+        async def fetch(self, query, *args):
+            return []
+
+    root = tmp_path / "telemetry"
+    # Write sensor data at t0
+    _archive(
+        root,
+        "od_sensor",
+        [
+            {
+                "role": "od_sensor",
+                "t_dev_ms": str(MINUTE_MS),
+                "t_rel_ms": "0",
+                "t_src": "rtc",
+                "seq": "1",
+                "od_do_mg_l": "5.50",
+            }
+        ],
+    )
+    # Write aerator data at t0 (230 RPM) and t0+200ms
+    _archive(
+        root,
+        "aerator",
+        [
+            {
+                "role": "aerator",
+                "t_dev_ms": str(MINUTE_MS),
+                "t_rel_ms": "0",
+                "t_src": "espnow",
+                "seq": "1",
+                "drv_rpm": "230.0",
+                "drv_rpm_target": "230.0",
+            },
+            {
+                "role": "aerator",
+                "t_dev_ms": str(MINUTE_MS + 200),
+                "t_rel_ms": "200",
+                "t_src": "espnow",
+                "seq": "2",
+                "drv_rpm": "231.0",
+                "drv_rpm_target": "230.0",
+            },
+        ],
+    )
+    # Write mixer data at t0 (1000 RPM)
+    _archive(
+        root,
+        "mixer",
+        [
+            {
+                "role": "mixer",
+                "t_dev_ms": str(MINUTE_MS),
+                "t_rel_ms": "0",
+                "t_src": "ntp",
+                "seq": "1",
+                "drv_rpm": "1000.0",
+                "drv_rpm_target": "1000.0",
+            }
+        ],
+    )
+
+    out_native = tmp_path / "out_native"
+    report = await flat.build_flat_export(
+        _Settings(root),
+        manifest=None,
+        db=_MockDB(),
+        registry=registry,
+        experiment_id="EXP-2026-10-09-02",
+        out_dir=out_native,
+        compress=False,
+    )
+
+    assert "aerator" in report.roles_present
+    assert "mixer" in report.roles_present
+    assert "od_sensor" in report.roles_present
+
+    with (out_native / "telemetry_native.csv").open() as fh:
+        reader = list(csv.DictReader(fh))
+
+    # At t0, all 3 roles coincide within merge_ms
+    t0_row = next(r for r in reader if int(r["t_dev_ms"]) == MINUTE_MS)
+    assert t0_row["od_do_mg_l"] == "5.50", "sensor DO must stay bare"
+    assert t0_row["aerator_drv_rpm"] == "230.0", "aerator RPM must be in aerator_drv_rpm"
+    assert t0_row["mixer_drv_rpm"] == "1000.0", "mixer RPM must be in mixer_drv_rpm"
+
+    # At t0+200, only aerator reported
+    t200_row = next(r for r in reader if int(r["t_dev_ms"]) == MINUTE_MS + 200)
+    assert t200_row["aerator_drv_rpm"] == "231.0"
+    assert t200_row["mixer_drv_rpm"] == "", "mixer cell must remain empty when it did not report"
+
 

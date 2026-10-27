@@ -259,6 +259,9 @@ class _Registry:
     def version(self):
         return self._real.version
 
+    def authoritative_role_for(self, quantity: str):
+        return self._real.authoritative_role_for(quantity)
+
 
 class _ExportDB:
     def __init__(self, started: datetime | None = None):
@@ -340,18 +343,18 @@ async def test_native_export_keeps_every_row_at_native_rate(tmp_path: Path) -> N
 
     # Every aerator sample survives, at its own cadence. This is the data the aligned bundle
     # loses, so it is the property worth pinning.
-    aero_rpms = [r["drv_rpm"] for r in rows if r["drv_rpm"]]
+    aero_rpms = [r["aerator_drv_rpm"] for r in rows if r.get("aerator_drv_rpm")]
     assert len(aero_rpms) == 25, "all 25 aerator samples must be present, at native rate"
     assert aero_rpms[0] == "200" and aero_rpms[-1] == "224"
 
-    sensor_dos = [r["od_do_mg_l"] for r in rows if r["od_do_mg_l"]]
+    sensor_dos = [r["od_do_mg_l"] for r in rows if r.get("od_do_mg_l")]
     assert len(sensor_dos) == 5, "all 5 sensor samples must be present"
     assert sensor_dos[-1] == "5.40"
 
     # The payload of the change: at an instant both nodes reported, one row carries both.
-    both = [r for r in rows if r["od_do_mg_l"] and r["drv_rpm"]]
+    both = [r for r in rows if r.get("od_do_mg_l") and r.get("aerator_drv_rpm")]
     assert both, "the two roles must share rows where their instants coincide"
-    assert both[0]["od_do_mg_l"] == "5.00" and both[0]["drv_rpm"] == "200"
+    assert both[0]["od_do_mg_l"] == "5.00" and both[0]["aerator_drv_rpm"] == "200"
 
     # And sorted, so a reader does not have to.
     stamps = [int(r["t_dev_ms"]) for r in rows]
