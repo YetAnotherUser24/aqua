@@ -63,3 +63,5 @@ deploy/*.log
 /data/
 aqua-station/data/
 *.csv.gz
+.matlab_prefs/
+.vscode/settings.json
