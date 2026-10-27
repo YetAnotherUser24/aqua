@@ -114,77 +114,58 @@ stored anywhere else.
 
 ## 2. Post-install configuration
 
-### 2.1 Supabase Storage credentials
+### 2.1 Cloudflare R2 Storage credentials & 24/7 Web Portal
 
 ```bash
 sudo -e /etc/aqua/gateway.env
 ```
 
-Set `AQUA_BACKUP__ENDPOINT_URL`, `AQUA_BACKUP__ACCESS_KEY_ID` and
-`AQUA_BACKUP__SECRET_ACCESS_KEY`.
+AquaControl uses **Cloudflare R2** (S3-compatible object storage) for durable off-Pi archival with 10 GB free tier storage, zero egress bandwidth fees, and no inactivity pausing.
 
-The endpoint is **S3-compatible**, not the PostgREST URL:
+Configure the backup block in `/etc/aqua/gateway.env`:
 
+```ini
+AQUA_BACKUP__ENABLED=true
+AQUA_BACKUP__BUCKET=aqua-station-r2
+AQUA_BACKUP__ENDPOINT_URL=https://<account_id>.r2.cloudflarestorage.com
+AQUA_BACKUP__REGION=auto
+AQUA_BACKUP__ACCESS_KEY_ID=<r2-access-key-id>
+AQUA_BACKUP__SECRET_ACCESS_KEY=<r2-secret-access-key>
+AQUA_BACKUP__VERIFY_AFTER_UPLOAD=true
 ```
-https://<project-ref>.supabase.co/storage/v1/s3
-```
 
-These are **Storage S3 access keys**, and they are not the project API keys. The
-`anon` and `service_role` keys under *Settings → API* cannot sign an S3 request:
-the endpoint rejects them with `403 Forbidden` and an **empty** error message
-(`An error occurred () when calling the PutObject operation`), which reads like a
-network fault and is not one. Generate the keys under *Storage → S3 Access Keys*.
+These credentials come from Cloudflare Dashboard -> **R2** -> **Manage R2 API Tokens** -> **Create API Token** (Permissions: *Object Read & Write*).
 
-Create the bucket named by `AQUA_BACKUP__BUCKET` (default `aqua-archive`) in the
-dashboard first — the flush uploads into an existing bucket and never creates
-one. Set `AQUA_BACKUP__REGION` to the region shown beside the keys; for a project
-whose pooler host is `aws-0-us-west-2.pooler.supabase.com` that is `us-west-2`.
+#### Custom Domain y Visualizador Web 24/7
+The bucket is connected to the custom domain `data.aqua-station.live`:
+- **Direct Edge Access:** Cloudflare Edge serves `https://data.aqua-station.live` directly with SSL.
+- **Root Redirect Rule:** A Dynamic Redirect rule in Cloudflare forwards requests to `/` towards `/index.html`.
+- **Chart.js SCADA Portal:** The root `index.html` file includes an interactive multi-axis visualizer for DO (mg/L), motor RPM, temperature (°C), and mixer speed, along with direct download links for experiment `.tar.gz` bundles and raw daily CSVs.
 
-Two things that cost time when setting this up, both of which fail with a message
-that points somewhere other than the cause:
-
-* **The project's API keys are not interchangeable with its S3 keys.** The new-style
-  `sb_publishable_…` and `sb_secret_…` keys are not accepted as a Bearer token by the
-  Storage API either — creating a bucket with one returns `Invalid Compact JWS`. Only
-  *Storage → S3 Access Keys* work for the flush, and only the dashboard (or SQL) can
-  create the bucket until they exist.
-* **The direct Postgres host is IPv6-only.** `db.<ref>.supabase.co` has no A record, so
-  a host without an IPv6 route fails with `Network is unreachable` — for admin SQL use
-  the IPv4 pooler instead, remembering that a pooled username carries the project ref:
-
-  ```
-  postgresql://postgres.<ref>:<password>@aws-0-<region>.pooler.supabase.com:5432/postgres
-  ```
-
-  The project's region is also its IPv6 prefix: an address in `2600:1f18::/32` is
-  `us-east-1`. `AQUA_DATABASE_URL` still points at loopback — the Pi's own Postgres is
-  the operational database, and the project is used for the durable archive.
-
-Verify the keys before trusting the timer, since the error above is unhelpful:
-
+Verify the connection:
 ```bash
 /opt/aqua-station/gateway/.venv/bin/python - <<'PY'
 import boto3
 from botocore.config import Config
 s3 = boto3.client("s3",
-    endpoint_url="https://<project-ref>.supabase.co/storage/v1/s3",
-    region_name="us-west-2",
+    endpoint_url="https://<account_id>.r2.cloudflarestorage.com",
+    region_name="auto",
     aws_access_key_id="<access-key-id>",
     aws_secret_access_key="<secret>",
-    config=Config(signature_version="s3v4", s3={"addressing_style": "path"}))
-print(s3.list_objects_v2(Bucket="aqua-archive", MaxKeys=1))
+    config=Config(signature_version="s3v4"))
+print(s3.list_objects_v2(Bucket="aqua-station-r2", MaxKeys=1))
 PY
 ```
 
-Then restart and dry-run the flush:
-
+Then restart and test the sync:
 ```bash
 sudo systemctl restart aqua-gateway
+aqua-r2-sync
 sudo systemctl start aqua-flush.service
 journalctl -u aqua-flush -n 50 --no-pager
 ```
 
-A successful flush logs `uploaded=1 ... verified=1`; a failed one exits non-zero
+A successful flush logs `uploaded=... verified=... failed=0`; a failed one exits non-zero
 and records the reason in the manifest (`last_error`), which is what the runbook
 reads.
 

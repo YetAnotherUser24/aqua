@@ -375,7 +375,17 @@ export function ExportHistoryModal({
           ) : null}
         </div>
 
-        <div className="flex justify-end pt-2 border-t border-scada-border">
+        <div className="flex justify-between items-center pt-2 border-t border-scada-border">
+          <a
+            href="https://data.aqua-station.live"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-scada-well text-sky-400 hover:text-white rounded-xl text-xs border border-scada-border hover:border-sky-500 transition font-mono"
+            title="Abre el repositorio en la nube con visualizador de curvas 24/7 (Cloudflare R2)"
+          >
+            <span>☁ Archivo Cloud 24/7</span>
+            <span>&rarr;</span>
+          </a>
           <button
             type="button"
             onClick={onClose}

@@ -29,6 +29,7 @@ import logging
 import time
 from collections.abc import Mapping
 from datetime import UTC, datetime
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ..events.model import Event, EventType, Scope, Source
@@ -519,6 +520,7 @@ class Orchestrator:
             experiment_id=experiment_id,
             detail={"requested_by": requested_by, "t_rel_s": self._t_rel_s()},
         )
+        asyncio.create_task(self._auto_export_and_upload(experiment_id))
         self._experiment_id = None
         self._recipe_id = None
         self._phase_index = 0
@@ -528,6 +530,66 @@ class Orchestrator:
         self._paused_accum_s = 0.0
         self._paused_at_s = None
         await self._persist_state(STATE_IDLE)
+
+    async def _auto_export_and_upload(self, experiment_id: str) -> None:
+        """
+        Build exports and sync them to Cloudflare R2 immediately after experiment completion.
+        Runs in background without delaying state transition to IDLE.
+        """
+        try:
+            # Short grace period for trailing telemetry flushes to settle
+            await asyncio.sleep(4.0)
+            log.info("auto-export: building aligned and native bundles for %s", experiment_id)
+
+            from ..export.bundle import build_bundle
+            from ..export.flat import build_flat_export
+
+            # 1. Aligned 1 Hz export
+            aligned_dir = self.gateway.settings.export_root / experiment_id
+            try:
+                await build_bundle(
+                    self.gateway.settings,
+                    self.gateway.manifest,
+                    self.gateway.db,
+                    self.gateway.registry,
+                    experiment_id,
+                    out_dir=aligned_dir,
+                    grid_seconds=1.0,
+                    compress=True,
+                )
+            except Exception as e:
+                log.warning("auto-export: build_bundle failed for %s: %s", experiment_id, e)
+
+            # 2. Native rate export
+            native_dir = self.gateway.settings.export_root / f"{experiment_id}_native"
+            try:
+                await build_flat_export(
+                    self.gateway.settings,
+                    self.gateway.manifest,
+                    self.gateway.db,
+                    self.gateway.registry,
+                    experiment_id,
+                    out_dir=native_dir,
+                    compress=True,
+                )
+            except Exception as e:
+                log.warning("auto-export: build_flat_export failed for %s: %s", experiment_id, e)
+
+            # 3. Trigger Cloudflare R2 sync
+            log.info("auto-export: triggering R2 upload for %s", experiment_id)
+            import shutil
+            import subprocess
+
+            sync_cmd = "/usr/local/bin/aqua-r2-sync"
+            if shutil.which(sync_cmd) or Path(sync_cmd).exists():
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(
+                    None,
+                    lambda: subprocess.run([sync_cmd], check=False),
+                )
+                log.info("auto-export: successfully uploaded %s to Cloudflare R2", experiment_id)
+        except Exception as exc:
+            log.error("auto-export: unhandled exception for %s: %s", experiment_id, exc)
 
     async def _disarm(self, *, experiment_id: str, requested_by: str) -> None:
         """Issue a stop to every role this recipe touched. Best-effort per role."""

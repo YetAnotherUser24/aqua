@@ -22,15 +22,15 @@ kind of platform. This repo moves it onto one box that is always on.
 ## Design in one picture
 
 ```
-ESP32 nodes ──MQTT──> Mosquitto ──> aqua-gateway ──┬──> live cache ──SSE 1 Hz──> browser
+ESP32 nodes ──MQTT──> Mosquitto ──> aqua-gateway ──┬──> live cache ──SSE 1 Hz──> Caddy ──> Cloudflare Tunnel ──> https://aqua-station.live
  (4 roles)            (LAN)         (Python)       ├──> CSV archive ──> /data/telemetry
                                                    ├──> 1-min rollups ──> PostgreSQL
                                                    └──> unified event stream
                                                                     │
-                                            daily 03:00 America/Lima│
+                                                post-run / daily R2 │
                                                                     v
-                                             Supabase Storage (raw/*.csv.gz,
-                                                               experiments/*.tar.gz)
+                                               Cloudflare R2 Edge Storage (raw/*.csv.gz,
+                                                exports/*.tar.gz) ──> https://data.aqua-station.live
 ```
 
 **Notable properties**
@@ -89,11 +89,13 @@ Done and verified
   `POST /api/state/phase-mode?phase_id=…&mode=…` — the orchestrator's MANUAL mode waits for an
   operator confirm instead of advancing on its own.
 - `firmware-patches/` — all four `.patch` files land the MQTT migration.
+- `POST /api/experiments/{id}/download` — export bundles (aligned CSV + manifest) and native high-frequency bundles are directly downloadable over HTTP and via the UI export modal.
+- Automated post-experiment cloud sync — `_auto_export_and_upload()` in `engine.py` builds export bundles and uploads them to Cloudflare R2 via `aqua-r2-sync` as soon as a run finishes.
+- 24/7 Cloudflare R2 edge data portal (`https://data.aqua-station.live/index.html`) — interactive multi-axis charting (DO, RPM, Temp, Mixer) and one-click downloads available even when the bench Pi is offline.
+- Cloudflare Tunnel (`https://aqua-station.live`) — zero-port-forwarding secure remote access to live SCADA dashboard and SSE telemetry stream.
 
 Not done yet
 
-- The export bundle is written on the gateway host (`/data/telemetry/exports/`) and is not
-  downloadable over HTTP.
 - No web test framework — `npm run typecheck && npm run build` is the gate. Component
   behaviour is verified by the manual table in `docs/TEST-PLAN.md` §A2.
 

@@ -20,17 +20,27 @@ flowchart TB
     MQ["Mosquitto MQTT Broker · 192.168.4.1:1883"]
     subgraph GW["aqua-station (Raspberry Pi Gateway)"]
       ING["Ingest & Envelope Validation"]
-      REC["Recipe Orchestration Engine (recipes.py)"]
+      REC["Recipe Orchestration Engine (engine.py)"]
       CSV["Daily Aligned Telemetry CSV Writer"]
       API["FastAPI Backend & SSE Telemetry Stream"]
+      R2SYNC["Auto-Upload & aqua-r2-sync"]
     end
     CD["Caddy Reverse Proxy · Static React Dashboard"]
+  end
+
+  subgraph WAN["Internet & Cloudflare Edge"]
+    CFT["Cloudflare Tunnel (cloudflared)"]
+    DOM_LIVE["https://aqua-station.live (Live SCADA & SSE API)"]
+    R2["Cloudflare R2 Object Storage (aqua-station-r2)"]
+    DOM_DATA["https://data.aqua-station.live (24/7 Edge Data Portal)"]
   end
 
   NS -->|"ESP-NOW Radio (<5 ms latency)"| NA
   NA & NM & NS & NP -->|"MQTT: tlm/ | cmd/ | ack/"| MQ
   MQ <--> GW
   GW <--> CD
+  CD <--> CFT <--> DOM_LIVE
+  R2SYNC -->|"S3 API (raw/ + exports/)"| R2 <--> DOM_DATA
 ```
 
 ### Component Roles & Directory Layout
@@ -39,8 +49,8 @@ flowchart TB
 | `nodo-aerador/` | `aerator` | ESP32-S3 + ODrive S1 UART | Mechanical aeration, closed-loop DO control (Fuzzy/PID at 20 Hz). |
 | `nodo-sensor-od/` | `od_sensor` | ESP32 + Modbus RTU RS485 | Optical DO sensing (Aqualabo OPTOD), RTC DS3231 timestamping, ESP-NOW broadcast. |
 | `nodo-bomba/` | `pump` | ESP32 + DRV8871 + AS5600 | Peristaltic volumetric dosing of $Na_2SO_3$ for chemical deoxygenation. |
-| `nodo-mezclador/` | `mixer` | ESP32-S3 + T-200 / SNR8503 | Hydrodynamic mixing ($\sim 1000\text{ RPM}$) to prevent stratification and maintain probe flow. |
-| `aqua-station/` | Gateway | Raspberry Pi 4 / Linux | Mosquitto broker, FastAPI backend, recipe orchestrator, PostgreSQL, React UI. |
+| `nodo-mezclador/` | `mixer` | ESP32-S3 + T-200 / SNR8503 | Hydrodynamic mixing ($\sim 1000\text{--}1200\text{ RPM}$) to prevent stratification and maintain probe flow. |
+| `aqua-station/` | Gateway | Raspberry Pi 4 / Linux | Mosquitto broker, FastAPI backend, recipe orchestrator, SQLite/PostgreSQL, React UI, Cloudflare Tunnel & R2 sync. |
 | `control-notes/` | Research | Markdown docs | Mathematical modeling, clean-water constraints, and academic control theory. |
 | `scripts/` | Tooling | Python / MATLAB | System identification, calibration, and telemetry analysis. |
 

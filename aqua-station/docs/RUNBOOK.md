@@ -39,11 +39,11 @@ journalctl -u aqua-flush -n 100 --no-pager
 
 | Cause | Fix |
 |---|---|
-| Credentials wrong or expired | Correct `/etc/aqua/gateway.env`, then `systemctl start aqua-flush` |
-| `An error occurred () when calling the PutObject operation` with no message | The keys are wrong, or they are the project API keys (`anon` / `service_role`), which cannot sign S3 requests. Supabase needs keys from *Storage → S3 Access Keys* — see `docs/DEPLOYMENT.md` §2.1 |
-| No internet | `curl -sI https://<project-ref>.supabase.co`. Wait, or tether. |
-| Bucket missing | Create `aqua-archive` in Supabase Storage |
-| Storage quota exceeded | Free tier is 1 GB. Prune old objects, or move to a paid tier. |
+| Credentials wrong or expired | Correct `/etc/aqua/gateway.env`, then `systemctl start aqua-flush` or run `aqua-r2-sync` |
+| R2 authentication failure | Verify R2 API token has *Object Read & Write* permissions in Cloudflare Dashboard — see `docs/DEPLOYMENT.md` §2.1 |
+| No internet | Check campus Wi-Fi / portal cautivo (`aqua-captive-url`). |
+| Bucket missing | Bucket `aqua-station-r2` must exist in Cloudflare R2. |
+| Custom domain access blocked | Check `data.aqua-station.live` has `enabled: true` in R2 custom domains settings. |
 | Verification failing repeatedly | `archive_verify_failed` events. **Do not** delete local files. Investigate: a mismatch means the upload is corrupt, not that the data is bad. |
 
 **Check the backlog:**
@@ -55,8 +55,9 @@ sqlite3 /var/lib/aqua-gateway/manifest.db \
    ORDER BY closed_at LIMIT 20;"
 ```
 
-**Force a flush** (safe to re-run; verification is idempotent):
+**Force a sync / flush** (safe to re-run; verification is idempotent):
 ```bash
+aqua-r2-sync
 sudo systemctl start aqua-flush.service
 ```
 
@@ -185,23 +186,23 @@ sqlite3 /var/lib/aqua-gateway/manifest.db \
 
 ## Restoring from the archive
 
-The Pi is a rolling buffer; **Supabase Storage is the durable archive**.
+The Pi is a rolling buffer; **Cloudflare R2 is the durable edge archive**.
 
 ```
 raw/<role>/YYYY-MM-DD.csv.gz
-events/YYYY-MM.csv.gz
-experiments/<exp_id>/bundle.tar.gz
+telemetry/<role>/YYYY-MM-DD.csv
+exports/<exp_id>/bundle.tar.gz
+nodo-bomba/
 ```
 
 ```bash
-# Rebuild a local window after a card replacement
-aws s3 sync s3://aqua-archive/raw/ ./raw/ \
-  --endpoint-url https://<project-ref>.supabase.co/storage/v1/s3
-
-# One experiment, ready for MATLAB
-aws s3 cp s3://aqua-archive/experiments/EXP-2026-10-09-01/bundle.tar.gz . \
-  --endpoint-url https://<project-ref>.supabase.co/storage/v1/s3
+# Direct HTTP download from edge portal (no AWS credentials required)
+curl -O https://data.aqua-station.live/exports/EXP-2026-10-26-03/bundle.tar.gz
 tar xzf bundle.tar.gz
+
+# Rebuild a local window after an SD card replacement via S3 API
+aws s3 sync s3://aqua-station-r2/raw/ /data/telemetry/ \
+  --endpoint-url https://2466a556724af7cbd00d3c3197a35de2.r2.cloudflarestorage.com
 ```
 
 A bundle contains the **combined, time-aligned wide dataset** plus `events.csv` and

@@ -38,14 +38,18 @@ flowchart TB
       RU["rollup: 1-min aggregates"]
       EVD["events: unified stream"]
       API["FastAPI"]
-      BK["backup: flush · verify · prune"]
+      BK["backup: flush · verify · prune · aqua-r2-sync"]
     end
     DB[("PostgreSQL 17 tuned · ~65 MB")]
     FS["/data/telemetry/*.csv[.gz]"]
     CD["Caddy · ~20 MB"]
   end
-  BR["Browser · static dashboard"]
-  SB["Supabase Storage"]
+  subgraph CLOUD["Cloudflare Edge & Internet"]
+    TUN["Cloudflare Tunnel (cloudflared)"]
+    LIVE["https://aqua-station.live (Live UI & API)"]
+    R2["Cloudflare R2 Object Storage (aqua-station-r2)"]
+    DATA["https://data.aqua-station.live (24/7 Data Portal)"]
+  end
 
   NA & NS & NM & NP -->|"MQTT tlm/cmd/ack"| MQ
   NS -.->|"ESP-NOW: DO + TIME"| NA
@@ -56,10 +60,10 @@ flowchart TB
   IN --> EVD --> DB
   API --> DB
   CD --> API
-  CD --> BR
+  CD <--> TUN <--> LIVE
   API -->|commands| MQ
   BK --> FS
-  BK -->|"daily 03:00 America/Lima"| SB
+  BK -->|"daily 03:00 & auto post-run"| R2 <--> DATA
 ```
 
 ## 3. Data flow
@@ -82,11 +86,11 @@ worth ~650× more than anything we could do to the telemetry path — see `deplo
 **Archive.** Per-role, per-day CSV, rotated and gzipped at midnight Lima time, tracked in a SQLite
 manifest. See `docs/DATA-FORMAT.md`.
 
-**Flush.** Daily at 03:00 Lima: upload unflushed files to Supabase Storage, verify sha256 and row
-count on both ends, mark the manifest, then prune what is eligible.
+**Flush.** Daily at 03:00 Lima and automatically after every experiment run: upload unflushed files and export bundles to Cloudflare R2 (`aqua-station-r2`), verify sha256 and row
+count on both ends, mark the manifest, and sync to the edge portal (`https://data.aqua-station.live`). Local files are pruned only when eligible.
 
-**Export.** On demand or at experiment end, assemble the combined time-aligned wide dataset plus the
-event overlay into a bundle. Derived, never stored at write time — see `docs/DATA-FORMAT.md` §6.
+**Export.** Generated automatically at experiment end (or on demand), assembling the combined time-aligned wide dataset plus the
+event overlay into a bundle and uploading it immediately to Cloudflare R2 — see `docs/DATA-FORMAT.md` §6.
 
 ## 4. Why these choices
 

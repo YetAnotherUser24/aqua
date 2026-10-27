@@ -5,7 +5,7 @@ Two tiers, deliberately:
 | Tier | Storage | Holds | Cost per GB |
 |---|---|---|---|
 | Operational | PostgreSQL 17 | devices, commands, events, experiments, 1-minute rollups | higher |
-| Archive | Files on SD → Supabase Storage | full-fidelity telemetry CSV | ~6× cheaper |
+| Archive | Files on SD → Cloudflare R2 | full-fidelity telemetry CSV & experiment bundles | Free tier (10 GB, $0 egress) |
 
 A relational row costs ~200 B effectively (tuple header + columns + index + WAL share) and dirties
 an 8 KB page on every write. A CSV row costs ~85 B and appends sequentially. For an immutable,
@@ -113,36 +113,35 @@ If space is low and **nothing** is eligible, the gateway raises `retention_block
 PostgreSQL and TimescaleDB retention, if ever enabled, must be **≥** local retention — otherwise
 you delete the queryable copy before the archive has it.
 
-## 5. Supabase archive layout
+## 5. Cloudflare R2 archive layout
 
-Object storage, not database rows. Compressed CSV is ~20× better fit at ~6× lower cost per GB, and
-raw 5 Hz rows do not fit a database budget: at ~200 B/row, 5 Hz is ~86 MB/day, which exhausts the
-Free tier's 500 MB database in about six days.
+Object storage (S3-compatible API), not database rows. Cloudflare R2 offers 10 GB free tier storage with **zero egress fees**, enabling permanent, free public download of full-fidelity telemetry and historical bundles without worrying about bandwidth metering.
 
 ```
-aqua-archive/
-├── raw/<role>/YYYY-MM-DD.csv.gz          ≈ 100 MB/yr gzipped at planned rates
-├── events/YYYY-MM.csv.gz
-└── experiments/<exp_id>/bundle.tar.gz    ≈ largest item — see below
+aqua-station-r2/
+├── index.html                                 # 24/7 web portal & interactive Chart.js viewer
+├── raw/<role>/YYYY-MM-DD.csv[.gz]             # raw sensor & actuator telemetry logs
+├── telemetry/<role>/YYYY-MM-DD.csv            # uncompressed telemetry mirror
+├── exports/<exp_id>/bundle.tar.gz             # aligned experiment bundles
+├── exports/<exp_id>/telemetry.csv             # aligned wide CSV (browser-fetchable)
+├── exports/<exp_id>_native/bundle.tar.gz      # native unresampled 5 Hz / 20 Hz bundle
+└── nodo-bomba/                                # pump sysid, step response, and validation CSVs
 ```
 
-Free tier is 1 GB storage / 5 GB egress, so roughly 9 years of raw. **Experiment bundles are the
-biggest item**, because they contain combined wide telemetry; the bundle therefore references raw
-files by key rather than duplicating them, and stores only the derived, aligned view.
+Public edge access: `https://data.aqua-station.live` serves the static viewer and direct file downloads even when the Raspberry Pi gateway is powered off.
 
 ## 6. Experiment bundle
 
-Built at export time (or automatically at experiment end), never at write time — you cannot know
-which nodes will participate or how to join them until the experiment is over.
+Built automatically at experiment end (via `_auto_export_and_upload()` in `engine.py`) or on demand via `POST /api/experiments/{id}/export`:
 
 ```
-experiments/<exp_id>/
+exports/<exp_id>/
 ├── manifest.json      # nodes, schema versions, clock offsets, calibration constants,
 │                      # time range, participating roles, gateway version
 ├── telemetry.csv      # WIDE, time-aligned across all roles on a common grid
 ├── events.csv         # unified event stream, this experiment only
 ├── raw_index.json     # archive keys of the per-role raw files (not copies)
-└── bundle.tar.gz      # the above, uploaded to Supabase Storage
+└── bundle.tar.gz      # compressed bundle uploaded to Cloudflare R2 and downloadable via HTTP
 ```
 
 `manifest.json` records the **clock offset applied per node** and the `ML_PER_REV` value in force.

@@ -9,38 +9,58 @@ Este documento describe la arquitectura de red implementada en la Raspberry Pi 3
 ```mermaid
 graph TD
     subgraph LAN_AISLADA ["Red Local Aislada (AquaStation - 2.4 GHz)"]
-        ESP1["ESP32 #1<br/>192.168.4.10"]
-        ESP2["ESP32 #2<br/>192.168.4.11"]
+        ESP1["ESP32 #1 (Aerador)<br/>192.168.4.10"]
+        ESP2["ESP32 #2 (Sensor DO)<br/>192.168.4.12"]
+        ESP3["ESP32 #3 (Bomba)<br/>192.168.4.13"]
+        ESP4["ESP32 #4 (Mezclador)<br/>192.168.4.11"]
         LaptopLocal["Laptop (Acceso Directo)<br/>192.168.4.X"]
     end
 
     subgraph RPI ["Raspberry Pi 3B+ (aqua-station)"]
         WLAN0["wlan0 (Nativo - AP)<br/>192.168.4.1"]
         ROUTING["Tabla de Rutas / Firewall<br/>- wlan0: Sin salida a Internet<br/>- wlan1: Default Gateway"]
+        GW_CORE["aqua-gateway (FastAPI + Caddy)<br/>127.0.0.1:8080"]
+        CLOUDFLARED["cloudflared daemon<br/>(Túnel saliente HTTP/2)"]
+        R2_SYNC["aqua-r2-sync<br/>(Sincronización S3 API)"]
         TAILSCALE["tailscale0 (VPN WireGuard)<br/>100.X.Y.Z"]
         WLAN1["wlan1 (USB MediaTek - STA)<br/>5 GHz Wi-Fi 6 (10.100.244.X)"]
     end
 
     subgraph WAN ["Campus UTEC / Internet"]
         MERAKI["Access Point Cisco Meraki<br/>Canal 48 / 5240 MHz"]
-        INTERNET["Internet / Tailscale Servers"]
+        INTERNET["Internet Pública"]
     end
 
-    subgraph REMOTO ["Acceso Remoto"]
-        LaptopRemota["Laptop en UTEC / Casa<br/>ssh aqua@100.X.Y.Z"]
+    subgraph CF_EDGE ["Cloudflare Global Anycast Edge"]
+        CFT["Cloudflare Tunnel<br/>https://aqua-station.live"]
+        R2["Cloudflare R2 Bucket<br/>aqua-station-r2"]
+        DATA_PORTAL["https://data.aqua-station.live<br/>(Visualizador 24/7 + Descargas)"]
     end
 
-    ESP1 -->|Telemetría / MQTT / HTTP| WLAN0
-    ESP2 -->|Telemetría / MQTT / HTTP| WLAN0
-    LaptopLocal -.->|SSH directo a 192.168.4.1| WLAN0
+    subgraph REMOTO ["Clientes Remotos"]
+        WebUser["Navegador / Investigador<br/>(Laptop o Celular)"]
+        LaptopRemota["Mantenimiento SSH<br/>aqua@100.X.Y.Z"]
+    end
+
+    ESP1 & ESP2 & ESP3 & ESP4 -->|MQTT: tlm/ cmd/ ack/| WLAN0
+    LaptopLocal -.->|HTTP directo a 192.168.4.1:8080| WLAN0
 
     WLAN0 --- ROUTING
+    ROUTING --- GW_CORE
+    GW_CORE <--> CLOUDFLARED
+    GW_CORE --> R2_SYNC
     ROUTING --- WLAN1
     ROUTING --- TAILSCALE
 
     WLAN1 -->|Portal Cautivo / Gateway 10.100.224.1| MERAKI
     MERAKI --> INTERNET
     TAILSCALE -.->|Túnel cifrado a través de wlan1| INTERNET
+    CLOUDFLARED -->|Túnel cifrado TLS 443| CFT
+    R2_SYNC -->|Sube CSVs y Bundles post-run| R2
+    R2 <--> DATA_PORTAL
+
+    WebUser -->|SCADA en Vivo| CFT
+    WebUser -->|Descargas & Gráficas 24/7| DATA_PORTAL
     LaptopRemota -->|SSH vía Tailscale VPN| TAILSCALE
 ```
 
@@ -70,9 +90,18 @@ graph TD
 - El adaptador USB MediaTek aprovecha la banda de **5 GHz en Wi-Fi 6 (802.11ax)** en el canal 48 con ~287 Mbps de tasa de transmisión y señal de -53 dBm.
 - Se encarga de sincronización de reloj (NTP), actualizaciones del sistema operativo (`apt`) y subida de datos a servicios en la nube si es necesario.
 
-### C. Métodos de Conexión desde la Laptop
-1. **Directo por Wi-Fi:** Conectarse a `AquaStation` con contraseña `AquaPass` y ejecutar `ssh aqua@192.168.4.1`.
-2. **Remoto por Tailscale:** Estando conectado a cualquier red Wi-Fi o datos, ejecutar `ssh aqua@100.X.Y.Z`.
+### C. Métodos de Conexión y Acceso al Dashboard
+1. **Directo por Wi-Fi Local:** Conectarse al AP `AquaStation` con contraseña `AquaPass` y acceder por web a `https://aqua-station.local` (o `ssh aqua@192.168.4.1`).
+2. **Acceso Web Global (Cloudflare Tunnel):** Acceder a `https://aqua-station.live` desde cualquier lugar (laptop, teléfono o red externa). Utiliza un túnel saliente cifrado sobre HTTP/2 (puerto TCP 443) que evade las restricciones de firewall e inspección DPI de Fortinet.
+3. **Mantenimiento Remoto (SSH):** Vía Tailscale cuando la red externa lo permita, o mediante SSH vía Cloudflare Access / Túnel local.
+
+### D. Almacenamiento Persistente y Descargas 24/7 (Cloudflare R2 Edge)
+1. **Portal Web y Visualizador:** Disponible en `https://data.aqua-station.live` (redirección automática a `/index.html`).
+2. **Independencia de Hardware:** Servido por la red Anycast Edge de Cloudflare con 10 GB gratuitos permanentes y cero costo de transferencia de salida (*zero-egress fees*). Permite visualizar curvas de OD/RPM/Temp y descargar bundles completos aunque la Raspberry Pi esté apagada o fuera de servicio.
+3. **Flujo de Sincronización Automática:**
+   - **Post-Experimento Inmediato:** El orquestador (`engine.py`) detecta la transición a `completed`, genera los paquetes alineado y nativo, y lanza la subida a R2 en segundo plano.
+   - **Cron Nocturno:** `aqua-flush.timer` corre a las 03:00 (hora local de Lima) para verificar y rotar telemetría diaria.
+   - **Manual:** Comando de consola `aqua-r2-sync`.
 
 ---
 
