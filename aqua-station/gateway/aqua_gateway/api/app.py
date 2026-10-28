@@ -1461,6 +1461,18 @@ def create_app(gateway: "Gateway") -> FastAPI:
             node_id=schema.node_id,
         )
 
+        # Ensure DO sensor samples in real-time (5s) for the closed-loop controller
+        if "od_sensor" in gateway.registry.roles:
+            sensor_schema = gateway.registry.for_role("od_sensor")
+            await gateway.commands.issue(
+                role="od_sensor",
+                action="start_monitor",
+                target={"interval_sec": 5},
+                experiment_id=body.experiment_id,
+                requested_by=body.requested_by,
+                node_id=sensor_schema.node_id,
+            )
+
         await gateway.events.emit(
             Event.make(
                 EventType.COMMAND_ISSUED,

@@ -16,6 +16,7 @@
 #include "log.h"
 #include "n_logger_config.h"
 #include "rtc_utils.h"
+#include "esp_now_sender.h"
 
 #include <ArduinoJson.h>
 #include <HTTPClient.h>
@@ -62,8 +63,8 @@ bool wifiConnect(bool block) {
   while (WiFi.status() != WL_CONNECTED) {
     if (millis() - t0 > WIFI_CONNECT_TIMEOUT_MS) {
       Logln(" timeout.");
-      WiFi.disconnect(true);
-      WiFi.mode(WIFI_OFF);
+      WiFi.mode(WIFI_STA);
+      WiFi.disconnect(false, false);
       return false;
     }
     delay(250);
@@ -72,6 +73,9 @@ bool wifiConnect(bool block) {
 
   Logf(" connected (IP: %s)\n", WiFi.localIP().toString().c_str());
   s_wasConnected = true;
+#if !defined(DISABLE_ESPNOW)
+  espNowSenderInit();
+#endif
   syncTimeNtp(3000);
 
   return true;
@@ -89,7 +93,8 @@ void wifiMaintain() {
     // SEGURO DE VIDA: Si el AutoReconnect interno falla por 30 segundos
     if (millis() - s_lastWifiRetry > 30000) {
       Logln("[Red] Pila WiFi atascada. Reiniciando hardware de red...");
-      WiFi.disconnect(true);
+      WiFi.mode(WIFI_STA);
+      WiFi.disconnect(false, false);
       IPAddress local_IP(AQUA_STATIC_IP);
       IPAddress gateway(AQUA_STATIC_GATEWAY);
       IPAddress subnet(AQUA_STATIC_SUBNET);
@@ -103,6 +108,9 @@ void wifiMaintain() {
       Logf("[Red] Conectado. IP: %s\n", WiFi.localIP().toString().c_str());
       // digitalWrite(LED_BUILTIN, LOW);
       s_wasConnected = true;
+#if !defined(DISABLE_ESPNOW)
+      espNowSenderInit();
+#endif
       syncTimeNtp(3000);
     }
   }

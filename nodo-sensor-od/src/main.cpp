@@ -732,10 +732,11 @@ void loop() {
   }
 
 #ifdef WIFI_MODULE
-  // Feedback Item 7: En IDLE, muestrear el sensor de OD y publicar telemetría cada 20 s
-  // para que el dashboard reporte siempre el valor de oxígeno disuelto en tiempo real.
+  // En IDLE, muestrear el sensor de OD y emitir telemetria ESP-NOW cada 5 s
+  // para mantener alimentado el lazo de control del aireador y evitar que el watchdog
+  // de 35 s salte por jitter, ademas de mantener actualizado el dashboard en tiempo real.
   static unsigned long lastIdleHeartbeat = 0;
-  if (millis() - lastIdleHeartbeat >= 20000) {
+  if (millis() - lastIdleHeartbeat >= 5000) {
     lastIdleHeartbeat = millis();
     takeMeasurement();
     hasValidTelemetry = true;

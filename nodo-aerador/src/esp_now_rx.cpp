@@ -60,8 +60,9 @@ bool espNowRxInit(ControlEngine& engine) {
     WiFi.mode(WIFI_STA);
   }
 
-  if (esp_now_init() != ESP_OK) {
-    Serial.println("[ESP-NOW RX] Error initializing ESP-NOW");
+  esp_err_t err = esp_now_init();
+  if (err != ESP_OK && err != ESP_ERR_ESPNOW_EXIST) {
+    Serial.printf("[ESP-NOW RX] Error initializing ESP-NOW (err=%d)\n", (int)err);
     return false;
   }
 

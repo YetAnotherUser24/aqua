@@ -746,6 +746,12 @@ static void cloudWorkerTask(void* pvParameters) {
         configTime(0, 0, "pool.ntp.org", "time.nist.gov");
         digitalWrite(LED_BUILTIN, LOW); // Turn ON LED
         wasConnected = true;
+
+#if !(defined(AERADOR_VIRTUAL) && AERADOR_VIRTUAL)
+        if (s_engine) {
+          espNowRxInit(*s_engine);
+        }
+#endif
       }
     }
 
