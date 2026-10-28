@@ -702,6 +702,7 @@ static void cloudWorkerTask(void* pvParameters) {
 #endif
 
   WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
   WiFi.setAutoReconnect(true);
   WiFi.setTxPower(WIFI_POWER_8_5dBm); // Reduce TX power for ESP32-S3 SuperMini stability
   IPAddress local_IP(AQUA_STATIC_IP);
@@ -743,6 +744,7 @@ static void cloudWorkerTask(void* pvParameters) {
         // but that source only exists when the logger is in radio range, and on the bench
         // (virtual mode) it never is. Without a fallback every telemetry sample stamps 0, so the
         // per-sample timestamps the envelope carries all collapse onto one instant.
+        WiFi.setSleep(false);
         configTime(0, 0, "pool.ntp.org", "time.nist.gov");
         digitalWrite(LED_BUILTIN, LOW); // Turn ON LED
         wasConnected = true;

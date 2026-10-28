@@ -194,8 +194,11 @@ float ControlEngine::computeOutputRpm(unsigned long nowMs) {
     portENTER_CRITICAL(&_mux);
     _failsafeActive = true;
     portEXIT_CRITICAL(&_mux);
-    _lastCommandedRpm = cfg.failsafe_rpm;
-    return cfg.failsafe_rpm;
+    // AGENTS.md Invariante 2.1: En agua limpia (R_bio=0) el sobreimpulso es irreversible (Mp=0.0%).
+    // Si se pierde la señal del sensor de OD, el motor DEBE frenar a 0 RPM inmediatamente
+    // para congelar la transferencia y evitar destruir el ensayo con sobre-aireación en vacío.
+    _lastCommandedRpm = 0.0f;
+    return 0.0f;
   }
 
   portENTER_CRITICAL(&_mux);

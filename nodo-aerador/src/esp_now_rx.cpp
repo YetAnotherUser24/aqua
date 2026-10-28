@@ -59,6 +59,7 @@ bool espNowRxInit(ControlEngine& engine) {
   if (WiFi.getMode() == WIFI_OFF) {
     WiFi.mode(WIFI_STA);
   }
+  WiFi.setSleep(false);
 
   esp_err_t err = esp_now_init();
   if (err != ESP_OK && err != ESP_ERR_ESPNOW_EXIST) {

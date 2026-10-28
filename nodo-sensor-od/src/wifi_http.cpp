@@ -45,6 +45,7 @@ bool wifiConnect(bool block) {
 
   Logf("WiFi connecting to \"%s\"...", WIFI_SSID);
   WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
   WiFi.setAutoReconnect(true);
   WiFi.setTxPower(WIFI_POWER_8_5dBm); // Crucial para la estabilidad
   IPAddress local_IP(AQUA_STATIC_IP);
@@ -72,6 +73,7 @@ bool wifiConnect(bool block) {
   }
 
   Logf(" connected (IP: %s)\n", WiFi.localIP().toString().c_str());
+  WiFi.setSleep(false);
   s_wasConnected = true;
 #if !defined(DISABLE_ESPNOW)
   espNowSenderInit();
@@ -106,6 +108,7 @@ void wifiMaintain() {
   } else {
     if (!s_wasConnected) {
       Logf("[Red] Conectado. IP: %s\n", WiFi.localIP().toString().c_str());
+      WiFi.setSleep(false);
       // digitalWrite(LED_BUILTIN, LOW);
       s_wasConnected = true;
 #if !defined(DISABLE_ESPNOW)

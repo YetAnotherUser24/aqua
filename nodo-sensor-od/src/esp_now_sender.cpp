@@ -15,6 +15,7 @@ bool espNowSenderInit() {
   if (WiFi.getMode() == WIFI_OFF) {
     WiFi.mode(WIFI_STA);
   }
+  WiFi.setSleep(false);
 
   esp_err_t initErr = esp_now_init();
   if (initErr != ESP_OK && initErr != ESP_ERR_ESPNOW_EXIST) {
@@ -60,6 +61,12 @@ bool espNowBroadcastDO(const OdTelemetryPacket& packet) {
   }
 
   if (result == ESP_OK) {
+    // Ráfaga redundante de 2 paquetes con 3ms de separación:
+    // Al ser broadcast (FF:FF:..), 802.11 no usa reintentos por ACK.
+    // Un segundo paquete consecutivo mitiga colisiones por ruido electromagnético de motores en 2.4 GHz.
+    delayMicroseconds(3000);
+    esp_now_send(BROADCAST_MAC, (const uint8_t*)&packet, sizeof(packet));
+
     Logf("[ESP-NOW] TX Seq #%u (ch=%u): DO=%.3f mg/L | Temp=%.2f C | Sat=%.1f %%\n",
          packet.sequence, (unsigned)WiFi.channel(), packet.dissolved_oxygen,
          packet.water_temperature, packet.oxygen_saturation);
