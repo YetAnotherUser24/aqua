@@ -76,6 +76,7 @@ bool espNowRxInit(ControlEngine& engine) {
   Serial.println("[ESP-NOW RX] Receiver listening for DO packets.");
   // El receptor NO registra peers: recibe en el canal actual del STA. Si el canal reportado aquí
   // no coincide con el del od-logger, los paquetes nunca llegarán (ambos deben seguir al mismo AP).
+  Serial.printf("[ESP-NOW RX] Aerator Station MAC: %s\n", WiFi.macAddress().c_str());
   Serial.printf("[ESP-NOW RX] Ready. WiFi ch=%u | packet=%u bytes (peer-less receive, follows the AP channel).\n",
                 (unsigned)WiFi.channel(), (unsigned)sizeof(OdTelemetryPacket));
   return true;
