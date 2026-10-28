@@ -27,11 +27,9 @@ bool espNowSenderInit() {
   const bool useUnicast = isUnicast(TARGET_PEER_MAC);
 
   if (espNowReady) {
-    bool peersOk = esp_now_is_peer_exist(BROADCAST_MAC);
-    if (useUnicast) {
-      peersOk = peersOk && esp_now_is_peer_exist(TARGET_PEER_MAC);
+    if (useUnicast ? esp_now_is_peer_exist(TARGET_PEER_MAC) : esp_now_is_peer_exist(BROADCAST_MAC)) {
+      return true;
     }
-    if (peersOk) return true;
   }
 
   // Ensure WiFi radio is in station mode so MAC layer is active
@@ -48,7 +46,6 @@ bool espNowSenderInit() {
 
   esp_now_register_send_cb(onDataSent);
 
-  // 1. Register Unicast target peer if configured
   if (useUnicast) {
     esp_now_peer_info_t unicastPeer = {};
     memcpy(unicastPeer.peer_addr, TARGET_PEER_MAC, 6);
@@ -59,32 +56,29 @@ bool espNowSenderInit() {
     if (!esp_now_is_peer_exist(TARGET_PEER_MAC)) {
       esp_err_t err = esp_now_add_peer(&unicastPeer);
       if (err != ESP_OK && err != ESP_ERR_ESPNOW_EXIST) {
-        Logf("[ESP-NOW] Warning: Failed to add unicast peer! err=%d\n", err);
+        Logf("[ESP-NOW] Error: Failed to add unicast peer! err=%d\n", err);
+        return false;
       }
     }
-  }
-
-  // 2. Always register Broadcast peer (used as fallback or primary if placeholder)
-  esp_now_peer_info_t bcastPeer = {};
-  memcpy(bcastPeer.peer_addr, BROADCAST_MAC, 6);
-  bcastPeer.channel = 0; // Auto-follow active Wi-Fi channel
-  bcastPeer.ifidx = WIFI_IF_STA;
-  bcastPeer.encrypt = false;
-
-  if (!esp_now_is_peer_exist(BROADCAST_MAC)) {
-    if (esp_now_add_peer(&bcastPeer) != ESP_OK) {
-      Logln("[ESP-NOW] Failed to add broadcast peer!");
-      return false;
-    }
-  }
-
-  espNowReady = true;
-  if (useUnicast) {
-    Logf("[ESP-NOW] Sender ready in UNICAST mode (Peer %02X:%02X:%02X:%02X:%02X:%02X, ch=%u, ACK+Retries ON).\n",
+    espNowReady = true;
+    Logf("[ESP-NOW] Sender ready in UNICAST mode (Peer %02X:%02X:%02X:%02X:%02X:%02X, ch=%u, HW ACK+Retries ON).\n",
          TARGET_PEER_MAC[0], TARGET_PEER_MAC[1], TARGET_PEER_MAC[2],
          TARGET_PEER_MAC[3], TARGET_PEER_MAC[4], TARGET_PEER_MAC[5],
          (unsigned)WiFi.channel());
   } else {
+    esp_now_peer_info_t bcastPeer = {};
+    memcpy(bcastPeer.peer_addr, BROADCAST_MAC, 6);
+    bcastPeer.channel = 0; // Auto-follow active Wi-Fi channel
+    bcastPeer.ifidx = WIFI_IF_STA;
+    bcastPeer.encrypt = false;
+
+    if (!esp_now_is_peer_exist(BROADCAST_MAC)) {
+      if (esp_now_add_peer(&bcastPeer) != ESP_OK) {
+        Logln("[ESP-NOW] Failed to add broadcast peer!");
+        return false;
+      }
+    }
+    espNowReady = true;
     Logf("[ESP-NOW] Sender ready in BROADCAST mode (Placeholder MAC, ch=%u, Dual-Burst ON).\n",
          (unsigned)WiFi.channel());
   }
@@ -94,14 +88,16 @@ bool espNowSenderInit() {
 bool espNowBroadcastDO(const OdTelemetryPacket& packet) {
   const bool useUnicast = isUnicast(TARGET_PEER_MAC);
 
-  if (!espNowReady || WiFi.getMode() == WIFI_OFF || !esp_now_is_peer_exist(BROADCAST_MAC) ||
-      (useUnicast && !esp_now_is_peer_exist(TARGET_PEER_MAC))) {
+  if (!espNowReady || WiFi.getMode() == WIFI_OFF ||
+      (useUnicast ? !esp_now_is_peer_exist(TARGET_PEER_MAC) : !esp_now_is_peer_exist(BROADCAST_MAC))) {
     espNowReady = false;
     if (!espNowSenderInit()) return false;
   }
 
+  // CASO 1: UNICAST (MAC real configurada)
+  // El hardware 802.11 gestiona ACKs automaticos y hasta 7 reintentos en microsegundos.
   if (useUnicast) {
-    // Modo UNICAST: El hardware 802.11 gestiona ACKs automaticos y hasta 7 reintentos en microsegundos
+    s_lastSendAcked = false;
     esp_err_t result = esp_now_send(TARGET_PEER_MAC, (const uint8_t*)&packet, sizeof(packet));
     if (result == ESP_ERR_ESPNOW_NOT_INIT || result == ESP_ERR_ESPNOW_IF) {
       espNowReady = false;
@@ -110,17 +106,25 @@ bool espNowBroadcastDO(const OdTelemetryPacket& packet) {
       }
     }
 
+    // Pequeño delay de contienda si no hubo ACK para reintentar a nivel de aplicacion
+    if (result != ESP_OK || !s_lastSendAcked) {
+      delay(4);
+      result = esp_now_send(TARGET_PEER_MAC, (const uint8_t*)&packet, sizeof(packet));
+    }
+
     if (result == ESP_OK) {
       Logf("[ESP-NOW] UNICAST TX Seq #%u (ch=%u): DO=%.3f mg/L | Temp=%.2f C | ACK=%s\n",
            packet.sequence, (unsigned)WiFi.channel(), packet.dissolved_oxygen,
            packet.water_temperature, s_lastSendAcked ? "YES" : "NO");
-      return true;
+      return s_lastSendAcked;
     } else {
-      Logf("[ESP-NOW] Unicast TX failed (err=%d), falling back to Broadcast...\n", result);
+      Logf("[ESP-NOW] UNICAST TX failed (err=%d)\n", result);
+      return false;
     }
   }
 
-  // Modo BROADCAST (Placeholder o Fallback de contingencia):
+  // CASO 2: BROADCAST (Solo cuando se usa el Placeholder 0xFF:FF:..)
+  // Al no haber ACK en broadcast, se envia una segunda trama tras 3 ms para mitigar colisiones.
   esp_err_t result = esp_now_send(BROADCAST_MAC, (const uint8_t*)&packet, sizeof(packet));
   if (result == ESP_ERR_ESPNOW_NOT_INIT || result == ESP_ERR_ESPNOW_IF) {
     espNowReady = false;
@@ -130,9 +134,6 @@ bool espNowBroadcastDO(const OdTelemetryPacket& packet) {
   }
 
   if (result == ESP_OK) {
-    // Ráfaga redundante de 2 paquetes con 3ms de separación:
-    // Al ser broadcast (FF:FF:..), 802.11 no usa reintentos por ACK.
-    // Un segundo paquete consecutivo mitiga colisiones por ruido electromagnético de motores en 2.4 GHz.
     delayMicroseconds(3000);
     esp_now_send(BROADCAST_MAC, (const uint8_t*)&packet, sizeof(packet));
 
