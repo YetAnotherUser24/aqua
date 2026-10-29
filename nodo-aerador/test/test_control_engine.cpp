@@ -149,8 +149,32 @@ int main() {
   assert(engine.isArmed() == false);
   printf("  -> Test 9 (Disarming Clean Reset): PASSED\n");
 
+  // -------------------------------------------------------------
+  // Test 10: Smart 2-DOF Hot-Start / Stair Step (No 0 RPM Deadband Lockout)
+  // -------------------------------------------------------------
+  // Scenario: System is re-armed or stepped from SP=5.0 to SP=7.0 mg/L.
+  // DO is already at 5.12 mg/L (> beta*SP = 0.35 * 7.0 = 2.45 mg/L).
+  // Standard 2-DOF would generate: e_P = 2.45 - 5.12 = -2.67 mg/L -> u_P = -591.8 RPM!
+  // This clamped u_sat to 0 RPM and required >15 cycles (~75-100s) of integration to overcome.
+  // Smart 2-DOF clamps p_target = max(2.45, 5.12) = 5.12 mg/L -> e_P = 0.0 mg/L.
+  // On the next cycle, the motor starts immediately with accumulated integral action!
+  cfg.target_do_mg_l = 7.0f;
+  engine.configure(cfg);
+  engine.setArmed(true);
+
+  g_fakeMillis += 1000UL;
+  engine.updateProcessVariable(5.12f, 24.0f);
+  engine.computeOutputRpm(g_fakeMillis); // Cycle 1: dt=5s, accumulates I = 1.915 * (7.0 - 5.12) * 5 = +18.0 RPM
+
+  g_fakeMillis += 5000UL;
+  engine.updateProcessVariable(5.12f, 24.0f);
+  float hotStartRpm = engine.computeOutputRpm(g_fakeMillis); // Cycle 2: should be > 0 RPM!
+  printf("  -> Hot-Start Stair Step RPM at t=5s: %.2f RPM\n", hotStartRpm);
+  assert(hotStartRpm > 15.0f && hotStartRpm < 50.0f);
+  printf("  -> Test 10 (Smart 2-DOF Hot-Start / Stair Step): PASSED (Immediate response: %.1f RPM, zero deadband lockout)\n", hotStartRpm);
+
   printf("=================================================================\n");
-  printf("[TEST] ALL 9 UNIT & INVARIANT TESTS PASSED PERFECTLY!\n");
+  printf("[TEST] ALL 10 UNIT & INVARIANT TESTS PASSED PERFECTLY!\n");
   printf("=================================================================\n");
   return 0;
 }

@@ -248,7 +248,11 @@ float ControlEngine::computeOutputRpm(unsigned long nowMs) {
  * Ecuaciones discretas (Ts = 5.0 s):
  *  1. Predictor: C_pred = C_meas + tau_lag * (dC/dt).
  *     Si C_pred >= SP y dC/dt > 0: frenado a 0 RPM y drenado de integral (prevención sobreimpulso limpio).
- *  2. Consigna ponderada en P: e_P = beta * SP - C_meas (beta = 0.35 para eliminar el proportional kick).
+ *  2. Consigna ponderada en P (Smart 2-DOF):
+ *     p_target = max(beta * SP, C_meas) cuando SP > C_meas.
+ *     e_P = (SP > C_meas) ? (p_target - C_meas) : (SP - C_meas).
+ *     Garantiza que la acción proporcional nunca frene hacia atrás (u_P >= 0) cuando el
+ *     estanque está por debajo de consigna pero C_meas > beta*SP (ej. stair tests o re-arranques).
  *  3. Acción proporcional: u_unsat = Kp * e_P + I(k-1).
  *  4. Saturación física: u_sat = sat(u_unsat, min_rpm, max_rpm).
  *  5. Integración con Back-Calculation:
@@ -264,9 +268,20 @@ float ControlEngine::runPid(float measuredDo, float dt, const ControlConfig& cfg
     return 0.0f;
   }
 
-  // 2. Error convencional y error de acción proporcional ponderada (2-DOF)
+  // 2. Error convencional y error de acción proporcional ponderada (Smart 2-DOF)
   float error = cfg.target_do_mg_l - measuredDo;
-  float error_p = (cfg.beta * cfg.target_do_mg_l) - measuredDo;
+
+  // Smart 2-DOF (Adaptive Beta Floor): En procesos unidireccionales de agua limpia (u >= 0),
+  // si el estanque está por debajo de consigna (error > 0) pero el DO medido supera (beta * SP),
+  // la formulación estándar 2-DOF generaría un error proporcional negativo (e_P < 0).
+  // Esto provocaría un "freno fantasma" que bloquea el motor en 0 RPM durante arranques en
+  // caliente o cambios de consigna tipo escalera (staircase tests).
+  // Clampeando p_target >= measuredDo cuando SP > measuredDo, la acción proporcional nunca
+  // empuja en reversa desde reposo (e_P >= 0), permitiendo que la acción integral comience
+  // a acelerar de inmediato sin retraso ni bloqueo. Si se rebasa la consigna (measuredDo >= SP),
+  // se utiliza el error completo (SP - measuredDo) para frenar de inmediato.
+  float p_target = fmaxf(cfg.beta * cfg.target_do_mg_l, measuredDo);
+  float error_p = (cfg.target_do_mg_l > measuredDo) ? (p_target - measuredDo) : (cfg.target_do_mg_l - measuredDo);
 
   float u_unsat = (cfg.kp * error_p) + _integral;
   if (cfg.kd > 0.0001f) {
