@@ -190,3 +190,26 @@ void loop() {
   sudo nmcli con down "Hotspot-ESP32" && sudo nmcli con up "Hotspot-ESP32"
   ```
 
+---
+
+## 4. Acceso Remoto SSH Online vía Cloudflare Tunnel (`ssh.aqua-station.live`)
+
+Para acceder remotamente a la terminal de la Raspberry Pi desde cualquier red (fuera del campus o sin estar conectado al AP `AquaStation`):
+
+### Configuración en la Máquina del Cliente (Laptop / PC)
+1. Tener `cloudflared` instalado en el sistema (`winget install --id Cloudflare.cloudflared` en Windows, o `brew install cloudflared` en macOS).
+2. Agregar al archivo `~/.ssh/config`:
+   ```ssh-config
+   Host aqua-pi ssh.aqua-station.live
+       HostName ssh.aqua-station.live
+       User aqua
+       ProxyCommand cloudflared access ssh --hostname %h
+   ```
+3. Conectarse directamente con:
+   ```bash
+   ssh aqua-pi
+   ```
+   *Ingresa la contraseña del usuario `aqua` (`4568`) o usa tu llave pública SSH.*
+   *El tráfico viaja encapsulado sobre HTTP/2 saliente (TCP 443), superando cualquier firewall institucional (como Fortinet de UTEC).*
+
+
