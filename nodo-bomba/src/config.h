@@ -205,7 +205,7 @@
 /* ------------------- Calibración de dosificación -------------------- */
 // Volumen entregado por revolución del cabezal peristáltico (mL/rev). Calibrar en banco.
 #ifndef ML_PER_REV
-#define ML_PER_REV              0.02823f // Calibrado gravimétricamente en banco (0.02823 mL/rev)
+#define ML_PER_REV              0.02835f // Calibrado gravimétricamente en banco (0.02835 mL/rev)
 #endif
 // Duty PWM de respaldo en caso de emergencia/modo abierto (%)
 #ifndef DOSE_DUTY_PERCENT

@@ -96,6 +96,15 @@ void PumpController::init(float mlPerRev, uint32_t doseTimeoutMs) {
 
   loadFromNvs();
 
+  // Si el valor compilado en config.h (mlPerRev) difiere del almacenado en NVS,
+  // el valor compilado tiene prevalencia y sincroniza la memoria NVS.
+  if (mlPerRev > 0.001f && fabsf(_mlPerRev - mlPerRev) > 0.000001f) {
+    Serial.printf("[NVS] Actualizando factor volumetrico a nuevo valor de config.h: %.5f mL/rev (anterior NVS: %.5f)\n",
+                  mlPerRev, _mlPerRev);
+    _mlPerRev = mlPerRev;
+    saveToNvs();
+  }
+
   stop();
 }
 
@@ -577,7 +586,7 @@ void PumpController::printStatus() {
   Serial.printf("  Duty Output:     %+5.1f%%\n", _telem.dutyPercent);
   Serial.printf("  Driver Hardware: TB6612FNG [STBY=%d, AIN2=%d, AIN1=%d, PWMA=%d] @ 12V\n",
                 TB6612_STBY_PIN, TB6612_AIN2_PIN, TB6612_AIN1_PIN, TB6612_PWMA_PIN);
-  Serial.printf("  Calibration:     %.4f mL/rev\n", _mlPerRev);
+  Serial.printf("  Calibration:     %.5f mL/rev\n", _mlPerRev);
   Serial.printf("  Meniscus State:  %s [Auto-offset: %.3f mL (%.2f revs)]\n",
                 _meniscusRetracted ? "RETRACTED (Dry Nozzle, Compensating)" : "FLUSH (At Tip, Ready)",
                 SUCKBACK_REVS * _mlPerRev, SUCKBACK_REVS);
@@ -686,7 +695,7 @@ void PumpController::handleCliCommand(char* cmd) {
     float cal = atof(cmd + 5);
     if (cal > 0.001f) {
       setMlPerRev(cal);
-      Serial.printf("[OK] Calibration set to %.4f mL/rev\n", _mlPerRev);
+      Serial.printf("[OK] Calibration set to %.5f mL/rev\n", _mlPerRev);
     } else {
       Serial.println("[ERROR] Invalid calibration factor");
     }
