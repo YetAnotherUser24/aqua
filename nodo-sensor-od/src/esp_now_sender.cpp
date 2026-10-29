@@ -106,9 +106,10 @@ bool espNowBroadcastDO(const OdTelemetryPacket& packet) {
       }
     }
 
-    // Pequeño delay de contienda si no hubo ACK para reintentar a nivel de aplicacion
+    // Pequeño delay pseudoaleatorio (2 a 7 ms) si no hubo ACK para reintentar a nivel de aplicacion
+    // Anti-harmonic jitter: descorrelaciona el reintento de la rafaga TCP/MQTT del receptor
     if (result != ESP_OK || !s_lastSendAcked) {
-      delay(4);
+      delay(2 + (esp_random() % 6));
       result = esp_now_send(TARGET_PEER_MAC, (const uint8_t*)&packet, sizeof(packet));
     }
 
