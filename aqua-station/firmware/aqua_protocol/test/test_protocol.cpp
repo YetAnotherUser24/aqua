@@ -210,10 +210,12 @@ static void testRegistryConstants() {
   CHECK_STR_EQ(aqua::roleName(aqua::Role::Aerator), "aerator");
   CHECK_STR_EQ(aqua::roleName(aqua::Role::Mixer), "mixer");
   CHECK_STR_EQ(aqua::roleName(aqua::Role::Pump), "pump");
+  CHECK_STR_EQ(aqua::roleName(aqua::Role::Vibration), "vibration");
   CHECK_STR_EQ(aqua::nodeId(aqua::Role::OdSensor), "a0000000-0000-0000-0000-000000000001");
   CHECK_STR_EQ(aqua::nodeId(aqua::Role::Aerator), "b0000000-0000-0000-0000-000000000002");
   CHECK_STR_EQ(aqua::nodeId(aqua::Role::Mixer), "c0000000-0000-0000-0000-000000000003");
   CHECK_STR_EQ(aqua::nodeId(aqua::Role::Pump), "d0000000-0000-0000-0000-000000000004");
+  CHECK_STR_EQ(aqua::nodeId(aqua::Role::Vibration), "e0000000-0000-0000-0000-000000000005");
   CHECK_STR_EQ(aqua::timeSourceName(aqua::TimeSource::Ntp), "ntp");
   CHECK_STR_EQ(aqua::timeSourceName(aqua::TimeSource::EspNow), "espnow");
   CHECK_STR_EQ(aqua::timeSourceName(aqua::TimeSource::Rtc), "rtc");
@@ -228,6 +230,8 @@ static void testTopics() {
   CHECK_STR_EQ(buffer, "aqua/tlm/aerator");
   CHECK(aqua::telemetryTopic(aqua::Role::OdSensor, buffer, sizeof(buffer)));
   CHECK_STR_EQ(buffer, "aqua/tlm/od_sensor");
+  CHECK(aqua::telemetryTopic(aqua::Role::Vibration, buffer, sizeof(buffer)));
+  CHECK_STR_EQ(buffer, "aqua/tlm/vibration");
 
   CHECK(aqua::commandTopic(aqua::Role::Pump, buffer, sizeof(buffer)));
   CHECK_STR_EQ(buffer, "aqua/cmd/pump");
@@ -238,6 +242,8 @@ static void testTopics() {
 
   CHECK(aqua::presenceTopic(aqua::Role::Aerator, buffer, sizeof(buffer)));
   CHECK_STR_EQ(buffer, "aqua/presence/b0000000-0000-0000-0000-000000000002");
+  CHECK(aqua::presenceTopic(aqua::Role::Vibration, buffer, sizeof(buffer)));
+  CHECK_STR_EQ(buffer, "aqua/presence/e0000000-0000-0000-0000-000000000005");
 
   // A buffer one byte short of "aqua/tlm/aerator" (16 chars, so 17 with the terminator) must
   // fail, not truncate: silently publishing on "aqua/tlm/aerat" would look like a node that

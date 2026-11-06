@@ -61,6 +61,7 @@ enum class Role : uint8_t {
   Aerator = 1,
   Mixer = 2,
   Pump = 3,
+  Vibration = 4,
 };
 
 /** @return role name, or "" if the enum value is not a known role. */

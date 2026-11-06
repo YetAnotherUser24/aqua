@@ -61,6 +61,7 @@ enum class Role : uint8_t {
   Aerator = 1,
   Mixer = 2,
   Pump = 3,
+  Vibration = 4,
 };
 
 /** @return role name, or "" if the enum value is not a known role. */
@@ -447,6 +448,7 @@ constexpr const char* kRpm = "pump_rpm";
 constexpr const char* kMode = "pump_mode";
 constexpr const char* kDoseCompleted = "pump_dose_completed";
 constexpr const char* kDoseTimedOut = "pump_dose_timed_out";
+constexpr const char* kMeniscusRetracted = "pump_meniscus_retracted";
 constexpr const char* kStatus = "drv_status";
 
 constexpr const char* kModeIdle = "idle";

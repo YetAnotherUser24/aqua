@@ -61,6 +61,7 @@ enum class Role : uint8_t {
   Aerator = 1,
   Mixer = 2,
   Pump = 3,
+  Vibration = 4,
 };
 
 /** @return role name, or "" if the enum value is not a known role. */
@@ -415,6 +416,8 @@ constexpr const char* kTorqueNm = "drv_torque_nm";
 constexpr const char* kIqA = "drv_iq_a";
 constexpr const char* kRunning = "drv_running";
 constexpr const char* kStatus = "drv_status";
+constexpr const char* kState = "drv_state";
+constexpr const char* kDisarmReason = "drv_disarm_reason";
 constexpr const char* kCtlMode = "ctl_mode";
 constexpr const char* kCtlFailsafe = "ctl_failsafe";
 constexpr const char* kPeerDoMgL = "peer_do_mg_l";
@@ -442,7 +445,6 @@ namespace pump_fields {
 constexpr const char* kDosedMl = "pump_dosed_ml";
 constexpr const char* kTargetMl = "pump_target_ml";
 constexpr const char* kRpm = "pump_rpm";
-constexpr const char* kFlowMlMin = "pump_flow_ml_min";
 constexpr const char* kMode = "pump_mode";
 constexpr const char* kDoseCompleted = "pump_dose_completed";
 constexpr const char* kDoseTimedOut = "pump_dose_timed_out";

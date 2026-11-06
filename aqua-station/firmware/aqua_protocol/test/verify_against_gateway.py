@@ -163,7 +163,8 @@ def main() -> int:
                 )
 
             # Every field must be declared, or the export silently omits a column.
-            known = schema.field_names
+            # t_dev_ms is the valid per-sample timestamp when present in sample dictionaries.
+            known = schema.field_names | {"t_dev_ms"}
             for sample_index, sample in enumerate(envelope.samples):
                 unknown = sorted(set(sample) - known)
                 if unknown:

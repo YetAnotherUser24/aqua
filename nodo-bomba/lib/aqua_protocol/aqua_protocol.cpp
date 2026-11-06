@@ -28,6 +28,7 @@ constexpr RoleInfo kRoles[] = {
     {"aerator", "b0000000-0000-0000-0000-000000000002"},
     {"mixer", "c0000000-0000-0000-0000-000000000003"},
     {"pump", "d0000000-0000-0000-0000-000000000004"},
+    {"vibration", "e0000000-0000-0000-0000-000000000005"},
 };
 constexpr size_t kRoleCount = sizeof(kRoles) / sizeof(kRoles[0]);
 

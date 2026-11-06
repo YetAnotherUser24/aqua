@@ -24,7 +24,7 @@ import pytest
 from aqua_gateway.archive.csv_writer import CsvArchiveWriter
 from aqua_gateway.schema.registry import load_registry
 
-ROLES = ("od_sensor", "aerator", "mixer", "pump")
+ROLES = ("od_sensor", "aerator", "mixer", "pump", "vibration")
 
 
 def _distinct_sample(schema):

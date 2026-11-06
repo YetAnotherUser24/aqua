@@ -148,6 +148,25 @@ roles:
       - {name: pump_meniscus_retracted, type: bool, note: "true if meniscus is parked 15-20mm inside nozzle"}
       - {name: drv_status,           type: int,   unit: null}
 
+  # --------------------------------------------------------------------------
+  # Vibration sensor (MPU6050 accelerometer on ESP32-C3).
+  # Triaxial structural vibration & condition monitoring of the tank.
+  # --------------------------------------------------------------------------
+  vibration:
+    display_name: "Sensor de vibración — MPU6050 / ESP32-C3"
+    node_id: "e0000000-0000-0000-0000-000000000005"
+    topic: aqua/tlm/vibration
+    expected_rate_hz: {experiment: 1.0, idle: 0.1}
+    fields:
+      - {name: vib_ax_g,         type: float, unit: "g",      precision: 3}
+      - {name: vib_ay_g,         type: float, unit: "g",      precision: 3}
+      - {name: vib_az_g,         type: float, unit: "g",      precision: 3}
+      - {name: vib_rms_g,        type: float, unit: "g",      precision: 3}
+      - {name: vib_peak_g,       type: float, unit: "g",      precision: 3}
+      - {name: vib_crest_factor, type: float, unit: null,     precision: 2}
+      - {name: vib_temp_c,       type: float, unit: "°C",     precision: 2}
+      - {name: dev_status,       type: int,   unit: null}
+
 # ------------------------------------------------------------------------------
 # Calibration constants. NOT telemetry — recorded in the experiment manifest so a
 # dose can be reconstructed after the fact.
