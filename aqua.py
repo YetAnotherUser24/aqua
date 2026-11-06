@@ -46,6 +46,11 @@ NODE_ENVS = {
         "real": "lora32",
         "virtual": "virtual-s3",
     },
+    "vibracion": {
+        "dir": ROOT / "nodo-vibracion",
+        "real": "esp32-c3",
+        "virtual": "esp32-c3-virtual",
+    },
 }
 
 

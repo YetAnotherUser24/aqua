@@ -47,12 +47,13 @@ except ImportError:  # pragma: no cover - developer feedback
 REPO_ROOT = Path(__file__).resolve().parent.parent
 NODE_BINARY = REPO_ROOT / "firmware" / "virtual_node" / "virtual_node"
 
-ROLES = ("od_sensor", "aerator", "mixer", "pump")
+ROLES = ("od_sensor", "aerator", "mixer", "pump", "vibration")
 NODE_IDS = {
     "od_sensor": "a0000000-0000-0000-0000-000000000001",
     "aerator": "b0000000-0000-0000-0000-000000000002",
     "mixer": "c0000000-0000-0000-0000-000000000003",
     "pump": "d0000000-0000-0000-0000-000000000004",
+    "vibration": "e0000000-0000-0000-0000-000000000005",
 }
 
 
