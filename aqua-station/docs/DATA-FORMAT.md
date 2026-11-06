@@ -21,9 +21,13 @@ time-ordered log — which is what telemetry is — files are the correct struct
 ├── aerator/2026-10-09.csv
 ├── mixer/2026-10-08.csv.gz
 ├── pump/2026-10-09.csv
-├── events/2026-10.csv                # unified event stream, monthly
-├── unknown/2026-10-09.jsonl          # side channel: fields the registry doesn't know
-└── .manifest.db                      # SQLite: flush/verify state per file
+└── unknown/2026-10-09.jsonl          # side channel: fields the registry doesn't know
+
+/var/lib/aqua-gateway/
+└── manifest.db                       # SQLite: flush/verify state per file
+
+# Operational events are stored in PostgreSQL 17 (partitioned monthly: events_YYYY_MM)
+# and bundled into exports/<exp_id>/events.csv per experiment.
 ```
 
 Rotation, compression and pruning all run in **`America/Lima` (UTC-5)**, not the host timezone.
@@ -74,11 +78,13 @@ Rules:
 
   A graceful stop loses nothing in either stage: `close_all()` flushes *and* syncs.
 
-## 3. Manifest — `.manifest.db` (SQLite)
+## 3. Manifest — `manifest.db` (SQLite)
+
+Located at `/var/lib/aqua-gateway/manifest.db`:
 
 ```
-file(path PK, role, day, rows, bytes, sha256, closed_at, compressed_at,
-     flushed_at, archive_key, verified, verify_attempts, last_error)
+files(path PK, role, day, rows, bytes, sha256, closed_at, compressed_at,
+      flushed_at, archive_key, verified, verify_attempts, last_error)
 ```
 
 `flushed_at` and `verified` are the fields that make retention safe. Nothing in the retention path

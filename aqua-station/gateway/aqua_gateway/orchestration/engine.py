@@ -454,6 +454,21 @@ class Orchestrator:
             self._paused = False
             self._paused_accum_s = 0.0
             self._paused_at_s = None
+            if self.gateway.db.available:
+                try:
+                    await self.gateway.db.execute(
+                        """
+                        UPDATE experiments
+                           SET status = $2,
+                               ended_at = now(),
+                               notes = COALESCE(notes, '') || ' [Auto-aborted: superseded by new run]'
+                         WHERE status = 'active' AND id != $1
+                        """,
+                        experiment_id,
+                        "aborted",
+                    )
+                except Exception:
+                    log.warning("failed to auto-abort prior active experiments", exc_info=True)
             await self._mark_experiment(experiment_id, status="active", started=True)
             await self._emit(
                 EventType.EXPERIMENT_STARTED,

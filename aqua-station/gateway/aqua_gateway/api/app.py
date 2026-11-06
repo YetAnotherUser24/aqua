@@ -469,12 +469,23 @@ def create_app(gateway: "Gateway") -> FastAPI:
             raise HTTPException(status_code=404, detail=f"unknown role {body.role!r}")
 
         schema = gateway.registry.for_role(body.role)
+        experiment_id = body.experiment_id
+        if experiment_id is None and gateway.db.available:
+            try:
+                active_exp = await gateway.db.fetchval(
+                    "SELECT id FROM experiments WHERE status = 'active' ORDER BY started_at DESC NULLS LAST LIMIT 1"
+                )
+                if active_exp:
+                    experiment_id = str(active_exp)
+            except Exception:
+                pass
+
         try:
             record = await gateway.commands.issue(
                 role=body.role,
                 action=body.action,
                 target=body.target,
-                experiment_id=body.experiment_id,
+                experiment_id=experiment_id,
                 requested_by=body.requested_by,
                 deadline_s=body.deadline_s,
                 node_id=schema.node_id,

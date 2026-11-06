@@ -10,6 +10,8 @@ import sys
 import json
 import gzip
 import shutil
+import sqlite3
+import time
 from pathlib import Path
 import boto3
 from botocore.config import Config
@@ -62,6 +64,27 @@ def sync_all():
                 try:
                     s3.upload_file(str(f), bucket, key, ExtraArgs={"ContentType": ct})
                     raw_files.append({"role": role, "name": f.name, "key": key, "size": f.stat().st_size})
+                    # Update manifest.db so retention pruning and health backlog reflect the flush
+                    manifest_path = Path("/var/lib/aqua-gateway/manifest.db")
+                    if manifest_path.exists():
+                        try:
+                            with sqlite3.connect(manifest_path) as conn:
+                                stem_path = str(f).replace(".gz", "")
+                                now_ts = time.time()
+                                conn.execute(
+                                    """
+                                    UPDATE files
+                                       SET flushed_at = ?,
+                                           archive_key = ?,
+                                           verified = 1,
+                                           verify_attempts = verify_attempts + 1
+                                     WHERE (path = ? OR path = ? OR path = ?)
+                                    """,
+                                    (now_ts, key, str(f), stem_path, f"{stem_path}.gz"),
+                                )
+                                conn.commit()
+                        except Exception as m_err:
+                            print(f"Warning: could not update manifest for {f.name}: {m_err}")
                 except Exception as e:
                     print(f"Error uploading {f.name}: {e}")
 

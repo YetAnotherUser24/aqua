@@ -7,6 +7,7 @@
 #include <ArduinoJson.h>
 #include <time.h>
 #include <sys/time.h>
+#include <esp_sntp.h>
 
 #if defined(OTA_ENABLED) && OTA_ENABLED
 #include <ArduinoOTA.h>
@@ -318,9 +319,11 @@ void cloudWorkerTask(void* parameter) {
                 Serial.printf("[Red] Conectado. IP: %s\n", WiFi.localIP().toString().c_str());
                 wasConnected = true;
 
-                // Sync time via NTP for precise ACK timestamps
-                configTime(0, 0, "pool.ntp.org", "time.nist.gov");
-                Serial.println("[NTP] Time synchronization requested.");
+                // Sync time via NTP: primary Pi Gateway (192.168.4.1), fallback pool.ntp.org.
+                // Smooth slewing ensures monotonicity during hydrodynamics runs.
+                sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);
+                configTime(0, 0, "192.168.4.1", "pool.ntp.org", "time.nist.gov");
+                Serial.println("[NTP] Time synchronization requested (smooth slewing, 192.168.4.1).");
 
 #if defined(OTA_ENABLED) && OTA_ENABLED
                 if (!otaConfigured) {

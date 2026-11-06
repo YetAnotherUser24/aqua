@@ -89,3 +89,22 @@ def test_hardware_monitor_caching():
         r3 = monitor.read_all(force=True)
         assert r3.cpu_temp_c == 55.0
 
+
+def test_hardware_monitor_rtc_sysfs_offset(tmp_path):
+    monitor = HardwareMonitor()
+    fake_rtc0 = tmp_path / "rtc0"
+    fake_rtc0.mkdir()
+    fake_epoch = fake_rtc0 / "since_epoch"
+    now_ts = 1730000000
+    fake_epoch.write_text(str(now_ts))
+
+    with patch("aqua_gateway.hardware.monitor.Path") as mock_path:
+        mock_path.side_effect = lambda *args: fake_rtc0 if "rtc0" in "".join(str(a) for a in args) and not "".join(str(a) for a in args).endswith("since_epoch") else (fake_epoch if "since_epoch" in "".join(str(a) for a in args) else Path(*args))
+        with patch("aqua_gateway.hardware.monitor.time.time", return_value=now_ts + 0.125):
+            with patch.object(monitor, "read_rtc_temp_sysfs", return_value=32.5):
+                rtc = monitor.read_rtc(None)
+                assert rtc.status == "ok"
+                assert rtc.valid is True
+                assert rtc.temp_c == 32.5
+                assert rtc.offset_s == 0.125
+

@@ -159,7 +159,8 @@ void loop() {
     // C. Build shared telemetry snapshot for Core 0 cloud worker
     SharedTelemetry sTelem;
     if (sync.has_valid_packet) {
-      sTelem.rtc_timestamp_ms = sync.rtc_timestamp_ms + (now - sync.received_at_ms);
+      const unsigned long deltaMs = (now >= sync.received_at_ms) ? (now - sync.received_at_ms) : 0UL;
+      sTelem.rtc_timestamp_ms = sync.rtc_timestamp_ms + (uint64_t)deltaMs;
     } else {
       sTelem.rtc_timestamp_ms = 0; // Will be ignored by backend if 0
     }

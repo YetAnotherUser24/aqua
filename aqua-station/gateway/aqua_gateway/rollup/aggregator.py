@@ -29,7 +29,7 @@ from __future__ import annotations
 import logging
 import time
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Any, Iterable, Mapping, Sequence
 
@@ -280,6 +280,38 @@ INSERT_SQL = (
     + ", ".join(f"{column} = EXCLUDED.{column}" for column in (*UPSERT_COLUMNS, *AGG_COLUMNS))
 )
 
+INSERT_1H_SQL = (
+    "INSERT INTO rollup_1h ("
+    "bucket, role, experiment_id, minutes_with_data, "
+    "od_do_mg_l_avg, od_do_mg_l_min, od_temp_c_avg, "
+    "drv_rpm_avg, drv_power_w_avg, drv_running_pct, pump_dosed_ml_sum"
+    ") SELECT "
+    "date_trunc('hour', bucket) AS hour_bucket, "
+    "role, "
+    "MAX(experiment_id) AS experiment_id, "
+    "COUNT(*)::integer AS minutes_with_data, "
+    "ROUND(AVG(od_do_mg_l_avg)::numeric, 4)::double precision, "
+    "MIN(od_do_mg_l_min), "
+    "ROUND(AVG(od_temp_c_avg)::numeric, 4)::double precision, "
+    "ROUND(AVG(drv_rpm_avg)::numeric, 4)::double precision, "
+    "ROUND(AVG(drv_power_w_avg)::numeric, 4)::double precision, "
+    "ROUND(AVG(drv_running_pct)::numeric, 4)::double precision, "
+    "ROUND(SUM(pump_dosed_ml_sum)::numeric, 4)::double precision "
+    "FROM rollup_1min "
+    "WHERE bucket >= $1 AND bucket < $2 "
+    "GROUP BY hour_bucket, role "
+    "ON CONFLICT (role, bucket) DO UPDATE SET "
+    "experiment_id = EXCLUDED.experiment_id, "
+    "minutes_with_data = EXCLUDED.minutes_with_data, "
+    "od_do_mg_l_avg = EXCLUDED.od_do_mg_l_avg, "
+    "od_do_mg_l_min = EXCLUDED.od_do_mg_l_min, "
+    "od_temp_c_avg = EXCLUDED.od_temp_c_avg, "
+    "drv_rpm_avg = EXCLUDED.drv_rpm_avg, "
+    "drv_power_w_avg = EXCLUDED.drv_power_w_avg, "
+    "drv_running_pct = EXCLUDED.drv_running_pct, "
+    "pump_dosed_ml_sum = EXCLUDED.pump_dosed_ml_sum"
+)
+
 
 def bucket_start(t_dev_ms: int) -> datetime:
     """Truncate a device timestamp to its minute."""
@@ -397,6 +429,14 @@ class RollupAggregator:
 
         try:
             await db.executemany(INSERT_SQL, rows)
+            # Consolidate 1-hour rollups for affected hours
+            hour_starts = {b.start.replace(minute=0, second=0, microsecond=0) for b in pending}
+            for h_start in hour_starts:
+                h_end = h_start + timedelta(hours=1)
+                try:
+                    await db.execute(INSERT_1H_SQL, h_start, h_end)
+                except Exception:
+                    log.warning("rollup_1h aggregation failed for hour %s", h_start, exc_info=True)
         except DatabaseUnavailable as exc:
             self.last_error = str(exc)
             log.warning("database unavailable; %d rollup bucket(s) dropped", len(rows))

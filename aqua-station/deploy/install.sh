@@ -326,11 +326,19 @@ LOGROTATE
 		skip "fake-hwclock absent or disabled"
 	fi
 
-	# Configure Chrony to synchronize system time to RTC (rtcsync)
+	# Configure Chrony to synchronize system time to RTC (rtcsync) and serve LAN
 	if [[ -d /etc/chrony/conf.d ]]; then
-		echo "rtcsync" > /etc/chrony/conf.d/10-rtc.conf
+		cat <<-'EOF' > /etc/chrony/conf.d/10-rtc.conf
+		# Synchronize system clock to hardware RTC every 11 minutes
+		rtcsync
+		# Authoritative local fallback when offline
+		local stratum 8
+		# Allow bench network nodes to sync time locally
+		allow 192.168.4.0/24
+		EOF
+		systemctl disable --now systemd-timesyncd 2>/dev/null || true
 		systemctl restart chrony 2>/dev/null || true
-		ok "chrony rtcsync configured"
+		ok "chrony rtcsync and local NTP server configured"
 	fi
 }
 

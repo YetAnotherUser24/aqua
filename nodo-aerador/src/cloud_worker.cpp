@@ -7,6 +7,7 @@
 #include <ArduinoJson.h>
 #include <Preferences.h>
 #include <lwip/sockets.h>
+#include <esp_sntp.h>
 #include "odrive_sd_logger.h"
 #include "esp_now_rx.h"
 #if defined(OTA_ENABLED) && OTA_ENABLED
@@ -64,7 +65,9 @@ static void getActiveExperimentId(char* out, size_t len) {
 static uint64_t currentRtcMs() {
   LoggerSyncState sync = espNowGetLoggerState();
   if (!sync.has_valid_packet) return 0;
-  return sync.rtc_timestamp_ms + (uint64_t)(millis() - sync.received_at_ms);
+  const unsigned long nowMs = millis();
+  const unsigned long deltaMs = (nowMs >= sync.received_at_ms) ? (nowMs - sync.received_at_ms) : 0UL;
+  return sync.rtc_timestamp_ms + (uint64_t)deltaMs;
 }
 
 void updateSharedTelemetry(const SharedTelemetry& telem) {
@@ -739,13 +742,11 @@ static void cloudWorkerTask(void* pvParameters) {
       if (!wasConnected) {
         Serial.printf("[Cloud Worker] WiFi connected. IP: %s (RSSI: %d dBm, ch: %u)\n",
                       WiFi.localIP().toString().c_str(), WiFi.RSSI(), (unsigned)WiFi.channel());
-        // Anchor the system clock. The node's *intended* time authority is the DS3231 on the OD
-        // logger, relayed over ESP-NOW, which is why nothing here ever asked NTP for the time --
-        // but that source only exists when the logger is in radio range, and on the bench
-        // (virtual mode) it never is. Without a fallback every telemetry sample stamps 0, so the
-        // per-sample timestamps the envelope carries all collapse onto one instant.
+        // Anchor the system clock. Primary authority is the Pi Gateway (192.168.4.1), with fallback to pool.ntp.org.
+        // Smooth slewing avoids backward clock jumps during DO control runs.
         WiFi.setSleep(false);
-        configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+        sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);
+        configTime(0, 0, "192.168.4.1", "pool.ntp.org", "time.nist.gov");
         digitalWrite(LED_BUILTIN, LOW); // Turn ON LED
         wasConnected = true;
 

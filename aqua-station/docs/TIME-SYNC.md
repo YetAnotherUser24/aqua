@@ -5,49 +5,42 @@ The analysis in `scripts/sysid_and_tune.m` and `advanced_thesis_tuning.m` identi
 cross-correlations between DO, airflow and dosing. Unknown per-column time skew would quietly
 invalidate exactly those results.
 
-## 1. The problem
+## 1. The problem & Hardware Foundation
 
 - Each node has an independent clock.
-- **The Raspberry Pi 3 has no hardware RTC** — `timedatectl` reports `RTC time: n/a`. On power loss
-  it returns with no idea of the time until it reaches the internet.
+- **The Raspberry Pi Gateway is fitted with a hardware DS3231 RTC (`/dev/rtc0` / I2C `0x68`)**:
+  - TCXO crystal oscillator providing $\pm 2\text{ ppm}$ stability ($\approx 0.17\text{ s/day}$ drift).
+  - Acts as the Authoritative Ground Truth across the entire bench.
+  - Automatically synchronized with Internet NTP via Linux kernel 11-minute sync mode (`rtcsync`) when WAN is available.
 - The nodes must keep working when the AP, the broker, or the internet is unavailable. Aeration
   control must not depend on network time.
 
 ## 2. Authority chain
 
-The deployment already contains a better time source than the Pi: **the OD sensor's DS3231**, which
-is battery-backed and survives power cuts. It becomes the persistent reference for the mesh.
-
 ```mermaid
 flowchart TB
-  NTP["Internet NTP<br/>systemd-timesyncd"]
-  RTC["nodo-sensor-od DS3231<br/>battery-backed<br/>= persistent authority"]
-  PI["aqua-station<br/>SNTP server for the LAN"]
-  MESH["mixer · pump · aerator"]
+  NTP["Internet NTP<br/>pool.ntp.org (when WAN is up)"]
+  RTC_PI["Gateway DS3231 RTC (/dev/rtc0)<br/>★ Authoritative Ground Truth (TCXO ±2 ppm)"]
+  PI["aqua-station (192.168.4.1)<br/>Chrony NTP Server (Stratum 1-2 online / Stratum 8 offline)"]
+  RTC_OD["nodo-sensor-od DS3231<br/>battery-backed probe reference"]
+  MESH["aerator · mixer · pump"]
+
   NTP -->|"when available"| PI
-  PI -->|"SNTP at boot"| MESH
-  RTC -->|"MQTT aqua/time (retained)"| PI
-  RTC -->|"ESP-NOW TIME packet"| MESH
-  PI -.->|"fallback: fake-hwclock + monotonic"| PI
+  PI <-->|"kernel 11-min sync (rtcsync)"| RTC_PI
+  PI ==>|"LAN NTP (192.168.4.1:123, smooth slewing)"| MESH & RTC_OD
+  RTC_OD -->|"ESP-NOW TIME packet (P2P backup)"| MESH
+  PI -->|"MQTT aqua/time (retained c/60s)"| MESH
 ```
 
-| Tier | Source | Available when |
-|---|---|---|
-| 1 | Internet NTP via `systemd-timesyncd` | Internet reachable |
-| 2 | **Sensor DS3231 over ESP-NOW** | No internet, no WiFi — peer-to-peer only |
-| 3 | Sensor DS3231 over MQTT (`aqua/time`) | ESP-NOW down, WiFi up |
-| 4 | Pi `fake-hwclock` persisted + monotonic uptime | Reboot, nothing reachable |
-| 5 | Node's own clock, `t_src = monotonic` | Everything else down; flagged in exports |
+| Tier | Source | Transport | Available when |
+|---|---|---|---|
+| 1 | Internet NTP via Chrony | WAN UDP 123 | Internet reachable |
+| 2 | **Gateway DS3231 RTC via Chrony (`192.168.4.1`)** | LAN UDP 123 | Local WiFi up, WAN offline |
+| 3 | **Sensor DS3231 over ESP-NOW** | Peer-to-peer radio | No WiFi, no Gateway — direct radio link |
+| 4 | Gateway/Sensor DS3231 over MQTT (`aqua/time`) | MQTT topic `aqua/time` | Broker up |
+| 5 | Node's own clock, `t_src = monotonic` | Internal timer | Everything else down; flagged in exports |
 
-Tiers 2 and 3 duplicate the same information over two transports on purpose. ESP-NOW survives a
-broker or AP outage; MQTT is more reliable when the AP is up but the peers are out of ESP-NOW
-range. This mirrors the existing ESP-NOW DO path in `nodo-aerador`, so the mechanism is already
-proven in this system.
-
-**Recommendation: fit a DS3231 to the Pi (~$3), the same part already used on the sensor.** It
-removes the last dependency on internet for time and makes tier 4 unnecessary. Given the board's
-`throttled=0x50000` history (under-voltage has occurred, and power cuts are plausible), this is
-cheap insurance for an always-on logger.
+The Gateway operates Chrony with `allow 192.168.4.0/24`, serving NTP time to all microcontroller nodes in under 100 ms from boot. Nodes use `SNTP_SYNC_MODE_SMOOTH` to slew rather than step during active control loops.
 
 ## 3. Protocol
 

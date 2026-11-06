@@ -42,11 +42,12 @@ class PowerReading:
 
 @dataclass(slots=True)
 class RtcReading:
-    """Status and temperature from DS3231 RTC."""
+    """Status, temperature and drift from DS3231 RTC."""
 
     temp_c: float | None
     valid: bool
     status: str  # "ok", "power_lost", "unavailable"
+    offset_s: float | None = None
 
 
 @dataclass(slots=True)
@@ -238,10 +239,11 @@ class HardwareMonitor:
         return None
 
     def read_rtc(self, bus: Any | None) -> RtcReading:
-        """Read DS3231 temperature and status."""
+        """Read DS3231 temperature, status and clock offset."""
         temp_c = self.read_rtc_temp_sysfs()
         valid = False
         status = "unavailable"
+        offset_s: float | None = None
 
         # Check if sysfs rtc0 exists
         rtc0_dir = Path("/sys/class/rtc/rtc0")
@@ -253,6 +255,7 @@ class HardwareMonitor:
             if since_epoch.is_file():
                 try:
                     ts = int(since_epoch.read_text().strip())
+                    offset_s = round(time.time() - ts, 3)
                     # If RTC date is before 2024, oscillator had lost power
                     if ts < 1704067200:
                         status = "power_lost"
@@ -283,7 +286,7 @@ class HardwareMonitor:
             except Exception as exc:
                 log.debug("direct I2C read from RTC at 0x%02X failed: %s", self.rtc_address, exc)
 
-        return RtcReading(temp_c=temp_c, valid=valid, status=status)
+        return RtcReading(temp_c=temp_c, valid=valid, status=status, offset_s=offset_s)
 
     def read_all(self, *, force: bool = False) -> HardwareReading:
         """Read all hardware telemetry, returning cached reading if within TTL."""

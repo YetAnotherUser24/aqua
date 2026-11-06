@@ -17,6 +17,7 @@ import logging
 import time
 from contextlib import suppress
 from datetime import datetime
+from pathlib import Path
 from typing import Any, Mapping
 from zoneinfo import ZoneInfo
 
@@ -185,13 +186,19 @@ class MqttIngest:
                             await client.subscribe(topic, qos=1)
 
                         await self._publish_time()
+                        time_task = asyncio.create_task(self._time_loop(), name="mqtt-time-broadcast")
 
-                        async for message in client.messages:
-                            await self._dispatch(
-                                str(message.topic),
-                                message.payload,
-                                retained=bool(getattr(message, "retain", False)),
-                            )
+                        try:
+                            async for message in client.messages:
+                                await self._dispatch(
+                                    str(message.topic),
+                                    message.payload,
+                                    retained=bool(getattr(message, "retain", False)),
+                                )
+                        finally:
+                            time_task.cancel()
+                            with suppress(asyncio.CancelledError):
+                                await time_task
             except aiomqtt.MqttError as exc:
                 if self._stopping.is_set():
                     return
@@ -312,7 +319,13 @@ class MqttIngest:
                 await self._flush_unknown()
 
         # -- project and fan out -------------------------------------------
-        day = datetime.fromtimestamp(envelope.t_dev_ms / 1000, tz=self._timezone).date()
+        now_local = datetime.now(tz=self._timezone)
+        dev_dt = datetime.fromtimestamp(envelope.t_dev_ms / 1000, tz=self._timezone)
+        # Prevent spurious day files from unsynced ESP32 boot clocks (1970/1969) or far-future corrupted years
+        if dev_dt.year < 2024 or dev_dt.year > 2030:
+            day = now_local.date()
+        else:
+            day = dev_dt.date()
         rows = rows_from_samples(schema, envelope.samples, t_dev_ms=envelope.t_dev_ms)
 
         await self.archive.append_batch(
@@ -538,14 +551,35 @@ class MqttIngest:
         """
         Broadcast the gateway's clock, retained.
 
-        The Pi has no hardware RTC, so on power loss it has no idea of the time until
-        NTP answers. Nodes therefore treat this as one source among several and fall
-        back to the sensor's DS3231 — see docs/TIME-SYNC.md.
+        The Raspberry Pi gateway uses its hardware DS3231 RTC as the authoritative
+        time source (ground truth), disciplining it via NTP when online.
         """
         if not self._publisher:
             return
-        payload = {"t_dev_ms": int(time.time() * 1000), "t_src": "ntp", "uncertainty_ms": 5}
+        t_src = "ntp"
+        uncertainty_ms = 5
+        rtc0_epoch = Path("/sys/class/rtc/rtc0/since_epoch")
+        if rtc0_epoch.is_file():
+            try:
+                rtc_ts = int(rtc0_epoch.read_text().strip())
+                if abs(time.time() - rtc_ts) <= 5.0:
+                    t_src = "rtc"
+                    uncertainty_ms = 10
+            except Exception:
+                pass
+        payload = {"t_dev_ms": int(time.time() * 1000), "t_src": t_src, "uncertainty_ms": uncertainty_ms}
         await self._publisher.publish(topics.TIME, json.dumps(payload).encode(), qos=1, retain=True)
+
+    async def _time_loop(self) -> None:
+        """Periodically broadcast time to mesh nodes every 60 seconds."""
+        while not self._stopping.is_set():
+            try:
+                await asyncio.sleep(60.0)
+                await self._publish_time()
+            except asyncio.CancelledError:
+                break
+            except Exception as exc:
+                log.debug("periodic time broadcast error: %s", exc)
 
     # -- helpers -----------------------------------------------------------
 

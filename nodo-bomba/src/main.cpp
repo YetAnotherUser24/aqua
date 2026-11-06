@@ -24,6 +24,7 @@
 #include <ArduinoJson.h>
 #include <esp_task_wdt.h>
 #include <sys/time.h>
+#include <esp_sntp.h>
 #include "config.h"
 #include "pump_bus.h"
 #include "pump_state.h"
@@ -448,7 +449,9 @@ static void cloudWorkerTask(void* param) {
 
     if (!wasConnected) {
       Serial.printf("[Cloud] WiFi connected. IP: %s\n", WiFi.localIP().toString().c_str());
-      configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+      // Primary NTP is Gateway (192.168.4.1), fallback pool.ntp.org.
+      sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);
+      configTime(0, 0, "192.168.4.1", "pool.ntp.org", "time.nist.gov");
       wasConnected = true;
     }
 

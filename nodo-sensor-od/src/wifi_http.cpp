@@ -129,8 +129,9 @@ bool syncTimeNtp(uint32_t timeoutMs) {
     }
   }
 
-  Logln("[NTP] Synchronizing time via NTP...");
-  configTime(0, 0, "pool.ntp.org", "time.nist.gov");
+  Logln("[NTP] Synchronizing time via NTP (Primary 192.168.4.1, Fallback pool.ntp.org)...");
+  sntp_set_sync_mode(SNTP_SYNC_MODE_SMOOTH);
+  configTime(0, 0, "192.168.4.1", "pool.ntp.org", "time.nist.gov");
 
   unsigned long t0 = millis();
   while (sntp_get_sync_status() != SNTP_SYNC_STATUS_COMPLETED && (millis() - t0 < timeoutMs)) {
