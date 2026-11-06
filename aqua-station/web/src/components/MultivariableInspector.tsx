@@ -59,6 +59,7 @@ const VAR_DEFS: VarDef[] = [
   { key: 'mixerRpm', role: 'mixer', field: 'drv_rpm', label: 'Mezclador PI', unit: 'rpm', precision: 0, side: 'right', color: '#14b8a6' },
   { key: 'temp', role: 'od_sensor', field: 'od_temp_c', label: 'Temp. agua', unit: '°C', precision: 2, side: 'right', color: '#60a5fa' },
   { key: 'pumpVol', role: 'pump', field: 'pump_dosed_ml', label: 'Bomba dosificada', unit: 'mL', precision: 2, side: 'right', color: '#a855f7' },
+  { key: 'vibRms', role: 'vibration', field: 'vib_rms_g', label: 'Vibración Tanque RMS', unit: 'g', precision: 3, side: 'left', color: '#e879f9' },
   { key: 'error', role: '', field: '', label: 'Error e(t) = SP − DO', unit: 'mg/L', precision: 3, side: 'right', color: '#f43f5e' },
   { key: 'dDoDt', role: '', field: '', label: 'Derivada d[DO]/dt', unit: 'mg/L/min', precision: 3, side: 'right', color: '#c084fc' },
   { key: 'drvStatus', role: 'aerator', field: 'drv_status', label: 'Falla ODrive (active_errors)', unit: null, precision: 0, side: 'right', color: '#ef4444' },
