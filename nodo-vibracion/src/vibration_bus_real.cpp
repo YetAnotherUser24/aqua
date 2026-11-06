@@ -89,6 +89,9 @@ public:
     int16_t rawAz = (int16_t)((Wire.read() << 8) | Wire.read());
     int16_t rawTemp = (int16_t)((Wire.read() << 8) | Wire.read());
 
+    out.raw_ax = rawAx;
+    out.raw_ay = rawAy;
+    out.raw_az = rawAz;
     out.ax_g = (float)rawAx / ACCEL_SCALE_4G;
     out.ay_g = (float)rawAy / ACCEL_SCALE_4G;
     out.az_g = (float)rawAz / ACCEL_SCALE_4G;

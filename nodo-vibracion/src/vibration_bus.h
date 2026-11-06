@@ -10,6 +10,9 @@ struct VibrationSample {
   float ax_g = 0.0f;
   float ay_g = 0.0f;
   float az_g = 0.0f;
+  int16_t raw_ax = 0;
+  int16_t raw_ay = 0;
+  int16_t raw_az = 0;
   float temp_c = 0.0f;
   bool valid = false;
 };

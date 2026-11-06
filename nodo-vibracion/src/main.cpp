@@ -50,13 +50,23 @@ void checkWifi(uint32_t nowMs) {
     return;
   }
 
-  // Si no esta conectado, no spamear reconnect() cada 5s (interrumpe la negociacion)
-  // Reintentar solo si pasa un timeout razonable de 15s
+  // Reintentar si han pasado mas de 15 segundos sin conexion
   if (nowMs - s_lastWifiCheckMs > 15000) {
     s_lastWifiCheckMs = nowMs;
-    Serial.println("[WIFI] Reintentando asociacion WiFi...");
+    const wl_status_t st = WiFi.status();
+    const char* stStr = "Desconocido";
+    switch (st) {
+      case WL_NO_SSID_AVAIL:   stStr = "SSID no encontrado"; break;
+      case WL_CONNECT_FAILED:  stStr = "Fallo de clave/auth"; break;
+      case WL_CONNECTION_LOST: stStr = "Conexion perdida"; break;
+      case WL_DISCONNECTED:    stStr = "Desconectado/Buscando"; break;
+      case WL_IDLE_STATUS:     stStr = "Inactivo/Esperando"; break;
+      default: break;
+    }
+    Serial.printf("[WIFI] Estado: %d (%s). Reintentando asociacion a '%s'...\n",
+                  (int)st, stStr, WIFI_SSID);
     WiFi.disconnect(false, false);
-    WiFi.reconnect();
+    WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   }
 }
 
@@ -107,7 +117,9 @@ void loop() {
       telem.dev_status = s_sensor->statusCode();
       const uint64_t unixMs = aquaLinkNowMs();
 
-      Serial.printf("[VIB] RMS: %.3fg | Peak: %.3fg | Cf: %.2f | Temp: %.1fC | Muestras: %u\n",
+      Serial.printf("[VIB] Ejes: X=%+.3fg Y=%+.3fg Z=%+.3fg (raw: %6d, %6d, %6d) | RMS: %.3fg | Peak: %.3fg | Cf: %.2f | Temp: %.1fC | N: %u\n",
+                    telem.ax_g, telem.ay_g, telem.az_g,
+                    telem.raw_ax, telem.raw_ay, telem.raw_az,
                     telem.rms_g, telem.peak_g, telem.crest_factor, telem.temp_c,
                     (unsigned int)telem.sample_count);
 

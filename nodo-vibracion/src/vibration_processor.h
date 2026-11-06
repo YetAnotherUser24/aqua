@@ -12,6 +12,9 @@ struct VibrationTelemetry {
   float ax_g = 0.0f;
   float ay_g = 0.0f;
   float az_g = 0.0f;
+  int16_t raw_ax = 0;
+  int16_t raw_ay = 0;
+  int16_t raw_az = 0;
   float rms_g = 0.0f;
   float peak_g = 0.0f;
   float crest_factor = 0.0f;
@@ -53,6 +56,9 @@ private:
   float _sumAy;
   float _sumAz;
   float _sumTemp;
+  int16_t _lastRawAx;
+  int16_t _lastRawAy;
+  int16_t _lastRawAz;
 
   // Arreglos circulares o buffers de ventana para el calculo de componentes dinamicas
   float _samplesAx[MAX_WINDOW_SAMPLES];

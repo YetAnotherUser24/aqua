@@ -38,6 +38,10 @@ public:
     out.ay_g = 0.18f * cosf(2.0f * (float)M_PI * 25.0f * t) + noiseY;
     out.az_g = 1.0f + 0.22f * sinf(2.0f * (float)M_PI * 50.0f * t) + noiseZ;
 
+    out.raw_ax = (int16_t)(out.ax_g * 8192.0f);
+    out.raw_ay = (int16_t)(out.ay_g * 8192.0f);
+    out.raw_az = (int16_t)(out.az_g * 8192.0f);
+
     // Temperatura de 24.5 C con suave deriva
     out.temp_c = _temp + 0.5f * sinf(0.05f * t);
     out.valid = true;

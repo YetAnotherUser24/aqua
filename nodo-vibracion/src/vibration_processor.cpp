@@ -32,6 +32,10 @@ void VibrationProcessor::addSample(const VibrationSample& sample) {
   _sumAz += sample.az_g;
   _sumTemp += sample.temp_c;
 
+  _lastRawAx = sample.raw_ax;
+  _lastRawAy = sample.raw_ay;
+  _lastRawAz = sample.raw_az;
+
   _count++;
 }
 
@@ -75,6 +79,9 @@ bool VibrationProcessor::finalizeWindow(VibrationTelemetry& out) {
   out.crest_factor = crestFactor;
   out.temp_c = _sumTemp / n;
   out.sample_count = _count;
+  out.raw_ax = _lastRawAx;
+  out.raw_ay = _lastRawAy;
+  out.raw_az = _lastRawAz;
 
   // Reiniciar ventana para el siguiente ciclo
   reset();
