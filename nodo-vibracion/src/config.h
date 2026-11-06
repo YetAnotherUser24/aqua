@@ -11,16 +11,22 @@
 // -----------------------------------------------------------------------------
 // RED Y MQTT
 // -----------------------------------------------------------------------------
-#define WIFI_SSID           "AQUACONTROL"
-#define WIFI_PASSWORD       "aquacontrol2024"
-#define WIFI_HOSTNAME       "nodo-vibracion"
+#ifndef AQUA_WIFI_SSID
+#define AQUA_WIFI_SSID          "AquaStation"
+#endif
+#ifndef AQUA_WIFI_PASSWORD
+#define AQUA_WIFI_PASSWORD      "AquaPass"
+#endif
+#define WIFI_SSID               AQUA_WIFI_SSID
+#define WIFI_PASSWORD           AQUA_WIFI_PASSWORD
+#define WIFI_HOSTNAME           "nodo-vibracion"
 
 // Red estatica AquaControl (192.168.4.14 para nodo-vibracion)
 #ifndef AQUA_STATIC_IP
 #define AQUA_STATIC_IP          192, 168, 4, 14
 #endif
 #ifndef AQUA_STATIC_GATEWAY
-#define AQUA_STATIC_GATEWAY     192, 168, 4, 1
+#define AQUA_STATIC_GATEWAY     0, 0, 0, 0
 #endif
 #ifndef AQUA_STATIC_SUBNET
 #define AQUA_STATIC_SUBNET      255, 255, 255, 0
@@ -34,12 +40,25 @@
 #define MQTT_BROKER_PORT    1883
 #define MQTT_CLIENT_ID      "nodo-vibracion"
 
-// Credenciales MQTT opcionales (dejar en nullptr si no requiere auth en bench)
-#define MQTT_USER           nullptr
-#define MQTT_PASSWORD       nullptr
+// Credenciales MQTT autenticadas para Mosquitto en aqua-pi
+#ifndef AQUA_MQTT_USER
+#define AQUA_MQTT_USER      "vibration"
+#endif
+#ifndef AQUA_MQTT_PASSWORD
+#define AQUA_MQTT_PASSWORD  "vibPass7xK9mQ2wL4pRt1Za8"
+#endif
+#define MQTT_USER           AQUA_MQTT_USER
+#define MQTT_PASSWORD       AQUA_MQTT_PASSWORD
 
 // Schema-v2 Transport
 #define AQUA_TRANSPORT_MQTT 1
+
+// -----------------------------------------------------------------------------
+// CALIBRACION / TARA EN REPOSO (OPCIONAL)
+// -----------------------------------------------------------------------------
+// Activa la tara en setup() calculando el offset para: X -> 0g, Y -> 1.0g, Z -> 0g
+#define ENABLE_AUTO_CALIBRATION   true
+#define CALIBRATION_SAMPLES       100
 
 // -----------------------------------------------------------------------------
 // HARDWARE I2C & MPU6050

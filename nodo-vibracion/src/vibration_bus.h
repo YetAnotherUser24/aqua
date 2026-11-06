@@ -40,6 +40,11 @@ public:
   virtual void tick(uint32_t nowMs) {}
 
   /**
+   * @brief Calibra offsets en reposo ajustando a los valores objetivo deseados.
+   */
+  virtual void calibrate(float targetX = 0.0f, float targetY = 1.0f, float targetZ = 0.0f) {}
+
+  /**
    * @brief Devuelve el codigo de estado del sensor (0 = OK).
    */
   virtual uint8_t statusCode() const = 0;

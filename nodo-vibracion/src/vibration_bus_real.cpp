@@ -15,7 +15,41 @@ namespace {
 
 class RealVibrationSensor : public IVibrationSensor {
 public:
-  RealVibrationSensor() : _statusCode(1), _initialized(false) {}
+  RealVibrationSensor() : _statusCode(1), _initialized(false), _offsetX(0.0f), _offsetY(0.0f), _offsetZ(0.0f) {}
+
+  void calibrate(float targetX = 0.0f, float targetY = 1.0f, float targetZ = 0.0f) override {
+    if (!_initialized) {
+      if (!init()) return;
+    }
+    long sumRawX = 0;
+    long sumRawY = 0;
+    long sumRawZ = 0;
+    size_t validSamples = 0;
+
+    for (size_t i = 0; i < CALIBRATION_SAMPLES; ++i) {
+      delay(5);
+      VibrationSample s;
+      if (read(s)) {
+        sumRawX += s.raw_ax;
+        sumRawY += s.raw_ay;
+        sumRawZ += s.raw_az;
+        validSamples++;
+      }
+    }
+
+    if (validSamples > 0) {
+      float avgX = (float)sumRawX / ((float)validSamples * ACCEL_SCALE_4G);
+      float avgY = (float)sumRawY / ((float)validSamples * ACCEL_SCALE_4G);
+      float avgZ = (float)sumRawZ / ((float)validSamples * ACCEL_SCALE_4G);
+
+      _offsetX = avgX - targetX;
+      _offsetY = avgY - targetY;
+      _offsetZ = avgZ - targetZ;
+
+      Serial.printf("[VIB] Calibracion completada (N=%u). Offsets: X=%+.3fg, Y=%+.3fg, Z=%+.3fg\n",
+                    (unsigned int)validSamples, _offsetX, _offsetY, _offsetZ);
+    }
+  }
 
   bool init() override {
     Wire.begin(PIN_I2C_SDA, PIN_I2C_SCL, I2C_FREQUENCY_HZ);
@@ -92,9 +126,9 @@ public:
     out.raw_ax = rawAx;
     out.raw_ay = rawAy;
     out.raw_az = rawAz;
-    out.ax_g = (float)rawAx / ACCEL_SCALE_4G;
-    out.ay_g = (float)rawAy / ACCEL_SCALE_4G;
-    out.az_g = (float)rawAz / ACCEL_SCALE_4G;
+    out.ax_g = ((float)rawAx / ACCEL_SCALE_4G) - _offsetX;
+    out.ay_g = ((float)rawAy / ACCEL_SCALE_4G) - _offsetY;
+    out.az_g = ((float)rawAz / ACCEL_SCALE_4G) - _offsetZ;
 
     // Formula MPU6050: T = (rawTemp / 340.0) + 36.53
     out.temp_c = ((float)rawTemp / 340.0f) + 36.53f;
@@ -110,6 +144,9 @@ public:
 private:
   uint8_t _statusCode;
   bool _initialized;
+  float _offsetX;
+  float _offsetY;
+  float _offsetZ;
 
   bool writeRegister(uint8_t reg, uint8_t value) {
     Wire.beginTransmission(MPU6050_I2C_ADDR);

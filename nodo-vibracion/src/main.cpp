@@ -88,6 +88,11 @@ void setup() {
   s_sensor = getVibrationSensor();
   if (!s_sensor->init()) {
     Serial.println("[ERR] No se pudo inicializar el sensor MPU6050.");
+  } else {
+#if ENABLE_AUTO_CALIBRATION
+    Serial.println("[VIB] Ejecutando auto-tara en reposo (X=0g, Y=1.0g, Z=0g)...");
+    s_sensor->calibrate(0.0f, 1.0f, 0.0f);
+#endif
   }
 }
 
