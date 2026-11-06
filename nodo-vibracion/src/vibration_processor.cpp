@@ -74,6 +74,7 @@ bool VibrationProcessor::finalizeWindow(VibrationTelemetry& out) {
   out.peak_g = peakDyn;
   out.crest_factor = crestFactor;
   out.temp_c = _sumTemp / n;
+  out.sample_count = _count;
 
   // Reiniciar ventana para el siguiente ciclo
   reset();

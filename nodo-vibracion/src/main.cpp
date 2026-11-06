@@ -23,25 +23,39 @@ uint32_t s_lastFlushMs = 0;
 uint32_t s_lastWifiCheckMs = 0;
 
 void setupWifi() {
-  Serial.printf("[WIFI] Conectando a red: %s\n", WIFI_SSID);
+  Serial.printf("[WIFI] Conectando a red: %s (IP fija 192.168.4.14)...\n", WIFI_SSID);
   WiFi.mode(WIFI_STA);
+  WiFi.setSleep(false);
+  WiFi.setAutoReconnect(true);
+  WiFi.setTxPower(WIFI_TX_POWER); // 8.5 dBm para evitar brownouts y caidas de tension en ESP32-C3
+
+  IPAddress local_IP(AQUA_STATIC_IP);
+  IPAddress gateway(AQUA_STATIC_GATEWAY);
+  IPAddress subnet(AQUA_STATIC_SUBNET);
+  WiFi.config(local_IP, gateway, subnet);
+
   WiFi.setHostname(WIFI_HOSTNAME);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 }
 
 void checkWifi(uint32_t nowMs) {
-  if (nowMs - s_lastWifiCheckMs < 5000) return;
-  s_lastWifiCheckMs = nowMs;
-
   if (WiFi.status() == WL_CONNECTED) {
     static bool logged = false;
     if (!logged) {
-      Serial.printf("[WIFI] Conectado. IP: %s | RSSI: %d dBm\n",
+      Serial.printf("[WIFI] Conectado con exito. IP: %s | RSSI: %d dBm\n",
                     WiFi.localIP().toString().c_str(), WiFi.RSSI());
       logged = true;
     }
-  } else {
-    Serial.println("[WIFI] Reconectando...");
+    s_lastWifiCheckMs = nowMs;
+    return;
+  }
+
+  // Si no esta conectado, no spamear reconnect() cada 5s (interrumpe la negociacion)
+  // Reintentar solo si pasa un timeout razonable de 15s
+  if (nowMs - s_lastWifiCheckMs > 15000) {
+    s_lastWifiCheckMs = nowMs;
+    Serial.println("[WIFI] Reintentando asociacion WiFi...");
+    WiFi.disconnect(false, false);
     WiFi.reconnect();
   }
 }
@@ -93,9 +107,9 @@ void loop() {
       telem.dev_status = s_sensor->statusCode();
       const uint64_t unixMs = aquaLinkNowMs();
 
-      Serial.printf("[VIB] RMS: %.3fg | Peak: %.3fg | Cf: %.2f | Temp: %.1fC | Muestras: %d\n",
+      Serial.printf("[VIB] RMS: %.3fg | Peak: %.3fg | Cf: %.2f | Temp: %.1fC | Muestras: %u\n",
                     telem.rms_g, telem.peak_g, telem.crest_factor, telem.temp_c,
-                    s_processor.sampleCount());
+                    (unsigned int)telem.sample_count);
 
       aquaLinkQueue(telem, unixMs);
       aquaLinkFlush();

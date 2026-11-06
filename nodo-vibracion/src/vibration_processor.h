@@ -17,6 +17,7 @@ struct VibrationTelemetry {
   float crest_factor = 0.0f;
   float temp_c = 0.0f;
   int dev_status = 0;
+  size_t sample_count = 0;
 };
 
 class VibrationProcessor {

@@ -4,9 +4,9 @@
  * @brief Configuracion estatica del nodo de vibracion (ESP32-C3 + MPU6050).
  */
 
-#include <stddef.h>
 #include <stdint.h>
 #include <stddef.h>
+#include <WiFi.h>
 
 // -----------------------------------------------------------------------------
 // RED Y MQTT
@@ -14,6 +14,21 @@
 #define WIFI_SSID           "AQUACONTROL"
 #define WIFI_PASSWORD       "aquacontrol2024"
 #define WIFI_HOSTNAME       "nodo-vibracion"
+
+// Red estatica AquaControl (192.168.4.14 para nodo-vibracion)
+#ifndef AQUA_STATIC_IP
+#define AQUA_STATIC_IP          192, 168, 4, 14
+#endif
+#ifndef AQUA_STATIC_GATEWAY
+#define AQUA_STATIC_GATEWAY     192, 168, 4, 1
+#endif
+#ifndef AQUA_STATIC_SUBNET
+#define AQUA_STATIC_SUBNET      255, 255, 255, 0
+#endif
+
+// Potencia RF de transmision WiFi (Crucial para estabilidad del ESP32-C3)
+// 8.5 dBm previene caidas de tension en el riel de 3.3V y brownouts
+#define WIFI_TX_POWER       WIFI_POWER_8_5dBm
 
 #define MQTT_BROKER_HOST    "192.168.4.1"
 #define MQTT_BROKER_PORT    1883
