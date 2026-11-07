@@ -19,11 +19,14 @@ import { useEffect, useState } from 'react';
 import {
   Activity,
   ChevronDown,
+  Droplets,
   FlaskConical,
   Hand,
   HardDrive,
   Play,
+  RotateCcw,
   SlidersHorizontal,
+  Thermometer,
   Zap,
 } from 'lucide-react';
 import { getRecipes } from '@/lib/api';
@@ -326,6 +329,9 @@ function SensorTab({ registry, snapshot }: { registry: Registry | null; snapshot
   const [pendingRate, setPendingRate] = useState<number | null>(null);
   const battery = readField(registry, snapshot, 'od_sensor', 'pwr_battery_v');
   const observed = snapshot?.nodes?.['od_sensor']?.observed_hz;
+  const envTemp = readField(registry, snapshot, 'aerator', 'env_temp_c');
+  const envHumidity = readField(registry, snapshot, 'aerator', 'env_humidity_pct');
+  const hasEnvData = envTemp.value != null && envHumidity.value != null;
 
   // Clear the pending mark once the measured rate matches what was asked for, or after a
   // bounded wait so a refused command does not pulse forever.
@@ -350,6 +356,45 @@ function SensorTab({ registry, snapshot }: { registry: Registry | null; snapshot
       deadline_s: 120,
       requested_by: 'operator:web',
     }).catch(() => setPendingRate(null));
+  };
+
+  // ---------------------------------------------------------------------------
+  // Nodo de Vibración Estructural (MPU6050 / ESP32-C3)
+  // ---------------------------------------------------------------------------
+  const [calibAxis, setCalibAxis] = useState<string>('+Y');
+  const [calibStatus, setCalibStatus] = useState<'idle' | 'sending' | 'success' | 'error'>('idle');
+  const [calibMsg, setCalibMsg] = useState<string | null>(null);
+
+  const vibNode = snapshot?.nodes?.['vibration'] ?? null;
+  const vibOnline = Boolean(vibNode?.online);
+  const vibHz = vibOnline ? vibNode?.observed_hz ?? null : null;
+  const vibRms = readField(registry, snapshot, 'vibration', 'vib_rms_g');
+  const vibPeak = readField(registry, snapshot, 'vibration', 'vib_peak_g');
+  const vibCf = readField(registry, snapshot, 'vibration', 'vib_crest_factor');
+  const vibTemp = readField(registry, snapshot, 'vibration', 'vib_temp_c');
+  const vibAx = readField(registry, snapshot, 'vibration', 'vib_ax_g');
+  const vibAy = readField(registry, snapshot, 'vibration', 'vib_ay_g');
+  const vibAz = readField(registry, snapshot, 'vibration', 'vib_az_g');
+
+  const handleCalibrate = async () => {
+    setCalibStatus('sending');
+    setCalibMsg(null);
+    try {
+      await postCommand({
+        role: 'vibration',
+        action: 'calibrate',
+        target: { axis: calibAxis },
+        deadline_s: 30,
+        requested_by: 'operator:web',
+      });
+      setCalibStatus('success');
+      setCalibMsg(`Comando de tara enviado (${calibAxis} = 1.0g).`);
+      setTimeout(() => setCalibStatus('idle'), 4000);
+    } catch (err) {
+      setCalibStatus('error');
+      setCalibMsg(err instanceof Error ? err.message : 'Error al enviar comando');
+      setTimeout(() => setCalibStatus('idle'), 5000);
+    }
   };
 
   return (
@@ -388,6 +433,57 @@ function SensorTab({ registry, snapshot }: { registry: Registry | null; snapshot
               </button>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* Sensor Ambiental DHT11 (Nodo Aerador - Termohigrómetro) */}
+      <div className="p-3 bg-scada-well rounded-xl border border-scada-border space-y-2.5">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <Thermometer className="w-3.5 h-3.5 text-amber-400" />
+            <span className="text-xs font-bold text-slate-200">Termohigrómetro Ambiental (DHT11)</span>
+          </div>
+          <span
+            className={cn(
+              'text-[10px] px-1.5 py-0.5 rounded font-mono font-medium border',
+              hasEnvData
+                ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800'
+                : 'bg-slate-800 text-slate-400 border-slate-700',
+            )}
+          >
+            {hasEnvData ? 'ACTIVO' : 'NO DETECTADO (OPCIONAL)'}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 gap-2">
+          <div className="p-2.5 bg-scada-elevated/80 rounded-lg border border-scada-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Thermometer className="w-4 h-4 text-amber-400/90" />
+              <div>
+                <span className="text-[10px] text-slate-400 block font-medium">Temp. Ambiente</span>
+                <span className="text-sm font-mono font-bold text-slate-100">
+                  {envTemp.value != null ? `${formatNumber(envTemp.value, 1)} °C` : '—'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="p-2.5 bg-scada-elevated/80 rounded-lg border border-scada-border flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Droplets className="w-4 h-4 text-sky-400/90" />
+              <div>
+                <span className="text-[10px] text-slate-400 block font-medium">Humedad Relativa</span>
+                <span className="text-sm font-mono font-bold text-slate-100">
+                  {envHumidity.value != null ? `${formatNumber(envHumidity.value, 1)} %` : '—'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between text-[10px] text-slate-500 font-mono pt-0.5">
+          <span>Nodo: Aerador (GPIO 1)</span>
+          <span>Cadencia: 3 s</span>
         </div>
       </div>
 
@@ -433,6 +529,173 @@ function SensorTab({ registry, snapshot }: { registry: Registry | null; snapshot
           <span className="text-telemetry-do font-bold">
             {observed == null ? '—' : `${observed.toFixed(3)} Hz`}
           </span>
+        </div>
+      </div>
+
+      {/* Sensor de Vibración Estructural (MPU6050 / ESP32-C3) */}
+      <div className="p-3 bg-scada-well rounded-xl border border-scada-border space-y-3">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-1.5">
+            <Activity className="w-3.5 h-3.5 text-fuchsia-400" />
+            <span className="text-xs font-bold text-slate-200">Vibración Estructural (MPU6050)</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span
+              className={cn(
+                'text-[10px] px-1.5 py-0.5 rounded font-mono font-medium border flex items-center gap-1.5',
+                vibOnline
+                  ? 'bg-emerald-950/80 text-emerald-400 border-emerald-800'
+                  : 'bg-slate-800 text-slate-400 border-slate-700'
+              )}
+            >
+              <span className={cn('w-1.5 h-1.5 rounded-full', vibOnline ? 'bg-emerald-400 animate-pulse' : 'bg-slate-500')} />
+              {vibOnline ? (vibHz != null ? `${vibHz.toFixed(1)} Hz` : 'ONLINE') : 'OFFLINE'}
+            </span>
+          </div>
+        </div>
+
+        {/* Métricas clave: RMS, Peak, Cf, Temp */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+          <div className="p-2 bg-scada-elevated/80 rounded-lg border border-scada-border">
+            <span className="text-[10px] text-slate-400 block font-medium">RMS Global</span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className={cn(
+                'text-sm font-mono font-bold',
+                vibRms.value == null ? 'text-slate-400' :
+                vibRms.value < 0.02 ? 'text-emerald-400' :
+                vibRms.value < 0.10 ? 'text-amber-400' : 'text-rose-400'
+              )}>
+                {vibRms.value != null ? formatNumber(vibRms.value, 3) : '—'}
+              </span>
+              <span className="text-[10px] text-slate-500 font-mono">g</span>
+            </div>
+            <span className="text-[9px] text-slate-500 block truncate">
+              {vibRms.value == null ? 'Sin datos' : vibRms.value < 0.02 ? 'Reposo normal' : vibRms.value < 0.10 ? 'Vibración leve' : 'Vibración alta'}
+            </span>
+          </div>
+
+          <div className="p-2 bg-scada-elevated/80 rounded-lg border border-scada-border">
+            <span className="text-[10px] text-slate-400 block font-medium">Pico Máx</span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-sm font-mono font-bold text-slate-100">
+                {vibPeak.value != null ? formatNumber(vibPeak.value, 3) : '—'}
+              </span>
+              <span className="text-[10px] text-slate-500 font-mono">g</span>
+            </div>
+            <span className="text-[9px] text-slate-500 block">Amplitud pico</span>
+          </div>
+
+          <div className="p-2 bg-scada-elevated/80 rounded-lg border border-scada-border">
+            <span className="text-[10px] text-slate-400 block font-medium">Factor Cresta</span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-sm font-mono font-bold text-sky-400">
+                {vibCf.value != null ? formatNumber(vibCf.value, 2) : '—'}
+              </span>
+            </div>
+            <span className="text-[9px] text-slate-500 block">Pico / RMS</span>
+          </div>
+
+          <div className="p-2 bg-scada-elevated/80 rounded-lg border border-scada-border">
+            <span className="text-[10px] text-slate-400 block font-medium">Temp MPU</span>
+            <div className="flex items-baseline gap-1 mt-0.5">
+              <span className="text-sm font-mono font-bold text-amber-300">
+                {vibTemp.value != null ? formatNumber(vibTemp.value, 1) : '—'}
+              </span>
+              <span className="text-[10px] text-slate-500 font-mono">°C</span>
+            </div>
+            <span className="text-[9px] text-slate-500 block">Sensor interno</span>
+          </div>
+        </div>
+
+        {/* Aceleración Triaxial Instantánea (X, Y, Z) */}
+        <div className="p-2.5 bg-scada-canvas rounded-lg border border-scada-border space-y-1.5 font-mono text-xs">
+          <div className="flex justify-between items-center text-slate-400 text-[11px]">
+            <span>Aceleración Triaxial Instantánea:</span>
+            {vibNode?.rssi != null && (
+              <span className="text-[10px] text-slate-500">{vibNode.rssi} dBm (WiFi)</span>
+            )}
+          </div>
+          <div className="grid grid-cols-3 gap-2 text-center">
+            <div className="p-1.5 bg-scada-elevated rounded border border-scada-border">
+              <span className="text-[10px] text-slate-400 block">Eje X</span>
+              <span className="text-xs font-bold text-slate-200">
+                {vibAx.value != null ? `${vibAx.value >= 0 ? '+' : ''}${formatNumber(vibAx.value, 3)} g` : '—'}
+              </span>
+            </div>
+            <div className="p-1.5 bg-scada-elevated rounded border border-scada-border">
+              <span className="text-[10px] text-slate-400 block">Eje Y</span>
+              <span className="text-xs font-bold text-slate-200">
+                {vibAy.value != null ? `${vibAy.value >= 0 ? '+' : ''}${formatNumber(vibAy.value, 3)} g` : '—'}
+              </span>
+            </div>
+            <div className="p-1.5 bg-scada-elevated rounded border border-scada-border">
+              <span className="text-[10px] text-slate-400 block">Eje Z</span>
+              <span className="text-xs font-bold text-slate-200">
+                {vibAz.value != null ? `${vibAz.value >= 0 ? '+' : ''}${formatNumber(vibAz.value, 3)} g` : '—'}
+              </span>
+            </div>
+          </div>
+        </div>
+
+        {/* Calibración / Tara en reposo */}
+        <div className="p-2.5 bg-scada-canvas rounded-lg border border-scada-border space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-bold text-slate-200">Calibración / Tara en Reposo:</span>
+            <span className="text-[10px] text-fuchsia-400 font-mono">Eje de Gravedad (1g)</span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-center">
+            <div className="sm:col-span-2">
+              <label className="text-[10px] text-slate-400 block mb-1">Eje vertical alineado a gravedad:</label>
+              <select
+                value={calibAxis}
+                onChange={(e) => setCalibAxis(e.target.value)}
+                disabled={calibStatus === 'sending'}
+                className="w-full bg-scada-elevated text-slate-100 text-xs border border-scada-border rounded-lg p-2 font-mono focus:outline-none focus:border-fuchsia-400"
+              >
+                <option value="+Y">+Y (Pared vertical - estándar)</option>
+                <option value="-Y">-Y (Pared vertical invertida)</option>
+                <option value="+Z">+Z (Base horizontal normal)</option>
+                <option value="-Z">-Z (Base horizontal invertida)</option>
+                <option value="+X">+X (Lateral +X)</option>
+                <option value="-X">-X (Lateral -X)</option>
+              </select>
+            </div>
+
+            <div className="sm:col-span-1 pt-3.5 sm:pt-0">
+              <button
+                type="button"
+                onClick={handleCalibrate}
+                disabled={calibStatus === 'sending' || !vibOnline}
+                title={!vibOnline ? 'El nodo de vibración debe estar conectado' : 'Tomar 100 muestras en reposo y descontar offset'}
+                className={cn(
+                  'w-full py-2 px-2.5 rounded-lg text-xs font-bold transition flex items-center justify-center gap-1.5 border',
+                  calibStatus === 'sending'
+                    ? 'bg-fuchsia-950 text-fuchsia-300 border-fuchsia-700 animate-pulse cursor-wait'
+                    : calibStatus === 'success'
+                    ? 'bg-emerald-950 text-emerald-300 border-emerald-700'
+                    : calibStatus === 'error'
+                    ? 'bg-rose-950 text-rose-300 border-rose-700'
+                    : !vibOnline
+                    ? 'bg-slate-800 text-slate-500 border-slate-700 cursor-not-allowed opacity-60'
+                    : 'bg-fuchsia-950/70 hover:bg-fuchsia-900 border-fuchsia-800 text-fuchsia-300 active:scale-95'
+                )}
+              >
+                <RotateCcw className={cn('w-3.5 h-3.5', calibStatus === 'sending' && 'animate-spin')} />
+                {calibStatus === 'sending' ? 'Calibrando...' : calibStatus === 'success' ? '¡Calibrado!' : 'Calibrar Tara'}
+              </button>
+            </div>
+          </div>
+
+          {calibMsg && (
+            <p className={cn('text-[10px] font-mono mt-1', calibStatus === 'error' ? 'text-rose-400' : 'text-emerald-400')}>
+              {calibMsg}
+            </p>
+          )}
+
+          <p className="text-[10px] text-slate-500 leading-relaxed">
+            Neutraliza los offsets mecánicos tomando 100 muestras en reposo. Fija 1.0g en el eje seleccionado y 0.0g en los demás.
+          </p>
         </div>
       </div>
     </div>

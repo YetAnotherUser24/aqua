@@ -65,6 +65,8 @@ const VAR_DEFS: VarDef[] = [
   { key: 'drvStatus', role: 'aerator', field: 'drv_status', label: 'Falla ODrive (active_errors)', unit: null, precision: 0, side: 'right', color: '#ef4444' },
   { key: 'drvState', role: 'aerator', field: 'drv_state', label: 'Estado Eje ODrive (state)', unit: null, precision: 0, side: 'right', color: '#38bdf8' },
   { key: 'disarmReason', role: 'aerator', field: 'drv_disarm_reason', label: 'Causa Desarme ODrive', unit: null, precision: 0, side: 'right', color: '#f97316' },
+  { key: 'envTemp', role: 'aerator', field: 'env_temp_c', label: 'Temp. ambiente (DHT11)', unit: '°C', precision: 1, side: 'right', color: '#fbbf24' },
+  { key: 'envHum', role: 'aerator', field: 'env_humidity_pct', label: 'Humedad ambiente (DHT11)', unit: '%', precision: 1, side: 'right', color: '#06b6d4' },
 ];
 
 const PRESETS: { id: string; label: string; keys: string[] }[] = [
