@@ -156,7 +156,7 @@ roles:
     display_name: "Sensor de vibración — MPU6050 / ESP32-C3"
     node_id: "e0000000-0000-0000-0000-000000000005"
     topic: aqua/tlm/vibration
-    expected_rate_hz: {experiment: 1.0, idle: 0.1}
+    expected_rate_hz: {experiment: 5.0, idle: 0.1}
     fields:
       - {name: vib_ax_g,         type: float, unit: "g",      precision: 3}
       - {name: vib_ay_g,         type: float, unit: "g",      precision: 3}

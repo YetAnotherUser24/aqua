@@ -81,6 +81,7 @@ SUPERSEDING_ACTIONS: frozenset[str] = frozenset(
         "force_off",
         "set_meniscus",
         "set_recipe",
+        "calibrate",
     }
 )
 

@@ -14,6 +14,9 @@
 #include <ArduinoJson.h>
 
 #include "aqua_protocol.h"
+#include "vibration_bus.h"
+
+extern IVibrationSensor* getVibrationSensor();
 
 namespace {
 
@@ -63,7 +66,7 @@ size_t populateFields(const VibrationTelemetry& st, uint64_t unixMs, aqua::Field
 }
 
 void onMqttMessage(char* topic, uint8_t* payload, unsigned int length) {
-  if (strcmp(topic, aqua::AQUA_TIME_TOPIC) == 0) {
+  if (topic != nullptr && strcmp(topic, aqua::AQUA_TIME_TOPIC) == 0) {
     JsonDocument doc;
     if (deserializeJson(doc, payload, length) == DeserializationError::Ok) {
       if (doc["t_dev_ms"].is<long long>()) {
@@ -73,6 +76,38 @@ void onMqttMessage(char* topic, uint8_t* payload, unsigned int length) {
           s_broadcastAtMs = millis();
           s_haveBroadcast = true;
         }
+      }
+    }
+    return;
+  }
+
+  char cmdTopic[64];
+  if (aqua::commandTopic(aqua::Role::Vibration, cmdTopic, sizeof(cmdTopic)) &&
+      topic != nullptr && strcmp(topic, cmdTopic) == 0) {
+    JsonDocument doc;
+    if (deserializeJson(doc, payload, length) == DeserializationError::Ok) {
+      const char* cmdId = doc["cmd_id"] | "";
+      const char* action = doc["action"] | "";
+      if (strcmp(action, "calibrate") == 0) {
+        const char* axis = doc["target"]["axis"] | "+Y";
+        float tx = 0.0f, ty = 0.0f, tz = 0.0f;
+        if (strcmp(axis, "+Y") == 0 || strcmp(axis, "Y") == 0) ty = 1.0f;
+        else if (strcmp(axis, "-Y") == 0) ty = -1.0f;
+        else if (strcmp(axis, "+Z") == 0 || strcmp(axis, "Z") == 0) tz = 1.0f;
+        else if (strcmp(axis, "-Z") == 0) tz = -1.0f;
+        else if (strcmp(axis, "+X") == 0 || strcmp(axis, "X") == 0) tx = 1.0f;
+        else if (strcmp(axis, "-X") == 0) tx = -1.0f;
+        else ty = 1.0f;
+
+        Serial.printf("[CMD] Calibrando tara en reposo con eje %s (target: X=%.1fg, Y=%.1fg, Z=%.1fg)...\n",
+                      axis, tx, ty, tz);
+        IVibrationSensor* sensor = getVibrationSensor();
+        if (sensor != nullptr) {
+          sensor->calibrate(tx, ty, tz);
+        }
+        aquaLinkAck(cmdId, true, "calibrated");
+      } else {
+        aquaLinkAck(cmdId, false, "unknown_action");
       }
     }
   }
@@ -140,6 +175,12 @@ void aquaLinkLoop() {
     Serial.println("[MQTT] Conectado con exito.");
     s_mqtt.subscribe(aqua::AQUA_TIME_TOPIC, 0);
 
+    char cmdTopic[64];
+    if (aqua::commandTopic(aqua::Role::Vibration, cmdTopic, sizeof(cmdTopic))) {
+      s_mqtt.subscribe(cmdTopic, 1);
+      Serial.printf("[MQTT] Suscrito a comandos: %s\n", cmdTopic);
+    }
+
     // Publicar presencia en linea
     const char* onlinePayload = "{\"online\":true}";
     s_mqtt.publish(presenceTopicBuf, (const uint8_t*)onlinePayload, strlen(onlinePayload), true);
@@ -204,3 +245,25 @@ bool aquaLinkFlush() {
 
 size_t aquaLinkQueued() { return s_queued; }
 uint32_t aquaLinkDropped() { return s_dropped; }
+
+void aquaLinkAck(const char* cmdId, bool applied, const char* detail) {
+  if (!s_mqtt.connected() || cmdId == nullptr || cmdId[0] == '\0') return;
+
+  char topic[64];
+  if (!aqua::ackTopic(aqua::Role::Vibration, topic, sizeof(topic))) return;
+
+  const uint64_t ms = aquaLinkNowMs();
+
+  char payload[256];
+  const int written =
+      snprintf(payload, sizeof(payload),
+               "{\"cmd_id\":\"%s\",\"result\":\"%s\",\"node_id\":\"%s\",\"t_dev_ms\":%llu,"
+               "\"detail\":\"%s\"}",
+               cmdId, applied ? "applied" : "rejected", aqua::nodeId(aqua::Role::Vibration),
+               (unsigned long long)ms, detail ? detail : "");
+  if (written > 0 && (size_t)written < sizeof(payload)) {
+    s_mqtt.publish(topic, (const uint8_t*)payload, (size_t)written, false);
+    Serial.printf("[MQTT] ACK enviado para %s: %s (%s)\n", cmdId, applied ? "applied" : "rejected", detail ? detail : "");
+  }
+}
+

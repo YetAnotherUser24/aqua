@@ -16,3 +16,4 @@ bool aquaLinkFlush();
 size_t aquaLinkQueued();
 uint32_t aquaLinkDropped();
 uint64_t aquaLinkNowMs();
+void aquaLinkAck(const char* cmdId, bool applied, const char* detail);

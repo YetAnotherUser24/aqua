@@ -97,8 +97,8 @@
 // Frecuencia de muestreo del sensor: 200 Hz (5 ms)
 constexpr uint32_t SENSOR_SAMPLE_INTERVAL_MS = 5;
 
-// Ventana de calculo y publicacion telemetrica: 1 Hz (1000 ms)
-constexpr uint32_t TELEMETRY_INTERVAL_MS = 1000;
+// Ventana de calculo y publicacion telemetrica: 5 Hz (200 ms / 0.2 s)
+constexpr uint32_t TELEMETRY_INTERVAL_MS = 200;
 
 // Intervalo en reposo / idle: 10 segundos (0.1 Hz)
 constexpr uint32_t IDLE_TELEMETRY_INTERVAL_MS = 10000;
