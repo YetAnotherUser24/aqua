@@ -1,0 +1,2421 @@
+<!DOCTYPE html>
+<html lang="es" class="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AquaControl — Data & Telemetry Edge Portal</title>
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta http-equiv="Pragma" content="no-cache">
+  <meta http-equiv="Expires" content="0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <style>
+    :root {
+      --scada-canvas: #080a0f;
+      --scada-surface: #0f131c;
+      --scada-elevated: #171d2b;
+      --scada-well: #0a0d14;
+      --scada-border: #1c2436;
+      --scada-border-hover: #2a3752;
+      --scada-border-focus: #38bdf8;
+      
+      --telemetry-do: #38bdf8;
+      --telemetry-motor: #f59e0b;
+      --telemetry-mixer: #14b8a6;
+      --telemetry-temp: #60a5fa;
+      --telemetry-success: #10b981;
+      --telemetry-warning: #f59e0b;
+      --telemetry-danger: #ef4444;
+
+      --text-main: #f8fafc;
+      --text-muted: #94a3b8;
+      --text-dim: #64748b;
+    }
+
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background-color: var(--scada-canvas);
+      color: var(--text-main);
+      font-family: 'Inter', system-ui, -apple-system, sans-serif;
+      min-height: 100vh;
+      overflow-x: hidden;
+      line-height: 1.5;
+    }
+
+    .font-mono {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+    }
+
+    /* Scrollbars */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: var(--scada-canvas);
+    }
+    ::-webkit-scrollbar-thumb {
+      background: var(--scada-border);
+      border-radius: 3px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--scada-border-focus);
+    }
+
+    /* Container */
+    .app-container {
+      max-width: 1320px;
+      margin: 0 auto;
+      padding: 1.5rem 1rem 4rem 1rem;
+    }
+
+    /* Glass Panels */
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.78);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(56, 189, 248, 0.12);
+      border-radius: 14px;
+      box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
+    }
+
+    .glass-panel-glow {
+      background: rgba(15, 23, 42, 0.88);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(6, 182, 212, 0.28);
+      box-shadow: 0 0 25px rgba(6, 182, 212, 0.12);
+      border-radius: 14px;
+    }
+
+    /* Header */
+    header.bench-header {
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      align-items: center;
+      gap: 1.25rem;
+      padding-bottom: 1.5rem;
+      margin-bottom: 1.75rem;
+      border-bottom: 1px solid var(--scada-border);
+    }
+
+    .brand-group {
+      display: flex;
+      align-items: center;
+      gap: 0.85rem;
+    }
+
+    .brand-icon {
+      width: 44px;
+      height: 44px;
+      border-radius: 10px;
+      background: linear-gradient(135deg, rgba(56, 189, 248, 0.2), rgba(6, 182, 212, 0.05));
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.5rem;
+      box-shadow: 0 0 15px rgba(56, 189, 248, 0.2);
+    }
+
+    .brand-titles h1 {
+      font-size: 1.45rem;
+      font-weight: 800;
+      letter-spacing: -0.025em;
+      color: #fff;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .brand-titles h1 span.tag {
+      font-size: 0.72rem;
+      font-weight: 700;
+      background: rgba(56, 189, 248, 0.15);
+      color: var(--telemetry-do);
+      padding: 0.15rem 0.5rem;
+      border-radius: 6px;
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+    }
+
+    .brand-titles p {
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-top: 0.15rem;
+    }
+
+    .header-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: rgba(16, 185, 129, 0.12);
+      border: 1px solid rgba(16, 185, 129, 0.35);
+      color: var(--telemetry-success);
+      padding: 0.45rem 0.85rem;
+      border-radius: 9999px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .status-pill .dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--telemetry-success);
+      box-shadow: 0 0 10px var(--telemetry-success);
+      animation: pulse-slow 2.5s infinite;
+    }
+
+    @keyframes pulse-slow {
+      0%, 100% { opacity: 1; transform: scale(1); }
+      50% { opacity: 0.5; transform: scale(1.15); }
+    }
+
+    .btn-live {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: var(--scada-elevated);
+      color: var(--telemetry-do);
+      border: 1px solid rgba(56, 189, 248, 0.3);
+      padding: 0.5rem 1rem;
+      border-radius: 9px;
+      text-decoration: none;
+      font-size: 0.85rem;
+      font-weight: 600;
+      transition: all 0.2s;
+    }
+
+    .btn-live:hover {
+      background: rgba(56, 189, 248, 0.15);
+      border-color: var(--telemetry-do);
+      box-shadow: 0 0 15px rgba(56, 189, 248, 0.25);
+    }
+
+    /* Navigation Tabs */
+    .nav-tabs {
+      display: flex;
+      gap: 0.5rem;
+      border-bottom: 1px solid var(--scada-border);
+      margin-bottom: 1.5rem;
+      overflow-x: auto;
+      padding-bottom: 0.5rem;
+    }
+
+    .nav-tab {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.5rem;
+      background: transparent;
+      border: 1px solid transparent;
+      color: var(--text-muted);
+      padding: 0.55rem 1.1rem;
+      border-radius: 8px;
+      font-size: 0.9rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+      white-space: nowrap;
+    }
+
+    .nav-tab:hover {
+      color: var(--text-main);
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    .nav-tab.active {
+      background: var(--scada-elevated);
+      color: var(--telemetry-do);
+      border-color: rgba(56, 189, 248, 0.35);
+      box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3);
+    }
+
+    .tab-badge {
+      font-size: 0.72rem;
+      background: rgba(255, 255, 255, 0.08);
+      padding: 0.15rem 0.45rem;
+      border-radius: 5px;
+      color: inherit;
+    }
+
+    /* Control Bar */
+    .observatory-toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 1rem;
+      padding: 1rem 1.25rem;
+      margin-bottom: 1.25rem;
+    }
+
+    .select-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.65rem;
+      flex: 1;
+      min-width: 320px;
+    }
+
+    .select-label {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      white-space: nowrap;
+    }
+
+    select.scada-select {
+      width: 100%;
+      background: var(--scada-well);
+      color: #fff;
+      border: 1px solid var(--scada-border);
+      border-radius: 8px;
+      padding: 0.55rem 0.9rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.85rem;
+      outline: none;
+      transition: border-color 0.2s;
+      cursor: pointer;
+    }
+
+    select.scada-select:focus {
+      border-color: var(--scada-border-focus);
+      box-shadow: 0 0 10px rgba(56, 189, 248, 0.2);
+    }
+
+    .fidelity-switch {
+      display: inline-flex;
+      align-items: center;
+      background: var(--scada-well);
+      border: 1px solid var(--scada-border);
+      border-radius: 8px;
+      padding: 0.2rem;
+      gap: 0.2rem;
+    }
+
+    .fidelity-btn {
+      background: transparent;
+      border: none;
+      color: var(--text-muted);
+      padding: 0.35rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.78rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .fidelity-btn.active {
+      background: #0284c7;
+      color: #fff;
+      box-shadow: 0 0 10px rgba(2, 132, 199, 0.4);
+    }
+
+    .toolbar-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .btn-action {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.4rem;
+      background: var(--scada-elevated);
+      color: var(--text-main);
+      border: 1px solid var(--scada-border);
+      padding: 0.45rem 0.85rem;
+      border-radius: 7px;
+      font-size: 0.8rem;
+      font-weight: 600;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.2s;
+    }
+
+    .btn-action:hover {
+      border-color: var(--telemetry-do);
+      background: rgba(56, 189, 248, 0.1);
+      color: var(--telemetry-do);
+    }
+
+    .btn-highlight {
+      background: rgba(56, 189, 248, 0.15);
+      border-color: rgba(56, 189, 248, 0.4);
+      color: var(--telemetry-do);
+    }
+    .btn-highlight:hover {
+      background: var(--telemetry-do);
+      color: #080a0f;
+      box-shadow: 0 0 14px rgba(56, 189, 248, 0.4);
+    }
+
+    .btn-primary {
+      background: #0284c7;
+      color: #fff;
+      border-color: #0369a1;
+    }
+    .btn-primary:hover {
+      background: #0ea5e9;
+      color: #fff;
+      border-color: #38bdf8;
+      box-shadow: 0 0 12px rgba(14, 165, 233, 0.4);
+    }
+
+    /* KPI Ribbon */
+    .kpi-ribbon {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+      gap: 0.85rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .kpi-card {
+      background: var(--scada-well);
+      border: 1px solid var(--scada-border);
+      border-radius: 12px;
+      padding: 0.9rem 1.1rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: border-color 0.2s;
+    }
+
+    .kpi-card.hero-card {
+      border-color: rgba(56, 189, 248, 0.35);
+      background: linear-gradient(180deg, rgba(56, 189, 248, 0.05) 0%, rgba(10, 13, 20, 0.9) 100%);
+    }
+
+    .kpi-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      font-size: 0.72rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 0.4rem;
+    }
+
+    .kpi-title {
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+
+    .kpi-badge {
+      font-size: 0.68rem;
+      padding: 0.15rem 0.4rem;
+      border-radius: 4px;
+      background: rgba(255, 255, 255, 0.06);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    .kpi-val-row {
+      display: flex;
+      align-items: baseline;
+      gap: 0.35rem;
+      margin: 0.25rem 0;
+    }
+
+    .kpi-val {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 1.65rem;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.02em;
+    }
+
+    .kpi-unit {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-muted);
+    }
+
+    .kpi-footer {
+      font-size: 0.75rem;
+      color: var(--text-dim);
+      font-family: 'JetBrains Mono', monospace;
+      margin-top: 0.25rem;
+      display: flex;
+      justify-content: space-between;
+    }
+
+    /* Series Toggles */
+    .series-bar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 0.6rem;
+      padding: 0.65rem 1rem;
+      background: rgba(10, 13, 20, 0.7);
+      border-bottom: 1px solid var(--scada-border);
+      border-radius: 14px 14px 0 0;
+    }
+
+    .series-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 0.45rem;
+      background: transparent;
+      border: 1px solid var(--scada-border);
+      color: var(--text-muted);
+      padding: 0.3rem 0.75rem;
+      border-radius: 6px;
+      font-size: 0.76rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+
+    .series-btn:hover {
+      border-color: rgba(255, 255, 255, 0.2);
+      color: #fff;
+    }
+
+    .series-btn.active {
+      background: rgba(255, 255, 255, 0.05);
+      color: #fff;
+    }
+
+    .series-btn .color-indicator {
+      width: 10px;
+      height: 10px;
+      border-radius: 2px;
+    }
+
+    /* Chart Canvas Container */
+    .chart-box {
+      position: relative;
+      height: 500px;
+      width: 100%;
+      padding: 1rem 1.25rem 1.25rem 1.25rem;
+      background: rgba(10, 13, 20, 0.85);
+      border-radius: 0 0 14px 14px;
+    }
+
+    .chart-overlay-loader {
+      display: none;
+      position: absolute;
+      inset: 0;
+      background: rgba(8, 10, 15, 0.85);
+      backdrop-filter: blur(4px);
+      align-items: center;
+      justify-content: center;
+      flex-direction: column;
+      gap: 0.75rem;
+      z-index: 20;
+      border-radius: 14px;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--telemetry-do);
+      font-size: 0.9rem;
+    }
+
+    .spinner {
+      width: 32px;
+      height: 32px;
+      border: 3px solid rgba(56, 189, 248, 0.2);
+      border-top-color: var(--telemetry-do);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to { transform: rotate(360deg); }
+    }
+
+    /* Grid & Cards for Tab 2 */
+    .exp-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+      gap: 1.1rem;
+    }
+
+    .exp-card {
+      background: var(--scada-well);
+      border: 1px solid var(--scada-border);
+      border-radius: 12px;
+      padding: 1.1rem;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      transition: all 0.2s;
+    }
+
+    .exp-card:hover {
+      border-color: rgba(56, 189, 248, 0.35);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+    }
+
+    .exp-card-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 0.5rem;
+      margin-bottom: 0.6rem;
+    }
+
+    .exp-card-title {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #fff;
+    }
+
+    .exp-card-subtitle {
+      font-size: 0.82rem;
+      color: var(--text-muted);
+      margin-bottom: 0.75rem;
+      line-height: 1.35;
+    }
+
+    .role-badges {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.35rem;
+      margin-bottom: 0.9rem;
+    }
+
+    .role-badge {
+      font-size: 0.68rem;
+      padding: 0.15rem 0.45rem;
+      border-radius: 4px;
+      background: var(--scada-elevated);
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+      border: 1px solid var(--scada-border);
+    }
+
+    .exp-card-actions {
+      display: flex;
+      flex-direction: column;
+      gap: 0.45rem;
+      margin-top: 0.5rem;
+      padding-top: 0.75rem;
+      border-top: 1px solid var(--scada-border);
+    }
+
+    /* Table for Raw Telemetry (Tab 3) */
+    .table-container {
+      overflow-x: auto;
+      border-radius: 10px;
+      border: 1px solid var(--scada-border);
+    }
+
+    table.scada-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.85rem;
+    }
+
+    table.scada-table th {
+      background: var(--scada-well);
+      color: var(--text-muted);
+      text-transform: uppercase;
+      font-size: 0.72rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      padding: 0.8rem 1rem;
+      text-align: left;
+      border-bottom: 1px solid var(--scada-border);
+    }
+
+    table.scada-table td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid var(--scada-border);
+    }
+
+    table.scada-table tr:hover td {
+      background: rgba(255, 255, 255, 0.02);
+    }
+
+    /* Footer */
+    footer.bench-footer {
+      margin-top: 3.5rem;
+      padding-top: 1.5rem;
+      border-top: 1px solid var(--scada-border);
+      text-align: center;
+      font-size: 0.8rem;
+      color: var(--text-dim);
+      display: flex;
+      flex-wrap: wrap;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+
+    /* Responsive */
+    @media (max-width: 768px) {
+      .chart-box { height: 380px; padding: 0.75rem; }
+      .brand-titles h1 { font-size: 1.2rem; }
+      .kpi-val { font-size: 1.35rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header -->
+    <header class="bench-header">
+      <div class="brand-group">
+        <div class="brand-icon">🌊</div>
+        <div class="brand-titles">
+          <h1>
+            AquaControl <span class="tag">Edge Archive</span>
+          </h1>
+          <p>Portal de Telemetría 24/7 &bull; Clean-Water Bench (ASCE/EWRI 2-22) &bull; Cloudflare R2 Storage</p>
+        </div>
+      </div>
+      <div class="header-actions">
+        <div class="status-pill">
+          <span class="dot"></span>
+          <span>Cloudflare Edge Activo</span>
+        </div>
+        <a href="https://aqua-station.live" target="_blank" rel="noopener noreferrer" class="btn-live">
+          <span>Dashboard SCADA en Vivo</span>
+          <span>↗</span>
+        </a>
+      </div>
+    </header>
+
+    <!-- Navigation Tabs -->
+    <div class="nav-tabs">
+      <button class="nav-tab active" id="tab-btn-viz" onclick="switchTab('viz')">
+        <span>📈 Observatorio SCADA</span>
+      </button>
+      <button class="nav-tab" id="tab-btn-exps" onclick="switchTab('exps')">
+        <span>📦 Catálogo de Ensayos</span>
+        <span class="tab-badge">24</span>
+      </button>
+      <button class="nav-tab" id="tab-btn-raw" onclick="switchTab('raw')">
+        <span>⚡ Telemetría Diaria Combinada</span>
+        <span class="tab-badge">8</span>
+      </button>
+    </div>
+
+    <!-- TAB 1: VISUALIZER -->
+    <div id="tab-viz">
+      <!-- Toolbar -->
+      <div class="glass-panel observatory-toolbar">
+        <div class="select-wrap">
+          <span class="select-label">Ensayo:</span>
+          <select id="exp-select" class="scada-select" onchange="onExperimentChange(this.value)">
+<option value="EXP-2026-10-28-04" selected>EXP-2026-10-28-04 — curva a 400 [⚡ Nativo + ⏱ 1 Hz]</option>
+<option value="EXP-2026-10-28-02" >EXP-2026-10-28-02 — escalon a 170 RPM [⚡ Nativo + ⏱ 1 Hz]</option>
+<option value="EXP-2026-10-28-01" >EXP-2026-10-28-01 — Prueba de controlador [⚡ Nativo + ⏱ 1 Hz]</option>
+<option value="EXP-2026-10-27-02" >EXP-2026-10-27-02 — EnsayoBomba2 [⚡ Solo Nativo]</option>
+<option value="EXP-2026-10-27-01" >EXP-2026-10-27-01 — PruebaDeBomba [⚡ Nativo + ⏱ 1 Hz]</option>
+<option value="EXP-2026-10-26-04" >EXP-2026-10-26-04 — ensayo escalon a 600 RPM [⚡ Nativo + ⏱ 1 Hz]</option>
+<option value="EXP-2026-10-26-03" >EXP-2026-10-26-03 — ensayo de escalon a 600 [⚡ Nativo + ⏱ 1 Hz]</option>
+<option value="EXP-2026-10-26-02" >EXP-2026-10-26-02 — Ensayo a escalon a 250 RPM a 4 mg/l [⚡ Nativo + ⏱ 1 Hz]</option>
+<option value="EXP-2026-10-26-01" >EXP-2026-10-26-01 — Ensayo de modelo a 300 rpm hasta 4 mg/l [⚡ Solo Nativo]</option>
+<option value="EXP-2026-10-24-02" >EXP-2026-10-24-02 — Ensayo de escala 2 [⚡ Nativo + ⏱ 1 Hz]</option>
+<option value="EXP-2026-10-24-01" >EXP-2026-10-24-01 — ensayos con delay a diferentes velocidades [⚡ Nativo + ⏱ 1 Hz]</option>
+<option value="EXP-2026-10-15-01" >EXP-2026-10-15-01 — Ensayo1 [⚡ Solo Nativo]</option>
+<option value="EXP-2026-10-14-04" >EXP-2026-10-14-04 — Protocolo D — Ensayo Combinado (Desoxigenación A + Escalón de Reoxigenación B) [⚡ Solo Nativo]</option>
+<option value="EXP-2026-10-14-03" >EXP-2026-10-14-03 — Protocolo D — Ensayo Combinado (Desoxigenación A + Escalón de Reoxigenación B) [⚡ Solo Nativo]</option>
+<option value="EXP-2026-10-14-02" >EXP-2026-10-14-02 — Protocolo A — Planta 1: Desoxigenación Química (Na₂SO₃) [⚡ Solo Nativo]</option>
+<option value="EXP-2026-10-13-06" >EXP-2026-10-13-06 — Protocolo B — Planta 2: Escalón de Aireación [⚡ Nativo + ⏱ 1 Hz]</option>
+<option value="EXP-2026-10-13-05" >EXP-2026-10-13-05 — Protocolo A — Planta 1: Desoxigenación Química (Na₂SO₃) [⚡ Nativo + ⏱ 1 Hz]</option>
+<option value="EXP-2026-10-13-04" >EXP-2026-10-13-04 — Prueba4 [⚡ Solo Nativo]</option>
+<option value="EXP-2026-10-13-03" >EXP-2026-10-13-03 — Prueba3 [⚡ Solo Nativo]</option>
+<option value="EXP-2026-10-13-02" >EXP-2026-10-13-02 — Prueba2 [⚡ Solo Nativo]</option>
+<option value="EXP-2026-10-13-01" >EXP-2026-10-13-01 — Prueba1 [⚡ Solo Nativo]</option>
+<option value="EXP-2026-10-12-04" >EXP-2026-10-12-04 — Protocolo B — Planta 2: Escalón de Aireación [⚡ Nativo + ⏱ 1 Hz]</option>
+<option value="EXP-2026-10-12-03" >EXP-2026-10-12-03 — Protocolo A — Planta 1: Desoxigenación Química (Na₂SO₃) [⚡ Solo Nativo]</option>
+<option value="EXP-2026-10-11-02" >EXP-2026-10-11-02 — pi bench closed_loop [⚡ Solo Nativo]</option>
+          </select>
+        </div>
+
+        <div class="status-pill" style="font-size: 0.78rem; padding: 0.35rem 0.75rem; border-color: rgba(56, 189, 248, 0.25);">
+          <span class="dot"></span>
+          <span id="chart-fidelity-badge">Curva Sincronizada (1 Hz)</span>
+        </div>
+
+        <div class="toolbar-actions">
+          <button class="btn-action" onclick="resetZoom()" title="Restablecer vista completa">
+            <span>🔄 Reset</span>
+          </button>
+          <button class="btn-action" onclick="exportChartPng()" title="Exportar imagen en alta resolución">
+            <span>📷 PNG HD</span>
+          </button>
+          <a id="btn-download-native" href="#" class="btn-action btn-highlight" download title="Descargar CSV nativo a frecuencia real (5-20 Hz) para tesis">
+            <span>⚡ Descargar CSV Nativo (Tesis)</span>
+          </a>
+          <a id="btn-download-wide" href="#" class="btn-action" download title="Descargar CSV sincronizado a 1 Hz">
+            <span>📄 CSV 1 Hz</span>
+          </a>
+          <a id="btn-download-bundle" href="#" class="btn-action" download title="Descargar paquete completo comprimido (.tar.gz)">
+            <span>📦 Bundle (.tar.gz)</span>
+          </a>
+        </div>
+      </div>
+
+      <!-- KPI Ribbon (Obsidian Hero Cards) -->
+      <div class="kpi-ribbon">
+        <!-- DO Card -->
+        <div class="kpi-card hero-card">
+          <div class="kpi-header" style="color: var(--telemetry-do);">
+            <div class="kpi-title">
+              <span>💧 Oxígeno Disuelto</span>
+            </div>
+            <span class="kpi-badge" id="kpi-do-sat">Sat: --%</span>
+          </div>
+          <div class="kpi-val-row">
+            <span class="kpi-val" id="kpi-do-val" style="color: var(--telemetry-do);">--</span>
+            <span class="kpi-unit">mg/L</span>
+          </div>
+          <div class="kpi-footer">
+            <span id="kpi-do-range">Inicio: -- &rarr; Fin: --</span>
+            <span id="kpi-do-delta" style="color: var(--telemetry-success);">--</span>
+          </div>
+        </div>
+
+        <!-- Aerator RPM Card -->
+        <div class="kpi-card">
+          <div class="kpi-header" style="color: var(--telemetry-motor);">
+            <div class="kpi-title">
+              <span>⚡ Aireador (ODrive)</span>
+            </div>
+            <span class="kpi-badge" id="kpi-rpm-state">Nominal</span>
+          </div>
+          <div class="kpi-val-row">
+            <span class="kpi-val" id="kpi-rpm-peak" style="color: var(--telemetry-motor);">--</span>
+            <span class="kpi-unit">RPM</span>
+          </div>
+          <div class="kpi-footer">
+            <span id="kpi-rpm-target">Objetivo: -- RPM</span>
+            <span id="kpi-rpm-avg">Prom: --</span>
+          </div>
+        </div>
+
+        <!-- Mixer Card -->
+        <div class="kpi-card">
+          <div class="kpi-header" style="color: var(--telemetry-mixer);">
+            <div class="kpi-title">
+              <span>🌀 Mezclador (T-200)</span>
+            </div>
+            <span class="kpi-badge">Hydrodynamic</span>
+          </div>
+          <div class="kpi-val-row">
+            <span class="kpi-val" id="kpi-mixer-rpm" style="color: var(--telemetry-mixer);">--</span>
+            <span class="kpi-unit">RPM</span>
+          </div>
+          <div class="kpi-footer">
+            <span>Régimen Homogéneo</span>
+            <span id="kpi-mixer-status">OK</span>
+          </div>
+        </div>
+
+        <!-- Temperature Context Card -->
+        <div class="kpi-card">
+          <div class="kpi-header" style="color: var(--telemetry-temp);">
+            <div class="kpi-title">
+              <span>🌡️ Temperatura Agua</span>
+            </div>
+            <span class="kpi-badge">OPTOD</span>
+          </div>
+          <div class="kpi-val-row">
+            <span class="kpi-val" id="kpi-temp-avg" style="color: var(--telemetry-temp);">--</span>
+            <span class="kpi-unit">°C</span>
+          </div>
+          <div class="kpi-footer">
+            <span id="kpi-temp-range">Min: -- • Max: --</span>
+            <span id="kpi-cstar-ref">C* ≈ 7.15</span>
+          </div>
+        </div>
+
+        <!-- Duration Card -->
+        <div class="kpi-card">
+          <div class="kpi-header" style="color: var(--text-muted);">
+            <div class="kpi-title">
+              <span>⏱ Duración Ensayo</span>
+            </div>
+            <span class="kpi-badge" id="kpi-samples-badge">0 pts</span>
+          </div>
+          <div class="kpi-val-row">
+            <span class="kpi-val" id="kpi-duration-val">--</span>
+          </div>
+          <div class="kpi-footer">
+            <span id="kpi-fidelity-badge" style="color: var(--telemetry-do);">Modo: Nativo</span>
+            <span id="kpi-run-status" style="color: var(--telemetry-success);">Completado</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Chart Panel -->
+      <div class="glass-panel" style="overflow: hidden; margin-bottom: 2rem;">
+        <!-- Series Toggles (No water temperature on the graph!) -->
+        <div class="series-bar">
+          <span style="font-size: 0.72rem; font-weight: 700; color: var(--text-dim); text-transform: uppercase; margin-right: 0.35rem;">Variables de Control:</span>
+          
+          <button class="series-btn active" id="btn-ser-do" onclick="toggleSeries('do')">
+            <span class="color-indicator" style="background: var(--telemetry-do);"></span>
+            <span>Oxígeno Disuelto (mg/L)</span>
+          </button>
+
+          <button class="series-btn active" id="btn-ser-rpm" onclick="toggleSeries('rpm')">
+            <span class="color-indicator" style="background: var(--telemetry-motor);"></span>
+            <span>Aireador RPM (Medido)</span>
+          </button>
+
+          <button class="series-btn active" id="btn-ser-target" onclick="toggleSeries('target')">
+            <span class="color-indicator" style="background: #fbbf24; border: 1px dashed #fff;"></span>
+            <span>RPM Setpoint (Consigna)</span>
+          </button>
+
+          <button class="series-btn active" id="btn-ser-mixer" onclick="toggleSeries('mixer')">
+            <span class="color-indicator" style="background: var(--telemetry-mixer);"></span>
+            <span>Mezclador T-200 (RPM)</span>
+          </button>
+
+          <button class="series-btn active" id="btn-ser-cstar" onclick="toggleSeries('cstar')">
+            <span class="color-indicator" style="background: rgba(56, 189, 248, 0.45); border: 1px dashed cyan;"></span>
+            <span>Línea C* Sat. (7.15 mg/L)</span>
+          </button>
+
+          <div style="margin-left: auto; display: flex; align-items: center; gap: 0.5rem;">
+            <button class="series-btn" id="btn-time-mode" onclick="toggleTimeMode()" title="Alternar entre tiempo transcurrido (MM:SS) y hora reloj (HH:MM:SS)">
+              <span id="time-mode-label">Eje X: Tiempo Relativo (MM:SS)</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Canvas -->
+        <div class="chart-box">
+          <div class="chart-overlay-loader" id="chart-loader">
+            <div class="spinner"></div>
+            <div id="loader-text">Descargando telemetría nativa de alta frecuencia...</div>
+          </div>
+          <canvas id="scadaChart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: EXPERIMENTS CATALOG -->
+    <div id="tab-exps" style="display: none;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
+        <div>
+          <h2 style="font-size: 1.25rem; font-weight: 700; color: #fff;">Catálogo Completo de Ensayos Realizados</h2>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem;">Acceso directo a telemetría nativa sin resampleo y bundles de exportación.</p>
+        </div>
+        <input type="text" id="exp-search" placeholder="Filtrar por nombre o ID..." oninput="filterExpCards(this.value)"
+               style="background: var(--scada-well); border: 1px solid var(--scada-border); color: #fff; padding: 0.45rem 0.85rem; border-radius: 8px; font-size: 0.85rem; width: 260px; outline: none;">
+      </div>
+
+      <div class="exp-grid" id="exp-grid-container">
+
+        <div class="exp-card" data-id="EXP-2026-10-28-04" data-title="curva a 400">
+          <div>
+            <div class="exp-card-header">
+              <span class="exp-card-title">EXP-2026-10-28-04</span>
+              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span> <span class="role-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">⏱ 1 Hz</span></div>
+            </div>
+            <div class="exp-card-subtitle">curva a 400</div>
+            <div class="role-badges">
+              <span class="role-badge">od_sensor</span><span class="role-badge">mixer</span><span class="role-badge">pump</span><span class="role-badge">aerator</span>
+            </div>
+          </div>
+          <div class="exp-card-actions">
+            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-28-04')">
+              <span>📈 Cargar en Visualizador</span>
+            </button>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <a href="/exports/EXP-2026-10-28-04_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
+                <span>⚡ CSV Nativo (Tesis)</span>
+              </a>
+              <a href="/exports/EXP-2026-10-28-04/telemetry.csv" class="btn-action" style="justify-content: center;" download title="Descargar CSV wide sincronizado a 1 Hz">
+                <span>📄 CSV 1 Hz</span>
+              </a>
+              <a href="/exports/EXP-2026-10-28-04_native/EXP-2026-10-28-04_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
+                <span>📦 .tar.gz</span>
+              </a>
+            </div>
+          </div>
+        </div>
+    
+
+        <div class="exp-card" data-id="EXP-2026-10-28-02" data-title="escalon a 170 rpm">
+          <div>
+            <div class="exp-card-header">
+              <span class="exp-card-title">EXP-2026-10-28-02</span>
+              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span> <span class="role-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">⏱ 1 Hz</span></div>
+            </div>
+            <div class="exp-card-subtitle">escalon a 170 RPM</div>
+            <div class="role-badges">
+              <span class="role-badge">od_sensor</span><span class="role-badge">mixer</span><span class="role-badge">pump</span><span class="role-badge">aerator</span>
+            </div>
+          </div>
+          <div class="exp-card-actions">
+            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-28-02')">
+              <span>📈 Cargar en Visualizador</span>
+            </button>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <a href="/exports/EXP-2026-10-28-02_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
+                <span>⚡ CSV Nativo (Tesis)</span>
+              </a>
+              <a href="/exports/EXP-2026-10-28-02/telemetry.csv" class="btn-action" style="justify-content: center;" download title="Descargar CSV wide sincronizado a 1 Hz">
+                <span>📄 CSV 1 Hz</span>
+              </a>
+              <a href="/exports/EXP-2026-10-28-02_native/EXP-2026-10-28-02_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
+                <span>📦 .tar.gz</span>
+              </a>
+            </div>
+          </div>
+        </div>
+    
+        <div class="exp-card" data-id="EXP-2026-10-28-01" data-title="prueba de controlador">
+          <div>
+            <div class="exp-card-header">
+              <span class="exp-card-title">EXP-2026-10-28-01</span>
+              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span> <span class="role-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">⏱ 1 Hz</span></div>
+            </div>
+            <div class="exp-card-subtitle">Prueba de controlador</div>
+            <div class="role-badges">
+              <span class="role-badge">od_sensor</span><span class="role-badge">mixer</span><span class="role-badge">pump</span><span class="role-badge">aerator</span>
+            </div>
+          </div>
+          <div class="exp-card-actions">
+            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-28-01')">
+              <span>📈 Cargar en Visualizador</span>
+            </button>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <a href="/exports/EXP-2026-10-28-01_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
+                <span>⚡ CSV Nativo (Tesis)</span>
+              </a>
+              <a href="/exports/EXP-2026-10-28-01/telemetry.csv" class="btn-action" style="justify-content: center;" download title="Descargar CSV wide sincronizado a 1 Hz">
+        <span>📄 CSV 1 Hz</span>
+      </a>
+              <a href="/exports/EXP-2026-10-28-01_native/EXP-2026-10-28-01_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
+                <span>📦 .tar.gz</span>
+              </a>
+            </div>
+          </div>
+        </div>
+    
+
+        <div class="exp-card" data-id="EXP-2026-10-27-02" data-title="ensayobomba2">
+          <div>
+            <div class="exp-card-header">
+              <span class="exp-card-title">EXP-2026-10-27-02</span>
+              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span></div>
+            </div>
+            <div class="exp-card-subtitle">EnsayoBomba2</div>
+            <div class="role-badges">
+              <span class="role-badge">od_sensor</span><span class="role-badge">mixer</span><span class="role-badge">pump</span><span class="role-badge">aerator</span>
+            </div>
+          </div>
+          <div class="exp-card-actions">
+            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-27-02')">
+              <span>📈 Cargar en Visualizador</span>
+            </button>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <a href="/exports/EXP-2026-10-27-02_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
+                <span>⚡ CSV Nativo (Tesis)</span>
+              </a>
+              
+              <a href="/exports/EXP-2026-10-27-02_native/EXP-2026-10-27-02_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
+                <span>📦 .tar.gz</span>
+              </a>
+            </div>
+          </div>
+        </div>
+    
+
+        <div class="exp-card" data-id="EXP-2026-10-27-01" data-title="pruebadebomba">
+          <div>
+            <div class="exp-card-header">
+              <span class="exp-card-title">EXP-2026-10-27-01</span>
+              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span> <span class="role-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">⏱ 1 Hz</span></div>
+            </div>
+            <div class="exp-card-subtitle">PruebaDeBomba</div>
+            <div class="role-badges">
+              <span class="role-badge">od_sensor</span><span class="role-badge">mixer</span><span class="role-badge">pump</span><span class="role-badge">aerator</span>
+            </div>
+          </div>
+          <div class="exp-card-actions">
+            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-27-01')">
+              <span>📈 Cargar en Visualizador</span>
+            </button>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <a href="/exports/EXP-2026-10-27-01_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
+                <span>⚡ CSV Nativo (Tesis)</span>
+              </a>
+              <a href="/exports/EXP-2026-10-27-01/telemetry.csv" class="btn-action" style="justify-content: center;" download title="Descargar CSV wide sincronizado a 1 Hz">
+        <span>📄 CSV 1 Hz</span>
+      </a>
+              <a href="/exports/EXP-2026-10-27-01_native/EXP-2026-10-27-01_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
+                <span>📦 .tar.gz</span>
+              </a>
+            </div>
+          </div>
+        </div>
+    
+
+        <div class="exp-card" data-id="EXP-2026-10-26-04" data-title="ensayo escalon a 600 rpm">
+          <div>
+            <div class="exp-card-header">
+              <span class="exp-card-title">EXP-2026-10-26-04</span>
+              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span> <span class="role-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">⏱ 1 Hz</span></div>
+            </div>
+            <div class="exp-card-subtitle">ensayo escalon a 600 RPM</div>
+            <div class="role-badges">
+              <span class="role-badge">od_sensor</span><span class="role-badge">aerator</span><span class="role-badge">mixer</span>
+            </div>
+          </div>
+          <div class="exp-card-actions">
+            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-26-04')">
+              <span>📈 Cargar en Visualizador</span>
+            </button>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <a href="/exports/EXP-2026-10-26-04_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
+                <span>⚡ CSV Nativo (Tesis)</span>
+              </a>
+              <a href="/exports/EXP-2026-10-26-04/telemetry.csv" class="btn-action" style="justify-content: center;" download title="Descargar CSV wide sincronizado a 1 Hz">
+        <span>📄 CSV 1 Hz</span>
+      </a>
+              <a href="/exports/EXP-2026-10-26-04_native/EXP-2026-10-26-04_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
+                <span>📦 .tar.gz</span>
+              </a>
+            </div>
+          </div>
+        </div>
+    
+
+        <div class="exp-card" data-id="EXP-2026-10-26-03" data-title="ensayo de escalon a 600">
+          <div>
+            <div class="exp-card-header">
+              <span class="exp-card-title">EXP-2026-10-26-03</span>
+              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span> <span class="role-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">⏱ 1 Hz</span></div>
+            </div>
+            <div class="exp-card-subtitle">ensayo de escalon a 600</div>
+            <div class="role-badges">
+              <span class="role-badge">od_sensor</span><span class="role-badge">mixer</span><span class="role-badge">aerator</span>
+            </div>
+          </div>
+          <div class="exp-card-actions">
+            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-26-03')">
+              <span>📈 Cargar en Visualizador</span>
+            </button>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <a href="/exports/EXP-2026-10-26-03_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
+                <span>⚡ CSV Nativo (Tesis)</span>
+              </a>
+              <a href="/exports/EXP-2026-10-26-03/telemetry.csv" class="btn-action" style="justify-content: center;" download title="Descargar CSV wide sincronizado a 1 Hz">
+        <span>📄 CSV 1 Hz</span>
+      </a>
+              <a href="/exports/EXP-2026-10-26-03_native/EXP-2026-10-26-03_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
+                <span>📦 .tar.gz</span>
+              </a>
+            </div>
+          </div>
+        </div>
+    
+
+        <div class="exp-card" data-id="EXP-2026-10-26-02" data-title="ensayo a escalon a 250 rpm a 4 mg/l">
+          <div>
+            <div class="exp-card-header">
+              <span class="exp-card-title">EXP-2026-10-26-02</span>
+              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span> <span class="role-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">⏱ 1 Hz</span></div>
+            </div>
+            <div class="exp-card-subtitle">Ensayo a escalon a 250 RPM a 4 mg/l</div>
+            <div class="role-badges">
+              <span class="role-badge">od_sensor</span><span class="role-badge">aerator</span><span class="role-badge">mixer</span>
+            </div>
+          </div>
+          <div class="exp-card-actions">
+            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-26-02')">
+              <span>📈 Cargar en Visualizador</span>
+            </button>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <a href="/exports/EXP-2026-10-26-02_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
+                <span>⚡ CSV Nativo (Tesis)</span>
+              </a>
+              <a href="/exports/EXP-2026-10-26-02/telemetry.csv" class="btn-action" style="justify-content: center;" download title="Descargar CSV wide sincronizado a 1 Hz">
+        <span>📄 CSV 1 Hz</span>
+      </a>
+              <a href="/exports/EXP-2026-10-26-02_native/EXP-2026-10-26-02_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
+                <span>📦 .tar.gz</span>
+              </a>
+            </div>
+          </div>
+        </div>
+    
+
+        <div class="exp-card" data-id="EXP-2026-10-26-01" data-title="ensayo de modelo a 300 rpm hasta 4 mg/l">
+          <div>
+            <div class="exp-card-header">
+              <span class="exp-card-title">EXP-2026-10-26-01</span>
+              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span></div>
+            </div>
+            <div class="exp-card-subtitle">Ensayo de modelo a 300 rpm hasta 4 mg/l</div>
+            <div class="role-badges">
+              <span class="role-badge">od_sensor</span><span class="role-badge">mixer</span><span class="role-badge">aerator</span>
+            </div>
+          </div>
+          <div class="exp-card-actions">
+            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-26-01')">
+              <span>📈 Cargar en Visualizador</span>
+            </button>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <a href="/exports/EXP-2026-10-26-01_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
+                <span>⚡ CSV Nativo (Tesis)</span>
+              </a>
+              
+              <a href="/exports/EXP-2026-10-26-01_native/EXP-2026-10-26-01_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
+                <span>📦 .tar.gz</span>
+              </a>
+            </div>
+          </div>
+        </div>
+    
+
+        <div class="exp-card" data-id="EXP-2026-10-24-02" data-title="ensayo de escala 2">
+          <div>
+            <div class="exp-card-header">
+              <span class="exp-card-title">EXP-2026-10-24-02</span>
+              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span> <span class="role-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">⏱ 1 Hz</span></div>
+            </div>
+            <div class="exp-card-subtitle">Ensayo de escala 2</div>
+            <div class="role-badges">
+              <span class="role-badge">od_sensor</span><span class="role-badge">mixer</span><span class="role-badge">aerator</span>
+            </div>
+          </div>
+          <div class="exp-card-actions">
+            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-24-02')">
+              <span>📈 Cargar en Visualizador</span>
+            </button>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <a href="/exports/EXP-2026-10-24-02_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
+                <span>⚡ CSV Nativo (Tesis)</span>
+              </a>
+              <a href="/exports/EXP-2026-10-24-02/telemetry.csv" class="btn-action" style="justify-content: center;" download title="Descargar CSV wide sincronizado a 1 Hz">
+        <span>📄 CSV 1 Hz</span>
+      </a>
+              <a href="/exports/EXP-2026-10-24-02_native/EXP-2026-10-24-02_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
+                <span>📦 .tar.gz</span>
+              </a>
+            </div>
+          </div>
+        </div>
+    
+
+        <div class="exp-card" data-id="EXP-2026-10-24-01" data-title="ensayos con delay a diferentes velocidades">
+          <div>
+            <div class="exp-card-header">
+              <span class="exp-card-title">EXP-2026-10-24-01</span>
+              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span> <span class="role-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">⏱ 1 Hz</span></div>
+            </div>
+            <div class="exp-card-subtitle">ensayos con delay a diferentes velocidades</div>
+            <div class="role-badges">
+              <span class="role-badge">od_sensor</span><span class="role-badge">mixer</span><span class="role-badge">aerator</span>
+            </div>
+          </div>
+          <div class="exp-card-actions">
+            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-24-01')">
+              <span>📈 Cargar en Visualizador</span>
+            </button>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <a href="/exports/EXP-2026-10-24-01_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
+                <span>⚡ CSV Nativo (Tesis)</span>
+              </a>
+              <a href="/exports/EXP-2026-10-24-01/telemetry.csv" class="btn-action" style="justify-content: center;" download title="Descargar CSV wide sincronizado a 1 Hz">
+        <span>📄 CSV 1 Hz</span>
+      </a>
+              <a href="/exports/EXP-2026-10-24-01_native/EXP-2026-10-24-01_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
+                <span>📦 .tar.gz</span>
+              </a>
+            </div>
+          </div>
+        </div>
+    
+
+        <div class="exp-card" data-id="EXP-2026-10-15-01" data-title="ensayo1">
+          <div>
+            <div class="exp-card-header">
+              <span class="exp-card-title">EXP-2026-10-15-01</span>
+              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span></div>
+            </div>
+            <div class="exp-card-subtitle">Ensayo1</div>
+            <div class="role-badges">
+              <span class="role-badge">od_sensor</span><span class="role-badge">aerator</span><span class="role-badge">mixer</span>
+            </div>
+          </div>
+          <div class="exp-card-actions">
+            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-15-01')">
+              <span>📈 Cargar en Visualizador</span>
+            </button>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <a href="/exports/EXP-2026-10-15-01_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
+                <span>⚡ CSV Nativo (Tesis)</span>
+              </a>
+              
+              <a href="/exports/EXP-2026-10-15-01_native/EXP-2026-10-15-01_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
+                <span>📦 .tar.gz</span>
+              </a>
+            </div>
+          </div>
+        </div>
+    
+
+        <div class="exp-card" data-id="EXP-2026-10-14-04" data-title="protocolo d — ensayo combinado (desoxigenación a + escalón de reoxigenación b)">
+          <div>
+            <div class="exp-card-header">
+              <span class="exp-card-title">EXP-2026-10-14-04</span>
+              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span></div>
+            </div>
+            <div class="exp-card-subtitle">Protocolo D — Ensayo Combinado (Desoxigenación A + Escalón de Reoxigenación B)</div>
+            <div class="role-badges">
+              <span class="role-badge">od_sensor</span><span class="role-badge">aerator</span><span class="role-badge">mixer</span>
+            </div>
+          </div>
+          <div class="exp-card-actions">
+            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-14-04')">
+              <span>📈 Cargar en Visualizador</span>
+            </button>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <a href="/exports/EXP-2026-10-14-04_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
+                <span>⚡ CSV Nativo (Tesis)</span>
+              </a>
+              
+              <a href="/exports/EXP-2026-10-14-04_native/EXP-2026-10-14-04_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
+                <span>📦 .tar.gz</span>
+              </a>
+            </div>
+          </div>
+        </div>
+    
+
+        <div class="exp-card" data-id="EXP-2026-10-14-03" data-title="protocolo d — ensayo combinado (desoxigenación a + escalón de reoxigenación b)">
+          <div>
+            <div class="exp-card-header">
+              <span class="exp-card-title">EXP-2026-10-14-03</span>
+              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span></div>
+            </div>
+            <div class="exp-card-subtitle">Protocolo D — Ensayo Combinado (Desoxigenación A + Escalón de Reoxigenación B)</div>
+            <div class="role-badges">
+              <span class="role-badge">od_sensor</span><span class="role-badge">aerator</span><span class="role-badge">mixer</span>
+            </div>
+          </div>
+          <div class="exp-card-actions">
+            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-14-03')">
+              <span>📈 Cargar en Visualizador</span>
+            </button>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <a href="/exports/EXP-2026-10-14-03_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
+                <span>⚡ CSV Nativo (Tesis)</span>
+              </a>
+              
+              <a href="/exports/EXP-2026-10-14-03_native/EXP-2026-10-14-03_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
+                <span>📦 .tar.gz</span>
+              </a>
+            </div>
+          </div>
+        </div>
+    
+
+        <div class="exp-card" data-id="EXP-2026-10-14-02" data-title="protocolo a — planta 1: desoxigenación química (na₂so₃)">
+          <div>
+            <div class="exp-card-header">
+              <span class="exp-card-title">EXP-2026-10-14-02</span>
+              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span></div>
+            </div>
+            <div class="exp-card-subtitle">Protocolo A — Planta 1: Desoxigenación Química (Na₂SO₃)</div>
+            <div class="role-badges">
+              <span class="role-badge">od_sensor</span><span class="role-badge">mixer</span><span class="role-badge">aerator</span>
+            </div>
+          </div>
+          <div class="exp-card-actions">
+            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-14-02')">
+              <span>📈 Cargar en Visualizador</span>
+            </button>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <a href="/exports/EXP-2026-10-14-02_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
+                <span>⚡ CSV Nativo (Tesis)</span>
+              </a>
+              
+              <a href="/exports/EXP-2026-10-14-02_native/EXP-2026-10-14-02_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
+                <span>📦 .tar.gz</span>
+              </a>
+            </div>
+          </div>
+        </div>
+    
+
+        <div class="exp-card" data-id="EXP-2026-10-13-06" data-title="protocolo b — planta 2: escalón de aireación">
+          <div>
+            <div class="exp-card-header">
+              <span class="exp-card-title">EXP-2026-10-13-06</span>
+              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span> <span class="role-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">⏱ 1 Hz</span></div>
+            </div>
+            <div class="exp-card-subtitle">Protocolo B — Planta 2: Escalón de Aireación</div>
+            <div class="role-badges">
+              <span class="role-badge">od_sensor</span><span class="role-badge">aerator</span>
+            </div>
+          </div>
+          <div class="exp-card-actions">
+            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-13-06')">
+              <span>📈 Cargar en Visualizador</span>
+            </button>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <a href="/exports/EXP-2026-10-13-06_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
+                <span>⚡ CSV Nativo (Tesis)</span>
+              </a>
+              <a href="/exports/EXP-2026-10-13-06/telemetry.csv" class="btn-action" style="justify-content: center;" download title="Descargar CSV wide sincronizado a 1 Hz">
+        <span>📄 CSV 1 Hz</span>
+      </a>
+              <a href="/exports/EXP-2026-10-13-06_native/EXP-2026-10-13-06_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
+                <span>📦 .tar.gz</span>
+              </a>
+            </div>
+          </div>
+        </div>
+    
+
+        <div class="exp-card" data-id="EXP-2026-10-13-05" data-title="protocolo a — planta 1: desoxigenación química (na₂so₃)">
+          <div>
+            <div class="exp-card-header">
+              <span class="exp-card-title">EXP-2026-10-13-05</span>
+              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span> <span class="role-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">⏱ 1 Hz</span></div>
+            </div>
+            <div class="exp-card-subtitle">Protocolo A — Planta 1: Desoxigenación Química (Na₂SO₃)</div>
+            <div class="role-badges">
+              <span class="role-badge">od_sensor</span><span class="role-badge">mixer</span>
+            </div>
+          </div>
+          <div class="exp-card-actions">
+            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-13-05')">
+              <span>📈 Cargar en Visualizador</span>
+            </button>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <a href="/exports/EXP-2026-10-13-05_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
+                <span>⚡ CSV Nativo (Tesis)</span>
+              </a>
+              <a href="/exports/EXP-2026-10-13-05/telemetry.csv" class="btn-action" style="justify-content: center;" download title="Descargar CSV wide sincronizado a 1 Hz">
+        <span>📄 CSV 1 Hz</span>
+      </a>
+              <a href="/exports/EXP-2026-10-13-05_native/EXP-2026-10-13-05_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
+                <span>📦 .tar.gz</span>
+              </a>
+            </div>
+          </div>
+        </div>
+    
+
+        <div class="exp-card" data-id="EXP-2026-10-13-04" data-title="prueba4">
+          <div>
+            <div class="exp-card-header">
+              <span class="exp-card-title">EXP-2026-10-13-04</span>
+              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span></div>
+            </div>
+            <div class="exp-card-subtitle">Prueba4</div>
+            <div class="role-badges">
+              <span class="role-badge">mixer</span><span class="role-badge">aerator</span>
+            </div>
+          </div>
+          <div class="exp-card-actions">
+            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-13-04')">
+              <span>📈 Cargar en Visualizador</span>
+            </button>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <a href="/exports/EXP-2026-10-13-04_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
+                <span>⚡ CSV Nativo (Tesis)</span>
+              </a>
+              
+              <a href="/exports/EXP-2026-10-13-04_native/EXP-2026-10-13-04_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
+                <span>📦 .tar.gz</span>
+              </a>
+            </div>
+          </div>
+        </div>
+    
+
+        <div class="exp-card" data-id="EXP-2026-10-13-03" data-title="prueba3">
+          <div>
+            <div class="exp-card-header">
+              <span class="exp-card-title">EXP-2026-10-13-03</span>
+              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span></div>
+            </div>
+            <div class="exp-card-subtitle">Prueba3</div>
+            <div class="role-badges">
+              <span class="role-badge">mixer</span><span class="role-badge">aerator</span>
+            </div>
+          </div>
+          <div class="exp-card-actions">
+            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-13-03')">
+              <span>📈 Cargar en Visualizador</span>
+            </button>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <a href="/exports/EXP-2026-10-13-03_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
+                <span>⚡ CSV Nativo (Tesis)</span>
+              </a>
+              
+              <a href="/exports/EXP-2026-10-13-03_native/EXP-2026-10-13-03_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
+                <span>📦 .tar.gz</span>
+              </a>
+            </div>
+          </div>
+        </div>
+    
+
+        <div class="exp-card" data-id="EXP-2026-10-13-02" data-title="prueba2">
+          <div>
+            <div class="exp-card-header">
+              <span class="exp-card-title">EXP-2026-10-13-02</span>
+              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span></div>
+            </div>
+            <div class="exp-card-subtitle">Prueba2</div>
+            <div class="role-badges">
+              <span class="role-badge">mixer</span><span class="role-badge">aerator</span>
+            </div>
+          </div>
+          <div class="exp-card-actions">
+            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-13-02')">
+              <span>📈 Cargar en Visualizador</span>
+            </button>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <a href="/exports/EXP-2026-10-13-02_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
+                <span>⚡ CSV Nativo (Tesis)</span>
+              </a>
+              
+              <a href="/exports/EXP-2026-10-13-02_native/EXP-2026-10-13-02_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
+                <span>📦 .tar.gz</span>
+              </a>
+            </div>
+          </div>
+        </div>
+    
+
+        <div class="exp-card" data-id="EXP-2026-10-13-01" data-title="prueba1">
+          <div>
+            <div class="exp-card-header">
+              <span class="exp-card-title">EXP-2026-10-13-01</span>
+              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span></div>
+            </div>
+            <div class="exp-card-subtitle">Prueba1</div>
+            <div class="role-badges">
+              <span class="role-badge">mixer</span><span class="role-badge">aerator</span>
+            </div>
+          </div>
+          <div class="exp-card-actions">
+            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-13-01')">
+              <span>📈 Cargar en Visualizador</span>
+            </button>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <a href="/exports/EXP-2026-10-13-01_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
+                <span>⚡ CSV Nativo (Tesis)</span>
+              </a>
+              
+              <a href="/exports/EXP-2026-10-13-01_native/EXP-2026-10-13-01_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
+                <span>📦 .tar.gz</span>
+              </a>
+            </div>
+          </div>
+        </div>
+    
+
+        <div class="exp-card" data-id="EXP-2026-10-12-04" data-title="protocolo b — planta 2: escalón de aireación">
+          <div>
+            <div class="exp-card-header">
+              <span class="exp-card-title">EXP-2026-10-12-04</span>
+              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span> <span class="role-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">⏱ 1 Hz</span></div>
+            </div>
+            <div class="exp-card-subtitle">Protocolo B — Planta 2: Escalón de Aireación</div>
+            <div class="role-badges">
+              <span class="role-badge">od_sensor</span><span class="role-badge">aerator</span>
+            </div>
+          </div>
+          <div class="exp-card-actions">
+            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-12-04')">
+              <span>📈 Cargar en Visualizador</span>
+            </button>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <a href="/exports/EXP-2026-10-12-04_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
+                <span>⚡ CSV Nativo (Tesis)</span>
+              </a>
+              <a href="/exports/EXP-2026-10-12-04/telemetry.csv" class="btn-action" style="justify-content: center;" download title="Descargar CSV wide sincronizado a 1 Hz">
+        <span>📄 CSV 1 Hz</span>
+      </a>
+              <a href="/exports/EXP-2026-10-12-04_native/EXP-2026-10-12-04_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
+                <span>📦 .tar.gz</span>
+              </a>
+            </div>
+          </div>
+        </div>
+    
+
+        <div class="exp-card" data-id="EXP-2026-10-12-03" data-title="protocolo a — planta 1: desoxigenación química (na₂so₃)">
+          <div>
+            <div class="exp-card-header">
+              <span class="exp-card-title">EXP-2026-10-12-03</span>
+              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span></div>
+            </div>
+            <div class="exp-card-subtitle">Protocolo A — Planta 1: Desoxigenación Química (Na₂SO₃)</div>
+            <div class="role-badges">
+              <span class="role-badge">aerator</span>
+            </div>
+          </div>
+          <div class="exp-card-actions">
+            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-12-03')">
+              <span>📈 Cargar en Visualizador</span>
+            </button>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <a href="/exports/EXP-2026-10-12-03_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
+                <span>⚡ CSV Nativo (Tesis)</span>
+              </a>
+              
+              <a href="/exports/EXP-2026-10-12-03_native/EXP-2026-10-12-03_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
+                <span>📦 .tar.gz</span>
+              </a>
+            </div>
+          </div>
+        </div>
+    
+
+        <div class="exp-card" data-id="EXP-2026-10-11-02" data-title="pi bench closed_loop">
+          <div>
+            <div class="exp-card-header">
+              <span class="exp-card-title">EXP-2026-10-11-02</span>
+              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span></div>
+            </div>
+            <div class="exp-card-subtitle">pi bench closed_loop</div>
+            <div class="role-badges">
+              <span class="role-badge">od_sensor</span><span class="role-badge">aerator</span>
+            </div>
+          </div>
+          <div class="exp-card-actions">
+            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-11-02')">
+              <span>📈 Cargar en Visualizador</span>
+            </button>
+            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+              <a href="/exports/EXP-2026-10-11-02_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
+                <span>⚡ CSV Nativo (Tesis)</span>
+              </a>
+              
+              <a href="/exports/EXP-2026-10-11-02_native/EXP-2026-10-11-02_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
+                <span>📦 .tar.gz</span>
+              </a>
+            </div>
+          </div>
+        </div>
+    
+      </div>
+    </div>
+
+    <!-- TAB 3: DAILY UNIFIED TELEMETRY -->
+    <div id="tab-raw" style="display: none;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem;">
+        <div>
+          <h2 style="font-size: 1.25rem; font-weight: 700; color: #fff;">Telemetría Diaria Unificada (Nativa Combinada)</h2>
+          <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.2rem;">Cada registro reúne la totalidad de sensores y actuadores (od_sensor, aerator, mixer) en un solo archivo CSV nativo por día, sin resampleo.</p>
+        </div>
+      </div>
+
+      <div class="table-container">
+        <table class="scada-table">
+          <thead>
+            <tr>
+              <th>Fecha</th>
+              <th>Nodos Integrados</th>
+              <th>Muestras (Pts)</th>
+              <th>Tamaño</th>
+              <th>Telemetría Combinada (Nativa)</th>
+              <th>Logs Individuales por Nodo</th>
+            </tr>
+          </thead>
+          <tbody>
+
+        <tr>
+          <td class="font-mono" style="font-weight: 700; color: #fff;">📅 2026-10-27</td>
+          <td><div style="display: flex; gap: 0.35rem; flex-wrap: wrap;"><span class="role-badge" style="color: var(--telemetry-motor); border-color: rgba(245, 158, 11, 0.4);">aerator</span><span class="role-badge" style="color: var(--telemetry-mixer); border-color: rgba(20, 184, 166, 0.4);">mixer</span><span class="role-badge" style="color: var(--telemetry-do); border-color: rgba(56, 189, 248, 0.4);">od_sensor</span></div></td>
+          <td class="font-mono">134 pts</td>
+          <td class="font-mono">2 KB</td>
+          <td>
+            <a href="/daily_native/telemetry_native_2026-10-27.csv.gz" class="btn-action btn-highlight" download title="Descargar telemetría nativa combinada de todo el día (134 pts)">
+              <span>⚡ CSV Nativo Combinado</span>
+            </a>
+          </td>
+          <td>
+            <div style="display: flex; gap: 0.3rem; flex-wrap: wrap;">
+              <a href="/raw/aerator/2026-10-27.csv" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/aerator/2026-10-27.csv"><span>aerator.csv</span></a><a href="/raw/mixer/2026-10-27.csv" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/mixer/2026-10-27.csv"><span>mixer.csv</span></a><a href="/raw/od_sensor/2026-10-27.csv" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/od_sensor/2026-10-27.csv"><span>od_sensor.csv</span></a>
+            </div>
+          </td>
+        </tr>
+    
+
+        <tr>
+          <td class="font-mono" style="font-weight: 700; color: #fff;">📅 2026-10-26</td>
+          <td><div style="display: flex; gap: 0.35rem; flex-wrap: wrap;"><span class="role-badge" style="color: var(--telemetry-motor); border-color: rgba(245, 158, 11, 0.4);">aerator</span><span class="role-badge" style="color: var(--telemetry-mixer); border-color: rgba(20, 184, 166, 0.4);">mixer</span><span class="role-badge" style="color: var(--telemetry-do); border-color: rgba(56, 189, 248, 0.4);">od_sensor</span></div></td>
+          <td class="font-mono">41,166 pts</td>
+          <td class="font-mono">848 KB</td>
+          <td>
+            <a href="/daily_native/telemetry_native_2026-10-26.csv.gz" class="btn-action btn-highlight" download title="Descargar telemetría nativa combinada de todo el día (41,166 pts)">
+              <span>⚡ CSV Nativo Combinado</span>
+            </a>
+          </td>
+          <td>
+            <div style="display: flex; gap: 0.3rem; flex-wrap: wrap;">
+              <a href="/raw/aerator/2026-10-26.csv.gz" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/aerator/2026-10-26.csv.gz"><span>aerator.csv.gz</span></a><a href="/raw/aerator/2026-10-26.csv" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/aerator/2026-10-26.csv"><span>aerator.csv</span></a><a href="/raw/mixer/2026-10-26.csv.gz" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/mixer/2026-10-26.csv.gz"><span>mixer.csv.gz</span></a><a href="/raw/mixer/2026-10-26.csv" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/mixer/2026-10-26.csv"><span>mixer.csv</span></a><a href="/raw/od_sensor/2026-10-26.csv.gz" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/od_sensor/2026-10-26.csv.gz"><span>od_sensor.csv.gz</span></a><a href="/raw/od_sensor/2026-10-26.csv" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/od_sensor/2026-10-26.csv"><span>od_sensor.csv</span></a>
+            </div>
+          </td>
+        </tr>
+    
+
+        <tr>
+          <td class="font-mono" style="font-weight: 700; color: #fff;">📅 2026-10-24</td>
+          <td><div style="display: flex; gap: 0.35rem; flex-wrap: wrap;"><span class="role-badge" style="color: var(--telemetry-motor); border-color: rgba(245, 158, 11, 0.4);">aerator</span><span class="role-badge" style="color: var(--telemetry-mixer); border-color: rgba(20, 184, 166, 0.4);">mixer</span><span class="role-badge" style="color: var(--telemetry-do); border-color: rgba(56, 189, 248, 0.4);">od_sensor</span></div></td>
+          <td class="font-mono">48,187 pts</td>
+          <td class="font-mono">880 KB</td>
+          <td>
+            <a href="/daily_native/telemetry_native_2026-10-24.csv.gz" class="btn-action btn-highlight" download title="Descargar telemetría nativa combinada de todo el día (48,187 pts)">
+              <span>⚡ CSV Nativo Combinado</span>
+            </a>
+          </td>
+          <td>
+            <div style="display: flex; gap: 0.3rem; flex-wrap: wrap;">
+              <a href="/raw/aerator/2026-10-24.csv.gz" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/aerator/2026-10-24.csv.gz"><span>aerator.csv.gz</span></a><a href="/raw/mixer/2026-10-24.csv.gz" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/mixer/2026-10-24.csv.gz"><span>mixer.csv.gz</span></a><a href="/raw/od_sensor/2026-10-24.csv.gz" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/od_sensor/2026-10-24.csv.gz"><span>od_sensor.csv.gz</span></a>
+            </div>
+          </td>
+        </tr>
+    
+
+        <tr>
+          <td class="font-mono" style="font-weight: 700; color: #fff;">📅 2026-10-19</td>
+          <td><div style="display: flex; gap: 0.35rem; flex-wrap: wrap;"><span class="role-badge" style="color: var(--telemetry-mixer); border-color: rgba(20, 184, 166, 0.4);">mixer</span><span class="role-badge" style="color: var(--telemetry-do); border-color: rgba(56, 189, 248, 0.4);">od_sensor</span></div></td>
+          <td class="font-mono">1,024 pts</td>
+          <td class="font-mono">13 KB</td>
+          <td>
+            <a href="/daily_native/telemetry_native_2026-10-19.csv.gz" class="btn-action btn-highlight" download title="Descargar telemetría nativa combinada de todo el día (1,024 pts)">
+              <span>⚡ CSV Nativo Combinado</span>
+            </a>
+          </td>
+          <td>
+            <div style="display: flex; gap: 0.3rem; flex-wrap: wrap;">
+              <a href="/raw/mixer/2026-10-19.csv.gz" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/mixer/2026-10-19.csv.gz"><span>mixer.csv.gz</span></a><a href="/raw/od_sensor/2026-10-19.csv.gz" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/od_sensor/2026-10-19.csv.gz"><span>od_sensor.csv.gz</span></a>
+            </div>
+          </td>
+        </tr>
+    
+
+        <tr>
+          <td class="font-mono" style="font-weight: 700; color: #fff;">📅 2026-10-15</td>
+          <td><div style="display: flex; gap: 0.35rem; flex-wrap: wrap;"><span class="role-badge" style="color: var(--telemetry-motor); border-color: rgba(245, 158, 11, 0.4);">aerator</span><span class="role-badge" style="color: var(--telemetry-mixer); border-color: rgba(20, 184, 166, 0.4);">mixer</span><span class="role-badge" style="color: var(--telemetry-do); border-color: rgba(56, 189, 248, 0.4);">od_sensor</span></div></td>
+          <td class="font-mono">24,396 pts</td>
+          <td class="font-mono">477 KB</td>
+          <td>
+            <a href="/daily_native/telemetry_native_2026-10-15.csv.gz" class="btn-action btn-highlight" download title="Descargar telemetría nativa combinada de todo el día (24,396 pts)">
+              <span>⚡ CSV Nativo Combinado</span>
+            </a>
+          </td>
+          <td>
+            <div style="display: flex; gap: 0.3rem; flex-wrap: wrap;">
+              <a href="/raw/aerator/2026-10-15.csv.gz" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/aerator/2026-10-15.csv.gz"><span>aerator.csv.gz</span></a><a href="/raw/mixer/2026-10-15.csv.gz" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/mixer/2026-10-15.csv.gz"><span>mixer.csv.gz</span></a><a href="/raw/od_sensor/2026-10-15.csv.gz" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/od_sensor/2026-10-15.csv.gz"><span>od_sensor.csv.gz</span></a>
+            </div>
+          </td>
+        </tr>
+    
+
+        <tr>
+          <td class="font-mono" style="font-weight: 700; color: #fff;">📅 2026-10-14</td>
+          <td><div style="display: flex; gap: 0.35rem; flex-wrap: wrap;"><span class="role-badge" style="color: var(--telemetry-motor); border-color: rgba(245, 158, 11, 0.4);">aerator</span><span class="role-badge" style="color: var(--telemetry-mixer); border-color: rgba(20, 184, 166, 0.4);">mixer</span><span class="role-badge" style="color: var(--telemetry-do); border-color: rgba(56, 189, 248, 0.4);">od_sensor</span></div></td>
+          <td class="font-mono">20,098 pts</td>
+          <td class="font-mono">415 KB</td>
+          <td>
+            <a href="/daily_native/telemetry_native_2026-10-14.csv.gz" class="btn-action btn-highlight" download title="Descargar telemetría nativa combinada de todo el día (20,098 pts)">
+              <span>⚡ CSV Nativo Combinado</span>
+            </a>
+          </td>
+          <td>
+            <div style="display: flex; gap: 0.3rem; flex-wrap: wrap;">
+              <a href="/raw/aerator/2026-10-14.csv" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/aerator/2026-10-14.csv"><span>aerator.csv</span></a><a href="/raw/mixer/2026-10-14.csv.gz" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/mixer/2026-10-14.csv.gz"><span>mixer.csv.gz</span></a><a href="/raw/od_sensor/2026-10-14.csv.gz" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/od_sensor/2026-10-14.csv.gz"><span>od_sensor.csv.gz</span></a>
+            </div>
+          </td>
+        </tr>
+    
+
+        <tr>
+          <td class="font-mono" style="font-weight: 700; color: #fff;">📅 2026-10-13</td>
+          <td><div style="display: flex; gap: 0.35rem; flex-wrap: wrap;"><span class="role-badge" style="color: var(--telemetry-motor); border-color: rgba(245, 158, 11, 0.4);">aerator</span><span class="role-badge" style="color: var(--telemetry-mixer); border-color: rgba(20, 184, 166, 0.4);">mixer</span><span class="role-badge" style="color: var(--telemetry-do); border-color: rgba(56, 189, 248, 0.4);">od_sensor</span></div></td>
+          <td class="font-mono">51,666 pts</td>
+          <td class="font-mono">856 KB</td>
+          <td>
+            <a href="/daily_native/telemetry_native_2026-10-13.csv.gz" class="btn-action btn-highlight" download title="Descargar telemetría nativa combinada de todo el día (51,666 pts)">
+              <span>⚡ CSV Nativo Combinado</span>
+            </a>
+          </td>
+          <td>
+            <div style="display: flex; gap: 0.3rem; flex-wrap: wrap;">
+              <a href="/raw/aerator/2026-10-13.csv" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/aerator/2026-10-13.csv"><span>aerator.csv</span></a><a href="/raw/mixer/2026-10-13.csv.gz" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/mixer/2026-10-13.csv.gz"><span>mixer.csv.gz</span></a><a href="/raw/od_sensor/2026-10-13.csv.gz" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/od_sensor/2026-10-13.csv.gz"><span>od_sensor.csv.gz</span></a>
+            </div>
+          </td>
+        </tr>
+    
+
+        <tr>
+          <td class="font-mono" style="font-weight: 700; color: #fff;">📅 2026-10-12</td>
+          <td><div style="display: flex; gap: 0.35rem; flex-wrap: wrap;"><span class="role-badge" style="color: var(--telemetry-motor); border-color: rgba(245, 158, 11, 0.4);">aerator</span><span class="role-badge" style="color: var(--telemetry-mixer); border-color: rgba(20, 184, 166, 0.4);">mixer</span><span class="role-badge" style="color: var(--telemetry-do); border-color: rgba(56, 189, 248, 0.4);">od_sensor</span></div></td>
+          <td class="font-mono">26,316 pts</td>
+          <td class="font-mono">384 KB</td>
+          <td>
+            <a href="/daily_native/telemetry_native_2026-10-12.csv.gz" class="btn-action btn-highlight" download title="Descargar telemetría nativa combinada de todo el día (26,316 pts)">
+              <span>⚡ CSV Nativo Combinado</span>
+            </a>
+          </td>
+          <td>
+            <div style="display: flex; gap: 0.3rem; flex-wrap: wrap;">
+              <a href="/raw/aerator/2026-10-12.csv.gz" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/aerator/2026-10-12.csv.gz"><span>aerator.csv.gz</span></a><a href="/raw/mixer/2026-10-12.csv.gz" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/mixer/2026-10-12.csv.gz"><span>mixer.csv.gz</span></a><a href="/raw/od_sensor/2026-10-12.csv.gz" class="btn-action" style="padding: 0.2rem 0.45rem; font-size: 0.72rem;" download title="Descargar log individual raw/od_sensor/2026-10-12.csv.gz"><span>od_sensor.csv.gz</span></a>
+            </div>
+          </td>
+        </tr>
+    
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="bench-footer">
+      <div>
+        AquaControl Distributed Cyber-Physical System &bull; Clean-Water Bench DO Physics (ASCE/EWRI 2-22)
+      </div>
+      <div>
+        Durable Edge Storage powered by Cloudflare R2 &bull; Zero Egress Fees &bull; 24/7 Access
+      </div>
+    </footer>
+  </div>
+
+  <!-- APPLICATION LOGIC & CHART ENGINE -->
+  <script>
+    const EXPERIMENTS = __EXPERIMENTS_JSON__;
+    let chartInstance = null;
+    let currentRawRows = [];
+    let isClockTime = false;
+    let activeFidelity = 'native'; // 'native' is default and primary!
+    let currentExpId = null;
+
+    // Series visibility state (Identical to dashboard ObservatoryChart.tsx)
+    const seriesVisible = {
+      do: true,
+      rpm: true,
+      target: true,
+      mixer: true,
+      cstar: true
+    };
+
+    // Constant reference C*
+    const C_STAR_REF = 7.15;
+
+    // Initialize application on DOM ready
+    document.addEventListener('DOMContentLoaded', () => {
+      const defaultId = "EXP-2026-10-28-01";
+      if (defaultId) {
+        currentExpId = defaultId;
+        loadExperiment(defaultId, 'native');
+      }
+    });
+
+    // Tab switching
+    function switchTab(tab) {
+      document.getElementById('tab-viz').style.display = tab === 'viz' ? 'block' : 'none';
+      document.getElementById('tab-exps').style.display = tab === 'exps' ? 'block' : 'none';
+      document.getElementById('tab-raw').style.display = tab === 'raw' ? 'block' : 'none';
+
+      document.getElementById('tab-btn-viz').classList.toggle('active', tab === 'viz');
+      document.getElementById('tab-btn-exps').classList.toggle('active', tab === 'exps');
+      document.getElementById('tab-btn-raw').classList.toggle('active', tab === 'raw');
+    }
+
+    function selectAndGraph(expId) {
+      document.getElementById('exp-select').value = expId;
+      switchTab('viz');
+      onExperimentChange(expId);
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function onExperimentChange(expId) {
+      if (expId) {
+        currentExpId = expId;
+        loadExperiment(expId);
+      }
+    }
+
+    function filterExpCards(query) {
+      const q = query.toLowerCase();
+      document.querySelectorAll('#exp-grid-container .exp-card').forEach(card => {
+        const id = card.dataset.id.toLowerCase();
+        const title = card.dataset.title;
+        const visible = id.includes(q) || title.includes(q);
+        card.style.display = visible ? 'flex' : 'none';
+      });
+    }
+
+    // Load CSV & Render
+    async function loadExperiment(expId) {
+      const exp = EXPERIMENTS.find(e => e.id === expId);
+      if (!exp) return;
+
+      // Update download links - Native is primary for thesis analysis
+      const btnNative = document.getElementById('btn-download-native');
+      const btnWide = document.getElementById('btn-download-wide');
+      const btnBundle = document.getElementById('btn-download-bundle');
+
+      if (exp.native_csv) {
+        btnNative.href = '/' + exp.native_csv;
+        btnNative.style.display = 'inline-flex';
+      } else {
+        btnNative.style.display = 'none';
+      }
+
+      if (exp.wide_csv) {
+        btnWide.href = '/' + exp.wide_csv;
+        btnWide.style.display = 'inline-flex';
+      } else {
+        btnWide.style.display = 'none';
+      }
+
+      const activeBundle = exp.native_bundle || exp.wide_bundle;
+      if (activeBundle) {
+        btnBundle.href = '/' + activeBundle;
+        btnBundle.style.display = 'inline-flex';
+      } else {
+        btnBundle.style.display = 'none';
+      }
+
+      // Graph using bundle (1 Hz) whenever available; fallback to native if only native exists
+      const fetchKey = exp.wide_csv || exp.native_csv;
+      const isWide = !!exp.wide_csv;
+      if (!fetchKey) {
+        alert('No hay archivo de telemetría disponible para este ensayo.');
+        return;
+      }
+
+      const badgeFid = document.getElementById('chart-fidelity-badge');
+      if (badgeFid) {
+        badgeFid.textContent = isWide ? 'Visualización Sincronizada (1 Hz)' : 'Visualización Nativa (Filtrada)';
+      }
+      const kpiFid = document.getElementById('kpi-fidelity-badge');
+      if (kpiFid) {
+        kpiFid.textContent = isWide ? 'Modo: Sincronizado (1 Hz)' : 'Modo: Nativo';
+      }
+
+      const loader = document.getElementById('chart-loader');
+      const loaderText = document.getElementById('loader-text');
+      loader.style.display = 'flex';
+      loaderText.textContent = `Descargando telemetría de ${exp.id}...`;
+
+      try {
+        const resp = await fetch('/' + fetchKey);
+        if (!resp.ok) throw new Error('HTTP ' + resp.status + ' al descargar telemetría.');
+        const csvText = await resp.text();
+        parseAndRender(csvText, exp, isWide ? 'wide' : 'native');
+      } catch (err) {
+        console.error(err);
+        loaderText.textContent = 'Error: ' + err.message;
+        setTimeout(() => { loader.style.display = 'none'; }, 2500);
+      } finally {
+        loader.style.display = 'none';
+      }
+    }
+
+    // High-Fidelity CSV Parser (Native & Wide)
+    function parseAndRender(csvText, exp, fidelity) {
+      const lines = csvText.trim().split('\n');
+      if (lines.length < 2) return;
+      const headers = lines[0].split(',').map(h => h.trim());
+
+      const idxTs = headers.indexOf('timestamp_utc') !== -1 ? headers.indexOf('timestamp_utc') : headers.indexOf('ts');
+      const idxGridTs = headers.indexOf('grid_ts') !== -1 ? headers.indexOf('grid_ts') : headers.indexOf('t_dev_ms');
+      const idxRelMs = headers.indexOf('t_rel_ms');
+      const idxDO = headers.indexOf('od_do_mg_l') !== -1 ? headers.indexOf('od_do_mg_l') : headers.indexOf('peer_do_mg_l');
+      const idxSat = headers.indexOf('od_sat_pct');
+      const idxRPM = headers.indexOf('aerator_drv_rpm') !== -1 ? headers.indexOf('aerator_drv_rpm') : headers.indexOf('drv_rpm');
+      const idxTarget = headers.indexOf('aerator_drv_rpm_target') !== -1 ? headers.indexOf('aerator_drv_rpm_target') : headers.indexOf('drv_rpm_target');
+      const idxMixer = headers.indexOf('mixer_drv_rpm');
+      const idxTemp = headers.indexOf('od_temp_c') !== -1 ? headers.indexOf('od_temp_c') : headers.indexOf('peer_temp_c');
+      const idxRole = headers.indexOf('role');
+
+      const isNative = (idxRole !== -1 || idxRelMs !== -1);
+      const parsedRows = [];
+
+      // Detect if authoritative RTC timestamps exist for optical sensor in this dataset
+      const idxTSrc = headers.indexOf('t_src');
+      let datasetHasRtcDO = false;
+      if (idxTSrc !== -1 && idxDO !== -1) {
+        for (let i = 1; i < lines.length; i++) {
+          const parts = lines[i].split(',');
+          if (parts[idxTSrc] === 'rtc' && parts[idxDO] !== '') {
+            datasetHasRtcDO = true;
+            break;
+          }
+        }
+      }
+
+      let minDO = Infinity, maxDO = -Infinity, firstDO = null, lastDO = null;
+      let lastSat = null;
+      let peakRPM = 0, sumActiveRPM = 0, countActiveRPM = 0;
+      let peakMixer = 0, sumMixer = 0, countMixer = 0;
+      let sumTemp = 0, countTemp = 0, minTemp = Infinity, maxTemp = -Infinity;
+      let targetRPM = 0;
+      let startMs = null;
+
+      for (let i = 1; i < lines.length; i++) {
+        const parts = lines[i].split(',');
+        if (parts.length < headers.length) continue;
+
+        let relSec = 0;
+        let clockTime = '';
+
+        if (idxRelMs !== -1 && parts[idxRelMs] !== '') {
+          const rawRelMs = parseFloat(parts[idxRelMs]);
+          if (rawRelMs < 0) continue; // Skip pre-roll samples before test start
+          relSec = rawRelMs / 1000;
+        } else {
+          let ms = null;
+          if (idxGridTs !== -1 && parts[idxGridTs]) ms = parseInt(parts[idxGridTs], 10);
+          else if (idxTs !== -1 && parts[idxTs]) ms = Date.parse(parts[idxTs]);
+          if (!ms || isNaN(ms)) ms = i * 1000;
+          if (startMs === null) startMs = ms;
+          relSec = Math.max(0, (ms - startMs) / 1000);
+        }
+
+        if (idxTs !== -1 && parts[idxTs]) {
+          clockTime = parts[idxTs].substring(11, 19);
+        }
+
+        // Dissolved Oxygen: take solely from optical sensor column (never from stale aerator peer)
+        // When hardware RTC timestamps exist, reject unanchored monotonic or mismatched merged echoes
+        let rawDo = idxDO !== -1 && parts[idxDO] !== '' ? parseFloat(parts[idxDO]) : null;
+        if (datasetHasRtcDO && idxTSrc !== -1 && parts[idxTSrc] !== 'rtc') {
+          rawDo = null;
+        }
+        if (rawDo !== null && (isNaN(rawDo) || !isFinite(rawDo))) rawDo = null;
+
+        const satVal = idxSat !== -1 && parts[idxSat] !== '' ? parseFloat(parts[idxSat]) : null;
+        let rpmVal = idxRPM !== -1 && parts[idxRPM] !== '' ? parseFloat(parts[idxRPM]) : null;
+        const tgtVal = idxTarget !== -1 && parts[idxTarget] !== '' ? parseFloat(parts[idxTarget]) : null;
+        let mixerVal = idxMixer !== -1 && parts[idxMixer] !== '' ? parseFloat(parts[idxMixer]) : null;
+        const tempVal = idxTemp !== -1 && parts[idxTemp] !== '' ? parseFloat(parts[idxTemp]) : null;
+
+        // Clamp negative noise spikes on motor
+        if (rpmVal !== null && !isNaN(rpmVal)) {
+          rpmVal = Math.max(0, Math.min(650, rpmVal));
+          if (rpmVal > peakRPM) peakRPM = rpmVal;
+          if (rpmVal > 20) {
+            sumActiveRPM += rpmVal;
+            countActiveRPM++;
+          }
+        }
+
+        if (tgtVal !== null && !isNaN(tgtVal) && tgtVal > targetRPM) {
+          targetRPM = tgtVal;
+        }
+
+        if (mixerVal !== null && !isNaN(mixerVal)) {
+          mixerVal = Math.max(0, Math.min(2500, mixerVal));
+          if (mixerVal > peakMixer) peakMixer = mixerVal;
+          if (mixerVal > 20) {
+            sumMixer += mixerVal;
+            countMixer++;
+          }
+        }
+
+        if (satVal !== null && !isNaN(satVal)) lastSat = satVal;
+        if (tempVal !== null && !isNaN(tempVal)) {
+          sumTemp += tempVal;
+          countTemp++;
+          if (tempVal < minTemp) minTemp = tempVal;
+          if (tempVal > maxTemp) maxTemp = tempVal;
+        }
+
+        parsedRows.push({
+          relSec: relSec,
+          clockTime: clockTime,
+          do: rawDo, // Initialized with sparse optical readings; linearly interpolated below
+          sat: satVal,
+          rpm: rpmVal,
+          target: tgtVal,
+          mixer: mixerVal
+        });
+      }
+
+      // 1. Linear interpolation (LERP) for DO:
+      // Identical to dashboard (ObservatoryChart.tsx). DO is a continuous physical quantity.
+      // Optical sensor samples every ~5 s while actuators sample at 5-20 Hz.
+      // Linear interpolation connects physical readings smoothly without artificial stepping or spikes.
+      const doIndices = [];
+      for (let i = 0; i < parsedRows.length; i++) {
+        if (parsedRows[i].do !== null && !isNaN(parsedRows[i].do) && isFinite(parsedRows[i].do)) {
+          doIndices.push(i);
+        }
+      }
+
+      if (doIndices.length === 1) {
+        const singleVal = parsedRows[doIndices[0]].do;
+        for (let i = 0; i < parsedRows.length; i++) parsedRows[i].do = singleVal;
+        firstDO = singleVal;
+        lastDO = singleVal;
+        minDO = singleVal;
+        maxDO = singleVal;
+      } else if (doIndices.length > 1) {
+        firstDO = parsedRows[doIndices[0]].do;
+        lastDO = parsedRows[doIndices[doIndices.length - 1]].do;
+
+        // Fill before first sample
+        for (let i = 0; i < doIndices[0]; i++) {
+          parsedRows[i].do = firstDO;
+        }
+
+        // Interpolate between consecutive optical readings
+        for (let k = 0; k < doIndices.length - 1; k++) {
+          const iA = doIndices[k];
+          const iB = doIndices[k + 1];
+          const secA = parsedRows[iA].relSec;
+          const secB = parsedRows[iB].relSec;
+          const valA = parsedRows[iA].do;
+          const valB = parsedRows[iB].do;
+          const spanSec = secB - secA;
+
+          if (spanSec > 0) {
+            for (let j = iA + 1; j < iB; j++) {
+              const frac = (parsedRows[j].relSec - secA) / spanSec;
+              parsedRows[j].do = Number((valA + frac * (valB - valA)).toFixed(3));
+            }
+          } else {
+            for (let j = iA + 1; j < iB; j++) {
+              parsedRows[j].do = valA;
+            }
+          }
+        }
+
+        // Fill after last sample
+        for (let i = doIndices[doIndices.length - 1] + 1; i < parsedRows.length; i++) {
+          parsedRows[i].do = lastDO;
+        }
+
+        // Compute min and max DO
+        for (let i = 0; i < parsedRows.length; i++) {
+          if (parsedRows[i].do < minDO) minDO = parsedRows[i].do;
+          if (parsedRows[i].do > maxDO) maxDO = parsedRows[i].do;
+        }
+      }
+
+      // 2. Zero-Order Hold (ZOH / sample-and-hold) for actuators (ODrive and mixer RPM):
+      // Identical to dashboard: actuators step instantaneously.
+      let lastRpm = 0;
+      let lastTarget = 0;
+      let lastMixer = 0;
+
+      for (let i = 0; i < parsedRows.length; i++) {
+        if (parsedRows[i].rpm !== null && !isNaN(parsedRows[i].rpm)) {
+          lastRpm = parsedRows[i].rpm;
+        } else {
+          parsedRows[i].rpm = lastRpm;
+        }
+
+        if (parsedRows[i].target !== null && !isNaN(parsedRows[i].target)) {
+          lastTarget = parsedRows[i].target;
+        } else {
+          parsedRows[i].target = lastTarget;
+        }
+
+        if (parsedRows[i].mixer !== null && !isNaN(parsedRows[i].mixer)) {
+          lastMixer = parsedRows[i].mixer;
+        } else {
+          parsedRows[i].mixer = lastMixer;
+        }
+      }
+
+      currentRawRows = parsedRows;
+
+      // Update KPI Cards
+      const totalSec = parsedRows.length > 0 ? parsedRows[parsedRows.length - 1].relSec : 0;
+      const minStr = Math.floor(totalSec / 60);
+      const secStr = Math.floor(totalSec % 60);
+      document.getElementById('kpi-duration-val').textContent = `${minStr}m ${secStr < 10 ? '0' : ''}${secStr}s`;
+      document.getElementById('kpi-samples-badge').textContent = `${parsedRows.length.toLocaleString()} pts (${isNative ? 'Nativo' : '1 Hz'})`;
+
+      if (firstDO !== null && lastDO !== null) {
+        document.getElementById('kpi-do-val').textContent = lastDO.toFixed(2);
+        document.getElementById('kpi-do-range').textContent = `${firstDO.toFixed(2)} → ${lastDO.toFixed(2)} mg/L`;
+        const delta = lastDO - firstDO;
+        const deltaStr = (delta >= 0 ? '+' : '') + delta.toFixed(2) + ' mg/L';
+        document.getElementById('kpi-do-delta').textContent = deltaStr;
+        document.getElementById('kpi-do-delta').style.color = delta >= 0 ? 'var(--telemetry-success)' : 'var(--telemetry-warning)';
+      } else {
+        document.getElementById('kpi-do-val').textContent = '--';
+        document.getElementById('kpi-do-range').textContent = 'Sin datos OD';
+        document.getElementById('kpi-do-delta').textContent = '--';
+      }
+
+      document.getElementById('kpi-do-sat').textContent = lastSat !== null ? `Sat: ${lastSat.toFixed(1)}%` : 'Sat: --%';
+      document.getElementById('kpi-rpm-peak').textContent = peakRPM > 0 ? Math.round(peakRPM) : '0';
+      document.getElementById('kpi-rpm-target').textContent = targetRPM > 0 ? `Objetivo: ${Math.round(targetRPM)} RPM` : 'Manual';
+      document.getElementById('kpi-rpm-avg').textContent = countActiveRPM > 0 ? `Prom: ${Math.round(sumActiveRPM / countActiveRPM)}` : 'Prom: 0';
+      document.getElementById('kpi-mixer-rpm').textContent = countMixer > 0 ? Math.round(sumMixer / countMixer) : (peakMixer > 0 ? Math.round(peakMixer) : '0');
+      document.getElementById('kpi-temp-avg').textContent = countTemp > 0 ? (sumTemp / countTemp).toFixed(2) : '--';
+      document.getElementById('kpi-temp-range').textContent = countTemp > 0 ? `Min: ${minTemp.toFixed(1)} • Max: ${maxTemp.toFixed(1)} °C` : '--';
+
+      renderChart();
+    }
+
+    // Render Chart.js (Focused on Control Dynamics: DO & RPM only)
+    function renderChart() {
+      if (!currentRawRows || currentRawRows.length === 0) return;
+
+      const ctx = document.getElementById('scadaChart').getContext('2d');
+      if (chartInstance) chartInstance.destroy();
+
+      // Adaptive downsampling for butter-smooth 60 FPS rendering
+      const totalPoints = currentRawRows.length;
+      const step = Math.max(1, Math.floor(totalPoints / 2500));
+
+      const labels = [];
+      const dataDO = [];
+      const dataRPM = [];
+      const dataTarget = [];
+      const dataMixer = [];
+      const dataCStar = [];
+
+      for (let i = 0; i < totalPoints; i += step) {
+        const r = currentRawRows[i];
+        if (isClockTime && r.clockTime) {
+          labels.push(r.clockTime);
+        } else {
+          const m = Math.floor(r.relSec / 60);
+          const s = Math.floor(r.relSec % 60);
+          labels.push(`${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`);
+        }
+
+        dataDO.push(r.do);
+        dataRPM.push(r.rpm);
+        dataTarget.push(r.target);
+        dataMixer.push(r.mixer);
+        dataCStar.push(C_STAR_REF);
+      }
+
+      // Datasets (Clean and focused: DO, Motor RPM, Target, Mixer, C*)
+      const datasets = [
+        {
+          label: 'Oxígeno Disuelto (mg/L)',
+          data: dataDO,
+          yAxisID: 'yDO',
+          borderColor: '#38bdf8',
+          backgroundColor: 'rgba(56, 189, 248, 0.08)',
+          fill: true,
+          borderWidth: 2.0,
+          tension: 0.25,
+          cubicInterpolationMode: 'monotone',
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          pointHoverBackgroundColor: '#38bdf8',
+          pointHoverBorderColor: '#fff',
+          spanGaps: true,
+          hidden: !seriesVisible.do
+        },
+        {
+          label: 'ODrive Aireador (RPM)',
+          data: dataRPM,
+          yAxisID: 'yRPM',
+          borderColor: '#f59e0b',
+          backgroundColor: 'transparent',
+          fill: false,
+          borderWidth: 2.0,
+          tension: 0,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          pointHoverBackgroundColor: '#f59e0b',
+          pointHoverBorderColor: '#fff',
+          spanGaps: true,
+          hidden: !seriesVisible.rpm
+        },
+        {
+          label: 'RPM Setpoint',
+          data: dataTarget,
+          yAxisID: 'yRPM',
+          borderColor: 'rgba(245, 158, 11, 0.65)',
+          borderDash: [5, 4],
+          borderWidth: 1.5,
+          tension: 0,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          spanGaps: true,
+          hidden: !seriesVisible.target
+        },
+        {
+          label: 'Mezclador T-200 (RPM)',
+          data: dataMixer,
+          yAxisID: 'yRPM',
+          borderColor: '#14b8a6',
+          backgroundColor: 'transparent',
+          fill: false,
+          borderWidth: 2.0,
+          tension: 0,
+          pointRadius: 0,
+          pointHoverRadius: 4,
+          pointHoverBackgroundColor: '#14b8a6',
+          spanGaps: true,
+          hidden: !seriesVisible.mixer
+        },
+        {
+          label: 'Línea C* Sat. (7.15 mg/L)',
+          data: dataCStar,
+          yAxisID: 'yDO',
+          borderColor: 'rgba(56, 189, 248, 0.45)',
+          borderDash: [8, 4],
+          borderWidth: 1.2,
+          pointRadius: 0,
+          pointHoverRadius: 0,
+          hidden: !seriesVisible.cstar
+        }
+      ];
+
+      chartInstance = new Chart(ctx, {
+        type: 'line',
+        data: {
+          labels: labels,
+          datasets: datasets
+        },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: {
+            mode: 'index',
+            intersect: false
+          },
+          plugins: {
+            legend: {
+              display: false // Managed via custom top buttons
+            },
+            tooltip: {
+              backgroundColor: 'rgba(15, 23, 42, 0.95)',
+              titleColor: '#38bdf8',
+              titleFont: { family: 'JetBrains Mono', size: 12, weight: 'bold' },
+              bodyColor: '#f8fafc',
+              bodyFont: { family: 'JetBrains Mono', size: 12 },
+              borderColor: 'rgba(56, 189, 248, 0.3)',
+              borderWidth: 1,
+              padding: 12,
+              displayColors: true,
+              callbacks: {
+                title: function(items) {
+                  return '⏱ ' + items[0].label + (isClockTime ? ' (Hora Reloj)' : ' transcurrido');
+                },
+                label: function(item) {
+                  const val = item.raw;
+                  if (val === null || isNaN(val)) return null;
+                  if (item.dataset.yAxisID === 'yDO') {
+                    return '💧 ' + item.dataset.label + ': ' + val.toFixed(3) + ' mg/L';
+                  } else if (item.dataset.yAxisID === 'yRPM') {
+                    const icon = item.dataset.label.includes('Mezclador') ? '🌀 ' : '⚡ ';
+                    return icon + item.dataset.label + ': ' + Math.round(val) + ' RPM';
+                  }
+                  return item.dataset.label + ': ' + val;
+                }
+              }
+            }
+          },
+          scales: {
+            x: {
+              grid: { color: 'rgba(30, 41, 59, 0.5)' },
+              ticks: {
+                color: '#94a3b8',
+                font: { family: 'JetBrains Mono', size: 10 },
+                maxTicksLimit: 12
+              }
+            },
+            yDO: {
+              type: 'linear',
+              position: 'left',
+              display: seriesVisible.do || seriesVisible.cstar,
+              min: 0,
+              suggestedMax: 8.5,
+              title: {
+                display: true,
+                text: 'OD (mg/L)',
+                color: '#38bdf8',
+                font: { family: 'JetBrains Mono', size: 10, weight: 'bold' }
+              },
+              ticks: {
+                color: '#38bdf8',
+                font: { family: 'JetBrains Mono', size: 10 },
+                callback: function(v) { return Number(v).toFixed(1); }
+              },
+              grid: { color: 'rgba(56, 189, 248, 0.1)' }
+            },
+            yRPM: {
+              type: 'linear',
+              position: 'right',
+              display: seriesVisible.rpm || seriesVisible.mixer || seriesVisible.target,
+              min: 0,
+              suggestedMin: 0,
+              suggestedMax: seriesVisible.mixer ? 1200 : 650,
+              title: {
+                display: true,
+                text: 'RPM',
+                color: '#f59e0b',
+                font: { family: 'JetBrains Mono', size: 10, weight: 'bold' }
+              },
+              ticks: {
+                color: '#f59e0b',
+                font: { family: 'JetBrains Mono', size: 10 },
+                callback: function(v) { return Math.round(Number(v)).toString(); }
+              },
+              grid: { drawOnChartArea: false }
+            }
+          }
+        }
+      });
+    }
+
+    // Series toggling
+    function toggleSeries(key) {
+      seriesVisible[key] = !seriesVisible[key];
+      const btn = document.getElementById('btn-ser-' + key);
+      if (btn) btn.classList.toggle('active', seriesVisible[key]);
+
+      if (chartInstance) {
+        renderChart();
+      }
+    }
+
+    // Time mode toggle
+    function toggleTimeMode() {
+      isClockTime = !isClockTime;
+      const lbl = document.getElementById('time-mode-label');
+      lbl.textContent = isClockTime ? 'Eje X: Hora Reloj (HH:MM:SS)' : 'Eje X: Tiempo Relativo (MM:SS)';
+      renderChart();
+    }
+
+    // Reset Zoom / Re-render
+    function resetZoom() {
+      if (chartInstance) renderChart();
+    }
+
+    // Export PNG
+    function exportChartPng() {
+      if (!chartInstance) return;
+      const url = chartInstance.toBase64Image();
+      const a = document.createElement('a');
+      a.download = `AquaControl_${document.getElementById('exp-select').value || 'curvas'}_${activeFidelity}.png`;
+      a.href = url;
+      a.click();
+    }
+  </script>
+</body>
+</html>

@@ -3,7 +3,7 @@
 aqua-station Cloudflare R2 Synchronization Tool.
 
 Syncs telemetry CSVs and experiment bundles to Cloudflare R2 Object Storage (aqua-station-r2).
-Regenerates the 24/7 client-side SCADA Data Portal (index.html) matching the AquaStation Obsidian theme.
+Regenerates and uploads the 24/7 client-side SCADA Data Portal (index.html) matching the AquaStation Obsidian theme.
 """
 import os
 import sys
@@ -17,6 +17,8 @@ import boto3
 from botocore.config import Config
 
 ENV_FILE = Path("/etc/aqua/gateway.env")
+TEMPLATE_PATH = Path("/opt/aqua-station/tools/portal_template.html")
+LOCAL_TEMPLATE_PATH = Path(__file__).resolve().parent / "portal_template.html"
 
 def load_env():
     env = {}
@@ -42,6 +44,26 @@ def get_s3_client(env):
         region_name=region,
         config=Config(signature_version="s3v4")
     )
+
+def build_portal_html(experiments):
+    """Injects experiment catalog into the portal HTML template."""
+    template_text = None
+    if TEMPLATE_PATH.exists():
+        template_text = TEMPLATE_PATH.read_text(encoding="utf-8")
+    elif LOCAL_TEMPLATE_PATH.exists():
+        template_text = LOCAL_TEMPLATE_PATH.read_text(encoding="utf-8")
+    
+    if not template_text:
+        print("Warning: portal template not found, skipping index.html generation")
+        return None
+
+    # Experiments JSON sorted descending
+    exp_json = json.dumps(experiments, ensure_ascii=False)
+    portal_html = template_text.replace(
+        "const EXPERIMENTS = __EXPERIMENTS_JSON__;",
+        f"const EXPERIMENTS = {exp_json};"
+    )
+    return portal_html
 
 def sync_all():
     env = load_env()
@@ -90,58 +112,86 @@ def sync_all():
 
     # 2. Sync experiment exports
     exports_root = Path("/data/exports")
-    wide_exps = []
-    native_exps = []
+    experiments_map = {}
     
     if exports_root.exists():
         for exp_dir in sorted(exports_root.iterdir(), reverse=True):
             if not exp_dir.is_dir():
                 continue
-            exp_id = exp_dir.name
-            is_native = exp_id.endswith("_native")
-            exp_data = {
-                "id": exp_id,
-                "is_native": is_native,
-                "title": "",
-                "status": "completed",
-                "time_range": {},
-                "roles": [],
-                "files": [],
-                "csv_key": None,
-                "bundle_key": None
-            }
+            dir_name = exp_dir.name
+            is_native = dir_name.endswith("_native")
+            base_id = dir_name[:-7] if is_native else dir_name
+
+            if base_id not in experiments_map:
+                experiments_map[base_id] = {
+                    "id": base_id,
+                    "title": "",
+                    "time_range": {},
+                    "roles": [],
+                    "wide_csv": None,
+                    "wide_bundle": None,
+                    "native_csv": None,
+                    "native_bundle": None,
+                    "sort_time": base_id
+                }
+
+            entry = experiments_map[base_id]
+
             for item in sorted(exp_dir.glob("*")):
                 if not item.is_file():
                     continue
-                key = f"exports/{exp_id}/{item.name}"
+                key = f"exports/{dir_name}/{item.name}"
                 ct = "application/gzip" if item.name.endswith((".gz", ".tgz")) else ("text/csv" if item.name.endswith(".csv") else "application/json")
                 try:
                     s3.upload_file(str(item), bucket, key, ExtraArgs={"ContentType": ct})
-                    exp_data["files"].append({"name": item.name, "key": key, "size": item.stat().st_size})
-                    if item.name == "telemetry.csv":
-                        exp_data["csv_key"] = key
-                    elif item.name == "telemetry_native.csv" and not exp_data["csv_key"]:
-                        exp_data["csv_key"] = key
-                    elif item.name.endswith((".tar.gz", ".tgz")):
-                        exp_data["bundle_key"] = key
-                    elif item.name == "manifest.json":
-                        try:
-                            m_json = json.loads(item.read_text(encoding="utf-8"))
-                            exp_data["title"] = m_json.get("title", "")
-                            exp_data["status"] = m_json.get("status", "completed")
-                            exp_data["time_range"] = m_json.get("time_range", {})
-                            exp_data["roles"] = m_json.get("roles_present", [])
-                        except Exception:
-                            pass
+                    if is_native:
+                        if item.name.endswith((".tar.gz", ".tgz")):
+                            entry["native_bundle"] = key
+                        elif item.name.endswith(".csv"):
+                            entry["native_csv"] = key
+                    else:
+                        if item.name.endswith((".tar.gz", ".tgz")):
+                            entry["wide_bundle"] = key
+                        elif item.name.endswith(".csv"):
+                            entry["wide_csv"] = key
+                        elif item.name == "manifest.json":
+                            try:
+                                m_json = json.loads(item.read_text(encoding="utf-8"))
+                                if m_json.get("title"): entry["title"] = m_json["title"]
+                                if m_json.get("time_range"):
+                                    entry["time_range"] = m_json["time_range"]
+                                    if m_json["time_range"].get("start"):
+                                        entry["sort_time"] = m_json["time_range"]["start"]
+                                if m_json.get("roles_present"): entry["roles"] = m_json["roles_present"]
+                            except Exception:
+                                pass
                 except Exception as e:
                     print(f"Error uploading {item.name}: {e}")
 
-            if is_native:
-                native_exps.append(exp_data)
-            else:
-                wide_exps.append(exp_data)
+    # Sort experiments chronologically by experiment ID descending (EXP-YYYY-MM-DD-NN)
+    sorted_experiments = sorted(
+        experiments_map.values(),
+        key=lambda x: x["id"],
+        reverse=True
+    )
 
-    print(f"Sync complete. Uploaded {len(wide_exps)} wide experiments, {len(native_exps)} native experiments, {len(raw_files)} raw files.")
+    print(f"Uploaded {len(sorted_experiments)} unique experiments, {len(raw_files)} raw files.")
+
+    # 3. Regenerate and upload 24/7 Portal index.html
+    portal_html = build_portal_html(sorted_experiments)
+    if portal_html:
+        try:
+            print("Uploading updated index.html to R2 root...")
+            s3.put_object(
+                Bucket=bucket,
+                Key="index.html",
+                Body=portal_html.encode("utf-8"),
+                ContentType="text/html",
+                CacheControl="no-cache, must-revalidate"
+            )
+            print(f"Successfully published data portal (index.html) with {len(sorted_experiments)} experiments to https://data.aqua-station.live")
+        except Exception as e:
+            print(f"Error uploading index.html to R2: {e}")
 
 if __name__ == "__main__":
     sync_all()
