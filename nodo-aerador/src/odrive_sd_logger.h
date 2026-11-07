@@ -24,6 +24,8 @@ struct OdriveLogSample {
   float fet_temp_c;        // Inverter MOSFET temperature
   float current_do_mg_l;   // Synchronized Dissolved Oxygen reading
   uint8_t control_mode;    // 0=PID, 1=Fuzzy, 2=Manual
+  float env_temp_c;        // Ambient temperature (DHT11, or NAN)
+  float env_humidity_pct;  // Ambient relative humidity (DHT11, or NAN)
 };
 
 /**

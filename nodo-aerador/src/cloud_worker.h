@@ -21,9 +21,14 @@ struct SharedTelemetry {
   uint8_t drv_state = 0;          // axis0.current_state (1=IDLE, 8=CLOSED_LOOP)
   uint32_t disarm_reason = 0;     // axis0.disarm_reason bitmask
   uint64_t rtc_timestamp_ms = 0;
+  float env_temp_c = NAN;
+  float env_humidity_pct = NAN;
+  bool env_dht_present = false;
 };
 
 void updateSharedTelemetry(const SharedTelemetry& telem);
+void updateSharedAmbient(float tempC, float humPct, bool present);
+void getSharedAmbient(float& outTempC, float& outHumPct, bool& outPresent);
 
 /**
  * @brief Spawns the background cloud worker task pinned to Core 0.

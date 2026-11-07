@@ -184,6 +184,13 @@ void loop() {
     sTelem.drv_state = cachedODriveTelem.current_state;
     sTelem.disarm_reason = cachedODriveTelem.disarm_reason;
 
+    float envTemp = NAN, envHum = NAN;
+    bool envPres = false;
+    getSharedAmbient(envTemp, envHum, envPres);
+    sTelem.env_temp_c = envTemp;
+    sTelem.env_humidity_pct = envHum;
+    sTelem.env_dht_present = envPres;
+
     updateSharedTelemetry(sTelem);
 
     // D. MicroSD logging a 5 Hz SOLO durante un experimento activo (V4 §2.1/§2.2)
@@ -202,6 +209,8 @@ void loop() {
       sample.fet_temp_c = cachedODriveTelem.fet_temperature;
       sample.current_do_mg_l = controlEngine.getLastMeasuredDo();
       sample.control_mode = (uint8_t)controlEngine.getConfig().mode;
+      sample.env_temp_c = envTemp;
+      sample.env_humidity_pct = envHum;
 
       odriveSdLoggerEnqueue(sample);
     }
@@ -213,7 +222,12 @@ void loop() {
       const char* modeStr = (cfg.mode == MODE_PID) ? "PID" :
                             ((cfg.mode == MODE_FUZZY) ? "FUZZY" : "MANUAL");
 
-      remoteLogPrintf("[CTRL Core 1] Mode: %s | DO: %.2f mg/L | Target: %.0f RPM | Act: %.0f RPM | %.1fV %.2fA (%.1fW) | Iq: %.3fA | ch=%u espnow_rx=%u%s%s%s%s%s\n",
+      char ambBuf[32] = "";
+      if (envPres && !isnan(envTemp) && !isnan(envHum)) {
+        snprintf(ambBuf, sizeof(ambBuf), " | Amb: %.1f°C %.0f%%", envTemp, envHum);
+      }
+
+      remoteLogPrintf("[CTRL Core 1] Mode: %s | DO: %.2f mg/L | Target: %.0f RPM | Act: %.0f RPM | %.1fV %.2fA (%.1fW) | Iq: %.3fA%s | ch=%u espnow_rx=%u%s%s%s%s%s\n",
                     modeStr,
                     controlEngine.getLastMeasuredDo(),
                     targetRpm,
@@ -222,6 +236,7 @@ void loop() {
                     cachedODriveTelem.ibus_current,
                     cachedODriveTelem.power_watts,
                     cachedODriveTelem.torque_estimate,
+                    ambBuf,
                     (unsigned)WiFi.channel(),
                     (unsigned)sync.packet_count,
                     controlEngine.isFailsafeActive() ? " [FAILSAFE]" : "",

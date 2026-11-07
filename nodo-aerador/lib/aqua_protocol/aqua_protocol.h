@@ -422,6 +422,8 @@ constexpr const char* kCtlMode = "ctl_mode";
 constexpr const char* kCtlFailsafe = "ctl_failsafe";
 constexpr const char* kPeerDoMgL = "peer_do_mg_l";
 constexpr const char* kPeerTempC = "peer_temp_c";
+constexpr const char* kEnvTempC = "env_temp_c";
+constexpr const char* kEnvHumidityPct = "env_humidity_pct";
 
 /** `ctl_mode` enum members, sent as text so an unknown value is rejected rather than
  *  silently mapped to a mode index that means something else. */

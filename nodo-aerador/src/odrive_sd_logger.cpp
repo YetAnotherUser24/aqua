@@ -69,7 +69,7 @@ static void sdWriterTask(void* param) {
         continue; // V4: sin experimento activo no se formatea ni se graba
       }
       int n = snprintf(s_lineBuffer, sizeof(s_lineBuffer),
-        "%lu,%llu,%.1f,%.2f,%.3f,%.3f,%.2f,%.2f,%.1f,%.3f,%u\n",
+        "%lu,%llu,%.1f,%.2f,%.3f,%.3f,%.2f,%.2f,%.1f,%.3f,%u,%.1f,%.1f\n",
         (unsigned long)sample.t_ms,
         (unsigned long long)sample.rtc_timestamp_ms,
         sample.target_rpm,
@@ -80,7 +80,9 @@ static void sdWriterTask(void* param) {
         sample.vbus_v,
         sample.fet_temp_c,
         sample.current_do_mg_l,
-        (unsigned int)sample.control_mode
+        (unsigned int)sample.control_mode,
+        sample.env_temp_c,
+        sample.env_humidity_pct
       );
 
       if (n > 0 && (batchLen + n < sizeof(s_batchBuffer))) {
@@ -99,7 +101,7 @@ static void sdWriterTask(void* param) {
         File f = SD.open(s_logPath, FILE_APPEND);
         if (f) {
           if (f.size() == 0) {
-            f.print("t_ms,rtc_timestamp_ms,target_rpm,actual_rpm,torque_nm,iq_a,ibus_a,vbus_v,fet_temp_c,do_mg_l,mode\n");
+            f.print("t_ms,rtc_timestamp_ms,target_rpm,actual_rpm,torque_nm,iq_a,ibus_a,vbus_v,fet_temp_c,do_mg_l,mode,env_temp_c,env_humidity_pct\n");
           }
           f.write((const uint8_t*)s_batchBuffer, batchLen);
           f.flush();

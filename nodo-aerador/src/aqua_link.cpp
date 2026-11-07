@@ -179,9 +179,9 @@ void publishPresence(bool online, const char* reason) {
  * first time the batch is serialised. A count that is named and used for the array is harder to
  * leave stale than a literal in two places.
  */
-constexpr size_t kSampleFieldCount = 1 + 15;
+constexpr size_t kSampleFieldCount = 1 + 17;
 
-/** One sample's fields: the per-sample time plus the 15 the registry declares. */
+/** One sample's fields: the per-sample time plus the 15 + 2 the registry declares. */
 size_t buildFields(const Queued& entry, aqua::FieldValue* out) {
   namespace f = aqua::aerator_fields;
   const SharedTelemetry& st = entry.state;
@@ -220,6 +220,11 @@ size_t buildFields(const Queued& entry, aqua::FieldValue* out) {
   // only: `od_sensor` is authoritative for dissolved oxygen and water temperature.
   out[n++] = aqua::FieldValue::num(f::kPeerDoMgL, st.measured_do, 3);
   out[n++] = aqua::FieldValue::num(f::kPeerTempC, st.water_temp, 2);
+  // Optional ambient temperature and humidity from DHT11
+  if (st.env_dht_present && !isnan(st.env_temp_c) && !isnan(st.env_humidity_pct)) {
+    out[n++] = aqua::FieldValue::num(f::kEnvTempC, st.env_temp_c, 1);
+    out[n++] = aqua::FieldValue::num(f::kEnvHumidityPct, st.env_humidity_pct, 1);
+  }
   return n;
 }
 

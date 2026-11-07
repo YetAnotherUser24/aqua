@@ -97,6 +97,9 @@ roles:
       # Informational only — od_sensor is authoritative for these quantities.
       - {name: peer_do_mg_l,     type: float, unit: "mg/L", precision: 3, legacy_source: measured_do, authoritative: false}
       - {name: peer_temp_c,      type: float, unit: "°C",   precision: 2, legacy_source: water_temp,  authoritative: false}
+      # Optional ambient temperature and humidity from DHT11
+      - {name: env_temp_c,       type: float, unit: "°C",   precision: 1, note: "DHT11 ambient temperature (optional)"}
+      - {name: env_humidity_pct, type: float, unit: "%",    precision: 1, note: "DHT11 ambient relative humidity (optional)"}
 
   # --------------------------------------------------------------------------
   # T-200 mixer via SNR8503 (ESC + FG tachometer). Specified in rad/s and duty —

@@ -97,16 +97,18 @@
 
 /* -------------------- MicroSD Card Logger ------------------------ */
 #ifndef SD_LOG_ENABLED
-#if defined(BOARD_LILYGO_LORA32) && (!defined(AERADOR_VIRTUAL) || !AERADOR_VIRTUAL)
-#define SD_LOG_ENABLED          1        // Enable high-speed SD logging on LilyGO hardware
-#else
-#define SD_LOG_ENABLED          1
-#endif
+#define SD_LOG_ENABLED          0        // Disabled: GPIO 7 is repurposed for DHT11 data line
 #endif
 
 #define SD_LOG_INTERVAL_MS      200UL    // 5 Hz SD sampling rate on Core 1 (V4 §2.2, solo en experimento)
 #define SD_LOG_QUEUE_SIZE       64       // RAM queue holding up to 6.4s of samples during flash erase
 #define SD_LOG_FLUSH_BATCH_SIZE 10       // Flush after 10 samples (every 1 second) or idle
+
+/* ----------------- Ambient DHT11 Sensor (Optional) --------------- */
+#ifndef DHT_ENABLED
+#define DHT_ENABLED             1        // 1 = Driver enabled (runtime autodetects presence)
+#endif
+#define DHT_SAMPLE_INTERVAL_MS  3000UL   // 3s sample interval on Core 0 (slow ambient dynamics)
 
 /* ----------------- Virtual motor bus settings --------------------- */
 // 1 = build with the simulated motor bus (no physical ODrive, no ESP-NOW).

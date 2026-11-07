@@ -10,6 +10,7 @@
 #include <esp_sntp.h>
 #include "odrive_sd_logger.h"
 #include "esp_now_rx.h"
+#include "dht_sensor.h"
 #if defined(OTA_ENABLED) && OTA_ENABLED
 #include <ArduinoOTA.h>
 #endif
@@ -72,7 +73,29 @@ static uint64_t currentRtcMs() {
 
 void updateSharedTelemetry(const SharedTelemetry& telem) {
   portENTER_CRITICAL(&s_telemMux);
+  float envTemp = s_sharedTelem.env_temp_c;
+  float envHum = s_sharedTelem.env_humidity_pct;
+  bool envPres = s_sharedTelem.env_dht_present;
   s_sharedTelem = telem;
+  s_sharedTelem.env_temp_c = envTemp;
+  s_sharedTelem.env_humidity_pct = envHum;
+  s_sharedTelem.env_dht_present = envPres;
+  portEXIT_CRITICAL(&s_telemMux);
+}
+
+void updateSharedAmbient(float tempC, float humPct, bool present) {
+  portENTER_CRITICAL(&s_telemMux);
+  s_sharedTelem.env_temp_c = tempC;
+  s_sharedTelem.env_humidity_pct = humPct;
+  s_sharedTelem.env_dht_present = present;
+  portEXIT_CRITICAL(&s_telemMux);
+}
+
+void getSharedAmbient(float& outTempC, float& outHumPct, bool& outPresent) {
+  portENTER_CRITICAL(&s_telemMux);
+  outTempC = s_sharedTelem.env_temp_c;
+  outHumPct = s_sharedTelem.env_humidity_pct;
+  outPresent = s_sharedTelem.env_dht_present;
   portEXIT_CRITICAL(&s_telemMux);
 }
 
@@ -696,6 +719,7 @@ static void cloudWorkerTask(void* pvParameters) {
   unsigned long lastTelemPush = 0;
   unsigned long lastTelemSample = 0;
   unsigned long lastCmdPoll = 0;
+  unsigned long lastDhtSample = 0;
   uint8_t fastPollBurst = 0;
 #if defined(OTA_ENABLED) && OTA_ENABLED
   bool otaInitialized = false;
@@ -703,6 +727,8 @@ static void cloudWorkerTask(void* pvParameters) {
 #if defined(TELNET_LOG_ENABLED) && TELNET_LOG_ENABLED
   bool telnetInitialized = false;
 #endif
+
+  dhtSensorInit();
 
   WiFi.mode(WIFI_STA);
   WiFi.setSleep(false);
@@ -718,6 +744,16 @@ static void cloudWorkerTask(void* pvParameters) {
   bool wasConnected = false;
 
   while (true) {
+    const unsigned long loopNow = millis();
+
+    // Periodic DHT11 ambient sampling on Core 0 (slow dynamics, never stalls Core 1)
+    if (loopNow - lastDhtSample >= DHT_SAMPLE_INTERVAL_MS) {
+      lastDhtSample = loopNow;
+      float t = NAN, h = NAN;
+      bool ok = dhtSensorRead(t, h);
+      updateSharedAmbient(t, h, ok);
+    }
+
     if (WiFi.status() != WL_CONNECTED) {
       if (wasConnected) {
         Serial.println("[Cloud Worker] WiFi disconnected. Auto-reconnect active...");

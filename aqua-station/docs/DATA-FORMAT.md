@@ -56,7 +56,7 @@ Rules:
   whichever comes first, and **every release is `fsync`ed**.
 
   Size alone made the exposure a property of the sampling rate: 64 KB is a fixed *number of
-  bytes*, so at the 5 Hz experiment cadence it is 3.1 minutes (`od_sensor` 3.9, `aerator` 3.6,
+  bytes*, so at the 5 Hz experiment cadence it is 2.8 minutes (`od_sensor` 3.9, `aerator` 2.8,
   `mixer` 5.4, `pump` 6.0) while the od_sensor's real 0.2 Hz stretched the same block past
   **90 minutes**. The cap is what turns that back into a duration. A role that stops sending is
   released too, by the gateway's maintenance sweep — the size and age checks in the write path

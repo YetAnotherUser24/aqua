@@ -121,6 +121,14 @@
 #define BOARD_BAT_ADC_PIN 36
 #endif
 
+/* DHT11 Ambient Temperature & Humidity Sensor (Optional) */
+#ifndef DHT_PIN
+#define DHT_PIN 12
+#endif
+#ifndef DHT_TYPE
+#define DHT_TYPE 11
+#endif
+
 #else
 
 /* ==========================================================================
@@ -152,6 +160,14 @@
 #define BOARD_BAT_ADC_PIN 13
 #endif
 
+/* DHT11 Ambient Temperature & Humidity Sensor (Optional) */
+#ifndef DHT_PIN
+#define DHT_PIN 7
+#endif
+#ifndef DHT_TYPE
+#define DHT_TYPE 11
+#endif
+
 
 /* Onboard MicroSD Dedicated SPI Controller (HSPI / SPI2) */
 #ifndef SD_SPI_HOST
@@ -159,7 +175,7 @@
 #endif
 
 #ifndef SD_PIN_CS
-#define SD_PIN_CS 7 
+#define SD_PIN_CS -1 
 #endif
 
 #ifndef SD_PIN_SCLK
