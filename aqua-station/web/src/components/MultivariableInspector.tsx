@@ -134,7 +134,7 @@ export function MultivariableInspector({ registry }: { registry: Registry | null
   const [rightAuto, setRightAuto] = useState(true);
   const [leftMin, setLeftMin] = useState(0);
   const [leftMax, setLeftMax] = useState(600);
-  const [rightMin, setRightMin] = useState(0);
+  const [rightMin, setRightMin] = useState(-1);
   const [rightMax, setRightMax] = useState(15);
 
   // One fetch per active variable. Cheap at these spans (raw archive tail), and it keeps each
@@ -191,7 +191,8 @@ export function MultivariableInspector({ registry }: { registry: Registry | null
     // Actuators ('odriveRpm', 'mixerRpm', 'pumpRpm') use Zero-Order Hold.
     const continuousKeys = new Set(['do', 'temp', 'waterTemp']);
     for (const def of VAR_DEFS) {
-      if (!active.has(def.key)) continue;
+      const isKeyNeeded = active.has(def.key) || (def.key === 'do' && (active.has('dDoDt') || active.has('error')));
+      if (!isKeyNeeded) continue;
 
       if (continuousKeys.has(def.key)) {
         const indices: number[] = [];
@@ -417,6 +418,8 @@ export function MultivariableInspector({ registry }: { registry: Registry | null
           display: rightVars.length > 0,
           min: rightAuto ? undefined : rightMin,
           max: rightAuto ? undefined : rightMax,
+          suggestedMin: rightVars.some((v) => v.key === 'dDoDt' || v.key === 'error') ? -0.5 : undefined,
+          suggestedMax: rightVars.some((v) => v.key === 'dDoDt' || v.key === 'error') ? 0.5 : undefined,
           grid: { drawOnChartArea: false },
           ticks: { color: '#facc15', font: { size: 10, family: 'monospace' } },
           title: {

@@ -56,6 +56,7 @@ interface Point {
   do: number | null;
   rpm: number | null;
   mixerRpm: number | null;
+  dDoDt?: number | null;
 }
 
 interface Mark {
@@ -87,6 +88,7 @@ export function ObservatoryChart({
   const [showRpm, setShowRpm] = useState(true);
   const [showMixerRpm, setShowMixerRpm] = useState(true);
   const [showDo, setShowDo] = useState(true);
+  const [showDoDt, setShowDoDt] = useState(true);
   const [emaFilter, setEmaFilter] = useState(true);
   const [axisConfigOpen, setAxisConfigOpen] = useState(false);
   const [doAuto, setDoAuto] = useState(true);
@@ -307,6 +309,53 @@ export function ObservatoryChart({
       }
     }
 
+    // 3. Rate of change of Dissolved Oxygen d[DO]/dt (mg/L/min):
+    // Calculated via sliding-window linear regression (OLS) on probe readings
+    // to provide an instantaneous mass-transfer / deoxygenation slope.
+    const WINDOW_MS = range === '10m' ? 30_000 : range === '1h' ? 60_000 : 120_000;
+    let winStart = 0;
+    for (let i = 0; i < sorted.length; i++) {
+      const curMs = sorted[i].ms;
+      const minWindowMs = curMs - WINDOW_MS;
+      while (winStart < parsedDo.length && parsedDo[winStart].ms < minWindowMs) {
+        winStart++;
+      }
+      let winEnd = winStart;
+      while (winEnd < parsedDo.length && parsedDo[winEnd].ms <= curMs) {
+        winEnd++;
+      }
+      let pts = parsedDo.slice(winStart, winEnd);
+      if (pts.length < 3 && parsedDo.length >= 3 && curMs - parsedDo[0].ms < WINDOW_MS) {
+        pts = parsedDo.slice(0, Math.min(6, parsedDo.length));
+      }
+      const n = pts.length;
+      if (n >= 3) {
+        const t0 = pts[0].ms / 1000;
+        let sumT = 0;
+        let sumY = 0;
+        let sumT2 = 0;
+        let sumTY = 0;
+        for (let k = 0; k < pts.length; k++) {
+          const pt = pts[k];
+          const t = pt.ms / 1000 - t0;
+          const y = pt.val;
+          sumT += t;
+          sumY += y;
+          sumT2 += t * t;
+          sumTY += t * y;
+        }
+        const denom = n * sumT2 - sumT * sumT;
+        if (denom > 1e-6) {
+          const slopePerSec = (n * sumTY - sumT * sumY) / denom;
+          sorted[i].dDoDt = Math.round(slopePerSec * 60 * 1000) / 1000;
+        } else {
+          sorted[i].dDoDt = null;
+        }
+      } else {
+        sorted[i].dDoDt = null;
+      }
+    }
+
     // Performance optimization: decimate if more than 1,200 points to keep 60 FPS
     // Decimation is strictly anchored to wall-clock time buckets to prevent phase/aliasing artifacts as points slide
     if (sorted.length > 1200) {
@@ -325,7 +374,7 @@ export function ObservatoryChart({
     }
 
     return sorted;
-  }, [parsedDo, parsedOdrive, parsedMixer, t0ms, emaFilter]);
+  }, [parsedDo, parsedOdrive, parsedMixer, t0ms, emaFilter, range]);
 
   const marks: Mark[] = useMemo(() => {
     const list: Mark[] = [];
@@ -716,8 +765,30 @@ export function ObservatoryChart({
       });
     }
 
+    if (showDoDt) {
+      sets.push({
+        label: 'Derivada d[DO]/dt (mg/L/min)',
+        yAxisID: 'dodt',
+        data: points.map((p) => ({
+          x: (xKey === 'tRel' ? p.tRel : p.ms) as number,
+          y: p.dDoDt ?? null,
+        })),
+        borderColor: '#c084fc',
+        backgroundColor: 'transparent',
+        fill: false,
+        borderWidth: 2,
+        pointStyle: 'circle' as const,
+        pointRadius: 0,
+        pointHoverRadius: 4,
+        tension: 0.2,
+        cubicInterpolationMode: 'default' as const,
+        normalized: true,
+        spanGaps: true,
+      });
+    }
+
     return { datasets: sets };
-  }, [points, showDo, showRpm, showMixerRpm, xKey]);
+  }, [points, showDo, showDoDt, showRpm, showMixerRpm, xKey]);
 
   // Handle Chart Click for Delta Cursors
   const handleChartClick = (event: any) => {
@@ -937,6 +1008,27 @@ export function ObservatoryChart({
             font: { size: 10, weight: 'bold' as const, family: 'monospace' },
           },
         },
+        dodt: {
+          type: 'linear' as const,
+          position: 'right' as const,
+          display: showDoDt,
+          suggestedMin: -0.6,
+          suggestedMax: 0.6,
+          grid: {
+            drawOnChartArea: false,
+          },
+          ticks: {
+            color: '#c084fc',
+            font: { size: 10, family: 'monospace' },
+            callback: (v: number | string) => Number(v).toFixed(2),
+          },
+          title: {
+            display: showDoDt,
+            text: 'd[DO]/dt (mg/L/min)',
+            color: '#c084fc',
+            font: { size: 10, weight: 'bold' as const, family: 'monospace' },
+          },
+        },
       },
       plugins: {
         legend: {
@@ -1020,6 +1112,7 @@ export function ObservatoryChart({
               const val = item.parsed.y;
               if (val === null || val === undefined) return `${cleanLabel}: Inactivo`;
               if (item.dataset.yAxisID === 'do') return `${cleanLabel}: ${Number(val).toFixed(3)} mg/L`;
+              if (item.dataset.yAxisID === 'dodt') return `${cleanLabel}: ${Number(val).toFixed(3)} mg/L/min`;
               return `${cleanLabel}: ${Math.round(val)} RPM`;
             },
             afterBody: (items: any[]) => {
@@ -1039,6 +1132,7 @@ export function ObservatoryChart({
   }, [
     concreteInterval,
     showDo,
+    showDoDt,
     showRpm,
     showMixerRpm,
     doAuto,
@@ -1080,7 +1174,7 @@ export function ObservatoryChart({
     <>
       <Panel
         title="Dinámica de Oxigenación & Ajuste de Transferencia kLa"
-        subtitle="Azul: Concentración DO (mg/L) • Ámbar: ODrive Aireador (RPM) • Verde azulado: Mezclador T-200 (RPM)"
+        subtitle="Azul: Concentración DO (mg/L) • Púrpura: Derivada d[DO]/dt (mg/L/min) • Ámbar: ODrive Aireador (RPM) • Verde azulado: Mezclador T-200 (RPM)"
         titleBadge={
           <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-scada-well text-slate-300 border border-scada-border font-normal">
             {concreteInterval
@@ -1721,6 +1815,22 @@ export function ObservatoryChart({
             {showDo ? <Eye className="w-3.5 h-3.5 text-telemetry-do" /> : <EyeOff className="w-3.5 h-3.5 text-slate-500" />}
             <span className="w-2.5 h-2.5 rounded-full bg-telemetry-do shadow-[0_0_6px_rgba(56,189,248,0.7)]" />
             <span>Oxígeno Disuelto (mg/L){showDo ? '' : ' (oculto)'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowDoDt((v) => !v)}
+            className={cn(
+              'flex items-center gap-1.5 px-2.5 py-1 rounded-lg border text-xs font-medium transition cursor-pointer',
+              showDoDt
+                ? 'bg-purple-950/40 border-purple-600/60 text-purple-300 hover:bg-purple-900/40'
+                : 'bg-slate-800/40 border-slate-700 text-slate-500 line-through opacity-60 hover:opacity-100',
+            )}
+            title="Mostrar / ocultar la tasa instantánea de cambio de oxígeno disuelto en mg/L por minuto"
+          >
+            {showDoDt ? <Eye className="w-3.5 h-3.5 text-purple-400" /> : <EyeOff className="w-3.5 h-3.5 text-slate-500" />}
+            <span className="w-2.5 h-2.5 rounded-full bg-purple-400 shadow-[0_0_6px_rgba(192,132,252,0.7)]" />
+            <span>Derivada d[DO]/dt (mg/L/min){showDoDt ? '' : ' (oculto)'}</span>
           </button>
 
           <button
