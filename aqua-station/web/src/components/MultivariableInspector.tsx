@@ -21,7 +21,7 @@ import '@/lib/chartSetup';
 import { Line } from 'react-chartjs-2';
 import { Layers, SlidersHorizontal } from 'lucide-react';
 import { getSamples } from '@/lib/api';
-import { useAsync } from '@/hooks/useAsync';
+import { useAsync, useInterval } from '@/hooks/useAsync';
 import { formatNumber } from '@/lib/format';
 import { formatTime } from '@/lib/dateUtils';
 import type { Registry } from '@/lib/types';
@@ -46,6 +46,7 @@ interface VarDef {
 /** Derived traces: no role/field to fetch, built in `points` from a fetched sibling series. */
 const DERIVED: Record<string, (row: Record<string, number | null>) => number | null> = {
   error: (row) => (typeof row.do === 'number' ? ERROR_SETPOINT_MG_L - row.do : null),
+  dDoDt: (row) => (typeof row.dDoDt === 'number' ? row.dDoDt : null),
 };
 
 /** The catalogue, hard-keyed to fields the registry actually carries. `field` must exist on
@@ -163,6 +164,11 @@ export function MultivariableInspector({ registry }: { registry: Registry | null
     [series, range],
   );
 
+  // Poll live telemetry every 2 seconds so auxiliary graphs update in real-time
+  useInterval(() => {
+    data.reload();
+  }, 2000);
+
   const points = useMemo(() => {
     const byMs = new Map<number, Record<string, number | null> & { ms: number }>();
     for (const [key, rows] of Object.entries(data.data ?? {})) {
@@ -183,7 +189,7 @@ export function MultivariableInspector({ registry }: { registry: Registry | null
     // Continuous physical variables ('do', 'waterTemp') are linearly interpolated between
     // measured points so the optical probe's readings render as a smooth curve without steps.
     // Actuators ('odriveRpm', 'mixerRpm', 'pumpRpm') use Zero-Order Hold.
-    const continuousKeys = new Set(['do', 'waterTemp']);
+    const continuousKeys = new Set(['do', 'temp', 'waterTemp']);
     for (const def of VAR_DEFS) {
       if (!active.has(def.key)) continue;
 
@@ -240,27 +246,30 @@ export function MultivariableInspector({ registry }: { registry: Registry | null
         }
       }
     }
-    for (const def of VAR_DEFS) {
-      const derive = DERIVED[def.key];
-      if (!active.has(def.key) || !derive) continue;
-      for (const row of merged) row[def.key] = derive(row);
-    }
-
-    // Compute d[DO]/dt derivative (rate of change in mg/L/min) via OLS linear regression
+    // Compute d[DO]/dt derivative (rate of change in mg/L/min) via sliding-window linear regression
     if (active.has('dDoDt')) {
       const doRows = merged.filter((r) => typeof r.do === 'number' && Number.isFinite(r.do));
       const WINDOW_MS = 30_000; // 30-second window gives smooth rate per minute
+      let winStart = 0;
       for (let i = 0; i < merged.length; i++) {
         const curMs = merged[i].ms;
-        const windowPts = doRows.filter((r) => r.ms <= curMs && r.ms >= curMs - WINDOW_MS);
-        if (windowPts.length >= 3) {
-          const t0 = windowPts[0].ms / 1000;
+        const minMs = curMs - WINDOW_MS;
+        while (winStart < doRows.length && doRows[winStart].ms < minMs) {
+          winStart++;
+        }
+        let winEnd = winStart;
+        while (winEnd < doRows.length && doRows[winEnd].ms <= curMs) {
+          winEnd++;
+        }
+        const n = winEnd - winStart;
+        if (n >= 3) {
+          const t0 = doRows[winStart].ms / 1000;
           let sumT = 0;
           let sumY = 0;
           let sumT2 = 0;
           let sumTY = 0;
-          const n = windowPts.length;
-          for (const pt of windowPts) {
+          for (let k = winStart; k < winEnd; k++) {
+            const pt = doRows[k];
             const t = pt.ms / 1000 - t0;
             const y = pt.do as number;
             sumT += t;
@@ -279,6 +288,15 @@ export function MultivariableInspector({ registry }: { registry: Registry | null
         } else {
           merged[i].dDoDt = null;
         }
+      }
+    }
+
+    for (const def of VAR_DEFS) {
+      const derive = DERIVED[def.key];
+      if (!active.has(def.key) || !derive) continue;
+      for (const row of merged) {
+        const val = derive(row);
+        if (val !== null) row[def.key] = val;
       }
     }
 
@@ -351,7 +369,7 @@ export function MultivariableInspector({ registry }: { registry: Registry | null
         borderWidth: 1.8,
         pointRadius: 0,
         pointHoverRadius: 4,
-        tension: v.key === 'do' || v.key === 'waterTemp' ? 0.2 : 0.1,
+        tension: v.key === 'do' || v.key === 'temp' || v.key === 'waterTemp' || v.key === 'dDoDt' ? 0.2 : 0.1,
         cubicInterpolationMode: 'default' as const,
         spanGaps: true,
       })),
