@@ -255,7 +255,7 @@ export function ObservatoryChart({
         if (spanMs > 0) {
           for (let j = iA + 1; j < iB; j++) {
             const frac = (sorted[j].ms - msA) / spanMs;
-            sorted[j].do = Number((valA + frac * (valB - valA)).toFixed(3));
+            sorted[j].do = valA + frac * (valB - valA);
           }
         }
       }
@@ -667,8 +667,8 @@ export function ObservatoryChart({
         pointStyle: 'circle' as const,
         pointRadius: 0,
         pointHoverRadius: 4,
-        tension: 0.25, // Spline cúbico suave para una curva senoidal perfectamente continua y lisa
-        cubicInterpolationMode: 'monotone' as const,
+        tension: 0.2, // Spline cúbico suave para una curva perfectamente continua y lisa
+        cubicInterpolationMode: 'default' as const,
         normalized: true,
         spanGaps: true,
       });

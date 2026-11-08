@@ -211,7 +211,7 @@ export function MultivariableInspector({ registry }: { registry: Registry | null
             if (span > 0) {
               for (let j = iA + 1; j < iB; j++) {
                 const frac = (merged[j].ms - msA) / span;
-                merged[j][def.key] = Number((valA + frac * (valB - valA)).toFixed(3));
+                merged[j][def.key] = valA + frac * (valB - valA);
               }
             }
           }
@@ -351,8 +351,8 @@ export function MultivariableInspector({ registry }: { registry: Registry | null
         borderWidth: 1.8,
         pointRadius: 0,
         pointHoverRadius: 4,
-        tension: v.key === 'do' || v.key === 'waterTemp' ? 0.25 : 0.1,
-        cubicInterpolationMode: v.key === 'do' || v.key === 'waterTemp' ? ('monotone' as const) : undefined,
+        tension: v.key === 'do' || v.key === 'waterTemp' ? 0.2 : 0.1,
+        cubicInterpolationMode: 'default' as const,
         spanGaps: true,
       })),
     };
