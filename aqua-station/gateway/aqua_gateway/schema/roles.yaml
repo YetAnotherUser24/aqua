@@ -176,4 +176,4 @@ roles:
 # ------------------------------------------------------------------------------
 calibration:
   pump:
-    ml_per_rev: {value: null, unit: "mL/rev", note: "from ML_PER_REV in nodo-bomba config.h — must be pinned per experiment"}
+    ml_per_rev: {value: 0.02841, unit: "mL/rev", note: "from ML_PER_REV in nodo-bomba config.h (calibrado con sol. Na2SO3 100g/L rho=1.10g/mL)"}
