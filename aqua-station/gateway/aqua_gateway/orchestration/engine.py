@@ -843,19 +843,35 @@ class Orchestrator:
         mode = self._mode_overrides.get(phase.phase_id, phase.mode)
         ctx = self._context()
 
+        effective = {**phase.params, **self._param_overrides.get(phase.phase_id, {})}
         cond = dict(phase.condition)
-        if cond.get("kind") == "dose_complete":
-            effective = {**phase.params, **self._param_overrides.get(phase.phase_id, {})}
+        kind = cond.get("kind")
+        if kind == "dose_complete":
             conc = float(effective.get("stock_conc_gpl", 100.0))
             if "sulfite_g" in effective:
                 cond["target_ml"] = round(float(effective["sulfite_g"]) / (conc / 1000.0), 2)
             elif "dose_ml" in effective:
                 cond["target_ml"] = float(effective["dose_ml"])
+        elif kind == "do_below_and_stable":
+            if "do_floor_mg_l" in effective:
+                cond["below_mg_l"] = float(effective["do_floor_mg_l"])
+        elif kind == "do_above":
+            if "stop_do_mg_l" in effective:
+                cond["threshold_mg_l"] = float(effective["stop_do_mg_l"])
+        elif kind == "do_below":
+            if "do_start_max_mg_l" in effective:
+                cond["threshold_mg_l"] = float(effective["do_start_max_mg_l"])
+            if "settle_time_s" in effective:
+                cond["min_elapsed_s"] = float(effective["settle_time_s"])
+        elif kind == "setpoint_reached":
+            if "step_rpm" in effective:
+                cond["target"] = float(effective["step_rpm"])
 
         # A supervised phase (`manual`/`hibrido`) may declare no timeout: the operator is the
         # clock, so there is nothing to run out. `auto` always declares one (enforced by
         # `validate_recipes`), so a mode that advances without a human is always bounded.
-        timed_out = phase.timeout_s is not None and ctx.now_s - ctx.phase_entered_s >= phase.timeout_s
+        effective_timeout = int(effective["safety_timeout_s"]) if "safety_timeout_s" in effective else phase.timeout_s
+        timed_out = effective_timeout is not None and ctx.now_s - ctx.phase_entered_s >= effective_timeout
         satisfied = timed_out or evaluate(cond, ctx)
 
         if not satisfied:
@@ -922,11 +938,21 @@ class Orchestrator:
                 status = "pending"
             cond_text = phase.condition_text
             effective_params = {**phase.params, **self._param_overrides.get(phase.phase_id, {})}
+            effective_timeout = int(effective_params["safety_timeout_s"]) if "safety_timeout_s" in effective_params else phase.timeout_s
             if phase.phase_id in ("p1_dose", "pd_dose") and "sulfite_g" in effective_params:
                 sg = float(effective_params["sulfite_g"])
                 conc = float(effective_params.get("stock_conc_gpl", 100.0))
                 v_ml = round(sg / (conc / 1000.0), 1)
                 cond_text = f"Masa dispensada = {sg:.2f} g Na₂SO₃ ({v_ml:.1f} mL ± 0.2 mL) registrado por encoder"
+            elif phase.phase_id in ("p1_deox", "pd_deox") and "do_floor_mg_l" in effective_params:
+                floor = float(effective_params["do_floor_mg_l"])
+                cond_text = f"DO < {floor:.1f} mg/L Y derivada en el fondo de respiración Y t > 180 s"
+            elif "stop_do_mg_l" in effective_params:
+                stop_do = float(effective_params["stop_do_mg_l"])
+                cond_text = f"DO ≥ {stop_do:.2f} mg/L ó timeout"
+            elif "do_start_max_mg_l" in effective_params:
+                max_do = float(effective_params["do_start_max_mg_l"])
+                cond_text = f"DO inicial < {max_do:.1f} mg/L Y reposo estabilizado"
 
             views.append(
                 {
@@ -938,7 +964,7 @@ class Orchestrator:
                     "status": status,
                     "condition_text": cond_text,
                     "params": effective_params,
-                    "timeout_s": phase.timeout_s,
+                    "timeout_s": effective_timeout,
                 }
             )
         return views

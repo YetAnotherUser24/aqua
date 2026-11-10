@@ -212,14 +212,30 @@ function PhaseCard({
                   const dMl = Number(phase.params?.dose_ml) || (sG / (conc / 1000));
                   return `Masa dispensada = ${sG.toFixed(2)} g Na₂SO₃ (${dMl.toFixed(1)} mL ± 0.2 mL) registrado por encoder`;
                 }
+                if (phase.phase_id === 'p1_deox' || phase.phase_id === 'pd_deox') {
+                  const floor = Number(phase.params?.do_floor_mg_l) ?? 3.0;
+                  return `DO < ${floor.toFixed(1)} mg/L Y derivada en el fondo de respiración Y t > 180 s`;
+                }
+                if (phase.params?.stop_do_mg_l !== undefined) {
+                  const stopDo = Number(phase.params.stop_do_mg_l);
+                  return `DO ≥ ${stopDo.toFixed(2)} mg/L ó timeout`;
+                }
+                if (phase.params?.do_start_max_mg_l !== undefined) {
+                  const maxDo = Number(phase.params.do_start_max_mg_l);
+                  const settle = Number(phase.params?.settle_time_s) || 60;
+                  return `DO inicial < ${maxDo.toFixed(1)} mg/L Y estanque en reposo durante ≥ ${settle} s`;
+                }
                 return phase.condition_text;
               })()}
               <span className="text-slate-500">
-                {/* A null timeout is a supervised phase waiting for its operator, not a
-                    missing value, so it reads as a statement rather than "nulls". */}
-                {phase.timeout_s === null
-                  ? ' · sin timeout (espera al operador)'
-                  : ` · timeout ${phase.timeout_s}s`}
+                {(() => {
+                  const timeout = phase.params?.safety_timeout_s !== undefined
+                    ? Number(phase.params.safety_timeout_s)
+                    : phase.timeout_s;
+                  return timeout === null
+                    ? ' · sin timeout (espera al operador)'
+                    : ` · timeout ${timeout}s`;
+                })()}
               </span>
             </div>
           </div>
