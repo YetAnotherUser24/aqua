@@ -185,7 +185,7 @@ _PLANTA_1_DEOX = Recipe(
                 "eps_mg_l_per_min": 0.15,
                 "min_elapsed_s": 180,
             },
-            timeout_s=600,
+            timeout_s=1800,
             # Stop the mixer for the measurement. The impeller is a re-oxygenation surface, so
             # with it running the tank's equilibrium is `Cs - respiration/kla` =
             # 8.3 - 0.0012/(0.25*0.0035) ~= 6.9 mg/L -- above the 3.0 floor, and the derivative
@@ -195,7 +195,7 @@ _PLANTA_1_DEOX = Recipe(
             # the *reaction*, measured without the re-oxygenation the impeller adds.
             # Sulfite reaction consumes dissolved oxygen. Mixing distributes the chemical.
             commands=(),
-            params={"do_floor_mg_l": 3.0, "safety_timeout_s": 600, "do_alert": True},
+            params={"do_floor_mg_l": 3.0, "safety_timeout_s": 1800, "do_alert": True},
         ),
         Phase(
             phase_id="p1_end",
@@ -435,9 +435,9 @@ _PLANTA_COMBINADA_D = Recipe(
                 "eps_mg_l_per_min": 0.15,
                 "min_elapsed_s": 180,
             },
-            timeout_s=600,
+            timeout_s=1800,
             commands=(),
-            params={"do_floor_mg_l": 3.0, "safety_timeout_s": 600, "do_alert": True},
+            params={"do_floor_mg_l": 3.0, "safety_timeout_s": 1800, "do_alert": True},
         ),
         Phase(
             phase_id="pd_trans",
