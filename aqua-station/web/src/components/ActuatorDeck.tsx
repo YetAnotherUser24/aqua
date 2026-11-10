@@ -946,12 +946,14 @@ export function ActuatorDeck({
                         : 'Volumen a inyectar (mL):'}
                     </label>
                     <input
-                      type="number"
-                      min={0.05}
-                      max={doseUnit === 'sulfite_g' ? 25 : doseUnit === 'solution_g' ? 250 : 200}
-                      step={doseUnit === 'sulfite_g' ? 0.05 : 0.5}
+                      type="text"
+                      inputMode="decimal"
                       value={doseAmount}
-                      onChange={(e) => setDoseAmount(Number(e.target.value))}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        const num = parseFloat(val.replace(',', '.'));
+                        setDoseAmount(isNaN(num) ? 0 : num);
+                      }}
                       className="w-full bg-scada-elevated text-slate-100 text-xs border border-scada-border rounded-lg p-2 font-mono focus:outline-none focus:border-telemetry-pump"
                     />
                   </div>

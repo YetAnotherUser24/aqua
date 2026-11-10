@@ -13,6 +13,7 @@
  * plan reads as one thing even though the defaults come from the gateway.
  */
 
+import { useState, useEffect } from 'react';
 import { Info } from 'lucide-react';
 import { cn } from './ui';
 
@@ -45,8 +46,8 @@ export const PHASE_FORMS: Record<string, ParamControl[]> = {
   ],
   p1_dose: [
     { kind: 'section', label: 'Cálculo de Reactivo & Dosificación' },
-    { kind: 'number', key: 'sulfite_g', label: 'Gramos de Na₂SO₃ deseados (Reactivo puro)', unit: 'g', min: 0.1, max: 20, step: 0.1 },
-    { kind: 'number', key: 'dose_ml', label: 'Volumen equivalente solución madre', unit: 'mL', min: 0.5, max: 200, step: 0.5 },
+    { kind: 'number', key: 'sulfite_g', label: 'Gramos de Na₂SO₃ deseados (Reactivo puro)', unit: 'g', min: 0.1, max: 100, step: 0.1 },
+    { kind: 'number', key: 'dose_ml', label: 'Volumen equivalente solución madre', unit: 'mL', min: 0.5, max: 1000, step: 0.5 },
     { kind: 'number', key: 'stock_conc_gpl', label: 'Concentración madre Na₂SO₃', unit: 'g/L', min: 10, max: 200, step: 10 },
     { kind: 'number', key: 'density_g_per_ml', label: 'Densidad de solución (ρ)', unit: 'g/mL', min: 0.9, max: 1.5, step: 0.01 },
     { kind: 'toggle', key: 'mix_during_dose', label: 'Agitación durante inyección', on: 'ACTIVA (Acelera disolución)', off: 'DETENIDA' },
@@ -110,8 +111,8 @@ export const PHASE_FORMS: Record<string, ParamControl[]> = {
   ],
   pd_dose: [
     { kind: 'section', label: 'Dosificación Na₂SO₃ (Desoxigenación)' },
-    { kind: 'number', key: 'sulfite_g', label: 'Gramos de Na₂SO₃ deseados (Reactivo puro)', unit: 'g', min: 0.1, max: 20, step: 0.1 },
-    { kind: 'number', key: 'dose_ml', label: 'Volumen equivalente solución madre', unit: 'mL', min: 0.5, max: 200, step: 0.5 },
+    { kind: 'number', key: 'sulfite_g', label: 'Gramos de Na₂SO₃ deseados (Reactivo puro)', unit: 'g', min: 0.1, max: 100, step: 0.1 },
+    { kind: 'number', key: 'dose_ml', label: 'Volumen equivalente solución madre', unit: 'mL', min: 0.5, max: 1000, step: 0.5 },
     { kind: 'number', key: 'stock_conc_gpl', label: 'Concentración madre', unit: 'g/L', min: 10, max: 200, step: 10 },
     { kind: 'number', key: 'density_g_per_ml', label: 'Densidad de solución (ρ)', unit: 'g/mL', min: 0.9, max: 1.5, step: 0.01 },
     { kind: 'toggle', key: 'mix_during_dose', label: 'Agitación continua', on: 'ACTIVA', off: 'DETENIDA' },
@@ -193,6 +194,79 @@ export function defaultParamValue(control: ParamControl): number | string | bool
 const numberInputClass =
   'w-20 bg-scada-well text-slate-100 text-xs font-mono border border-scada-border rounded px-2 py-1 text-right focus:outline-none focus:border-telemetry-do';
 
+/**
+ * Text-based decimal input that prevents browser clamping and wiping out on backspace/commas.
+ * Supports typing "." and "," seamlessly, preserving intermediate typing like "3." or "3,".
+ */
+function NumberInput({
+  value,
+  min,
+  max,
+  onChange,
+  className,
+}: {
+  value: number | string | undefined | null;
+  min?: number;
+  max?: number;
+  onChange: (val: number) => void;
+  className?: string;
+}) {
+  const [localStr, setLocalStr] = useState<string>(() => {
+    if (value === undefined || value === null || isNaN(Number(value))) return '';
+    return String(value);
+  });
+  const [isFocused, setIsFocused] = useState(false);
+
+  useEffect(() => {
+    if (!isFocused) {
+      if (value === undefined || value === null || isNaN(Number(value))) {
+        setLocalStr('');
+      } else {
+        setLocalStr(String(value));
+      }
+    }
+  }, [value, isFocused]);
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const raw = e.target.value;
+    setLocalStr(raw);
+    const normalized = raw.replace(',', '.').trim();
+    if (normalized === '' || normalized === '-' || normalized === '.' || normalized.endsWith('.')) {
+      return;
+    }
+    const parsed = parseFloat(normalized);
+    if (!isNaN(parsed)) {
+      onChange(parsed);
+    }
+  };
+
+  const handleBlur = () => {
+    setIsFocused(false);
+    const normalized = localStr.replace(',', '.').trim();
+    let parsed = parseFloat(normalized);
+    if (isNaN(parsed)) {
+      parsed = typeof value === 'number' && !isNaN(value) ? value : (min ?? 0);
+    } else {
+      if (min !== undefined && parsed < min) parsed = min;
+      if (max !== undefined && parsed > max) parsed = max;
+    }
+    setLocalStr(String(parsed));
+    onChange(parsed);
+  };
+
+  return (
+    <input
+      type="text"
+      inputMode="decimal"
+      value={localStr}
+      onFocus={() => setIsFocused(true)}
+      onChange={handleChange}
+      onBlur={handleBlur}
+      className={className ?? numberInputClass}
+    />
+  );
+}
+
 /** A small green switch, as the mockup's `toggle`. */
 function Switch({ on, onToggle }: { on: boolean; onToggle: () => void }) {
   return (
@@ -220,10 +294,12 @@ export function PhaseForm({
   phaseId,
   params,
   onParam,
+  onParams,
 }: {
   phaseId: string;
   params: Record<string, unknown>;
   onParam: (key: string, value: number | string | boolean) => void;
+  onParams?: (patch: Record<string, number | string | boolean>) => void;
 }) {
   const spec = PHASE_FORMS[phaseId];
   // No spec: fall back to a plain number field per param, so an undescribed gateway param is
@@ -237,10 +313,9 @@ export function PhaseForm({
         {keys.map((key) => (
           <div key={key} className="flex items-center justify-between gap-2">
             <span className="text-slate-300">{key.replace(/_/g, ' ')}</span>
-            <input
-              type="number"
-              value={Number(params[key])}
-              onChange={(e) => onParam(key, Number(e.target.value))}
+            <NumberInput
+              value={params[key] as number}
+              onChange={(val) => onParam(key, val)}
               className={numberInputClass}
             />
           </div>
@@ -250,22 +325,41 @@ export function PhaseForm({
   }
 
   const handleNumberChange = (key: string, val: number) => {
-    onParam(key, val);
     if (phaseId === 'p1_dose' || phaseId === 'pd_dose') {
       const conc = Number(params['stock_conc_gpl']) || 100;
       if (key === 'sulfite_g') {
         const newMl = Number((val / (conc / 1000)).toFixed(1));
-        onParam('dose_ml', newMl);
+        if (onParams) {
+          onParams({ sulfite_g: val, dose_ml: newMl });
+        } else {
+          onParam('sulfite_g', val);
+          onParam('dose_ml', newMl);
+        }
+        return;
       } else if (key === 'dose_ml') {
         const newG = Number((val * (conc / 1000)).toFixed(2));
-        onParam('sulfite_g', newG);
+        if (onParams) {
+          onParams({ dose_ml: val, sulfite_g: newG });
+        } else {
+          onParam('dose_ml', val);
+          onParam('sulfite_g', newG);
+        }
+        return;
       } else if (key === 'stock_conc_gpl' && val > 0) {
         const g = Number(params['sulfite_g']);
         if (g > 0) {
-          onParam('dose_ml', Number((g / (val / 1000)).toFixed(1)));
+          const newMl = Number((g / (val / 1000)).toFixed(1));
+          if (onParams) {
+            onParams({ stock_conc_gpl: val, dose_ml: newMl });
+          } else {
+            onParam('stock_conc_gpl', val);
+            onParam('dose_ml', newMl);
+          }
+          return;
         }
       }
     }
+    onParam(key, val);
   };
 
   return (
@@ -292,13 +386,11 @@ export function PhaseForm({
                 <div className="flex items-center justify-between gap-2">
                   <span className="text-slate-300">{control.label}</span>
                   <div className="flex items-center gap-1 shrink-0">
-                    <input
-                      type="number"
+                    <NumberInput
                       value={value}
                       min={control.min}
                       max={control.max}
-                      step={control.step ?? 'any'}
-                      onChange={(e) => handleNumberChange(control.key, Number(e.target.value))}
+                      onChange={(val) => handleNumberChange(control.key, val)}
                       className={numberInputClass}
                     />
                     {control.unit ? (

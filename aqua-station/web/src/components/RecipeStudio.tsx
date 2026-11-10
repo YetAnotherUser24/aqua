@@ -114,6 +114,7 @@ function PhaseCard({
   busy,
   onMode,
   onParam,
+  onParams,
   onConfirm,
   onManualAction,
   modeDisabledReason,
@@ -122,6 +123,7 @@ function PhaseCard({
   busy: boolean;
   onMode: (mode: PhaseMode) => void;
   onParam: (key: string, value: number | string | boolean) => void;
+  onParams?: (patch: Record<string, number | string | boolean>) => void;
   onConfirm: () => void;
   onManualAction: () => void;
   /** Shown as a tooltip on the inert mode buttons; empty when they are live. */
@@ -197,7 +199,12 @@ function PhaseCard({
           {/* Per-phase parameters, as the mockup's bespoke control surface: sections, number
               fields, selects, switches and static badges. Driven by the declarative spec in
               `PhaseForm`, with edited values held by RecipeStudio. */}
-          <PhaseForm phaseId={phase.phase_id} params={phase.params ?? {}} onParam={onParam} />
+          <PhaseForm
+            phaseId={phase.phase_id}
+            params={phase.params ?? {}}
+            onParam={onParam}
+            onParams={onParams}
+          />
 
           {/* Exit condition */}
           <div className="border-t border-scada-border pt-2.5">
@@ -923,19 +930,25 @@ export function RecipeStudio({
       : p,
   );
 
-  const handleParam = (phaseId: string, key: string, value: number | string | boolean) => {
-    const updated = { ...(paramEdits[phaseId] ?? {}), [key]: value };
-    const nextEdits = {
-      ...paramEdits,
-      [phaseId]: updated,
-    };
-    setParamEdits(nextEdits);
+  const handleParams = (phaseId: string, updates: Record<string, unknown>) => {
+    setParamEdits((prev) => {
+      const current = prev[phaseId] ?? {};
+      const updated = { ...current, ...updates };
+      const nextEdits = {
+        ...prev,
+        [phaseId]: updated,
+      };
+      if (activeRecipeId) {
+        onSetParams?.(phaseId, updated);
+      } else {
+        onParamDraftChange?.(nextEdits);
+      }
+      return nextEdits;
+    });
+  };
 
-    if (activeRecipeId) {
-      onSetParams?.(phaseId, updated);
-    } else {
-      onParamDraftChange?.(nextEdits);
-    }
+  const handleParam = (phaseId: string, key: string, value: number | string | boolean) => {
+    handleParams(phaseId, { [key]: value });
   };
 
   const handleMode = (phaseId: string, mode: PhaseMode) => {
@@ -1137,6 +1150,7 @@ export function RecipeStudio({
                   }
                   onMode={(mode) => handleMode(phase.phase_id, mode)}
                   onParam={(key, value) => handleParam(phase.phase_id, key, value)}
+                  onParams={(updates) => handleParams(phase.phase_id, updates)}
                   onConfirm={onConfirm}
                   onManualAction={() => triggerManual(phase.phase_id)}
                 />

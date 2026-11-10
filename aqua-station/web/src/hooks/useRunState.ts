@@ -90,9 +90,14 @@ export function useRunState(pollMs = 5_000): RunStateApi {
     [transition],
   );
   const setParams = useCallback(
-    (phaseId: string, params: Record<string, unknown>) =>
-      transition(() => apiSetPhaseParams(phaseId, params)),
-    [transition],
+    async (phaseId: string, params: Record<string, unknown>) => {
+      try {
+        await apiSetPhaseParams(phaseId, params);
+      } catch (err) {
+        console.error('Failed to set phase params:', err);
+      }
+    },
+    [],
   );
   const setMode = useCallback(
     (phaseId: string, mode: PhaseMode, experimentId?: string | null) =>

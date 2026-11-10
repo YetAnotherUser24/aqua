@@ -452,6 +452,17 @@ class Orchestrator:
             self._completed = set()
             self._awaiting_confirm = None
             self._action_pending = None
+            self._param_overrides = {}
+            for row in phases_status:
+                raw_params = row.get("params")
+                if raw_params:
+                    try:
+                        import json
+                        loaded = json.loads(raw_params) if isinstance(raw_params, str) else dict(raw_params)
+                        if loaded:
+                            self._param_overrides[str(row["phase_id"])] = loaded
+                    except Exception:
+                        pass
             # Seed the mode overrides from the persisted plan instead of clearing them. The
             # operator may have chosen each phase's mode *before* launching -- that choice lives
             # in ``experiment_phases.mode`` -- and the run must honour it. Only a mode that
@@ -719,10 +730,16 @@ class Orchestrator:
 
                     override = params_override or {}
                     if "target_g" in override or "grams_total" in override:
-                        dose_ml = round(float(target_g) / density_g_per_ml, 2)
+                        dose_ml = round(float(override.get("target_g") or override.get("grams_total")) / density_g_per_ml, 2)
+                    elif "dose_ml" in override or "target_ml" in override:
+                        dose_ml = float(override.get("dose_ml") or override.get("target_ml"))
+                    elif "sulfite_g" in override:
+                        dose_ml = round(float(override["sulfite_g"]) / (stock_conc_gpl / 1000.0), 2)
                     elif sulfite_g is not None:
                         # Pure Na2SO3 grams to volume (mL): 100 g/L = 0.100 g/mL => V = g / 0.100
                         dose_ml = round(float(sulfite_g) / (stock_conc_gpl / 1000.0), 2)
+                    elif dose_ml is not None:
+                        dose_ml = float(dose_ml)
                     elif target_g is not None:
                         # Solution total grams to volume (mL): V = g / density
                         dose_ml = round(float(target_g) / density_g_per_ml, 2)
@@ -733,8 +750,12 @@ class Orchestrator:
                         cmd_target["dose_ml"] = dose_ml
                     if sulfite_g is not None:
                         cmd_target["sulfite_g"] = float(sulfite_g)
+                    elif dose_ml is not None:
+                        cmd_target["sulfite_g"] = round(dose_ml * (stock_conc_gpl / 1000.0), 2)
                     if target_g is not None:
                         cmd_target["target_g"] = float(target_g)
+                    elif dose_ml is not None:
+                        cmd_target["target_g"] = round(dose_ml * density_g_per_ml, 2)
 
                 # The command's own deadline is bounded by the phase's timeout so a command
                 # cannot outlive the phase that issued it. A supervised phase may declare no
