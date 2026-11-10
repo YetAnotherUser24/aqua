@@ -108,6 +108,8 @@ def _do_above(cond: Mapping[str, Any], ctx: PhaseContext) -> bool:
 
 def _do_stable(cond: Mapping[str, Any], ctx: PhaseContext) -> bool:
     """The oxygen trend is flat to within ``eps`` and has been for ``window_s``."""
+    if ctx.now_s - ctx.phase_entered_s < float(cond.get("min_elapsed_s", 0)):
+        return False
     window_s = float(cond.get("window_s", 30))
     window_ms = int(window_s * 1000)
     recent = [p for p in ctx.do_history if p[0] >= ctx.do_history[-1][0] - window_ms] if ctx.do_history else []

@@ -225,12 +225,26 @@ function PhaseCard({
                   const settle = Number(phase.params?.settle_time_s) || 60;
                   return `DO inicial < ${maxDo.toFixed(1)} mg/L Y estanque en reposo durante ≥ ${settle} s`;
                 }
+                if (phase.params?.step_rpm !== undefined && (phase.phase_id === 'p2_step' || phase.phase_id === 'pd_step')) {
+                  const rpm = Number(phase.params.step_rpm);
+                  return `ODrive alcanza consigna (${rpm} RPM)`;
+                }
+                if (phase.phase_id === 'cl_run' && phase.params?.run_time_s !== undefined) {
+                  const rSec = Number(phase.params.run_time_s);
+                  return `Tiempo transcurrido ≥ duración fijada (${rSec} s)`;
+                }
+                if ((phase.phase_id === 'p1_prep' || phase.phase_id === 'pd_prep') && phase.params?.warm_time_s !== undefined) {
+                  const warm = Number(phase.params.warm_time_s);
+                  return `DO estabilizado (|d[DO]/dt| < 0.05 mg/L/min) tras mezcla ≥ ${warm} s`;
+                }
                 return phase.condition_text;
               })()}
               <span className="text-slate-500">
                 {(() => {
                   const timeout = phase.params?.safety_timeout_s !== undefined
                     ? Number(phase.params.safety_timeout_s)
+                    : phase.phase_id === 'cl_run' && phase.params?.run_time_s !== undefined
+                    ? Number(phase.params.run_time_s)
                     : phase.timeout_s;
                   return timeout === null
                     ? ' · sin timeout (espera al operador)'

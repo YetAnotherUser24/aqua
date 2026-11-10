@@ -195,7 +195,7 @@ _PLANTA_1_DEOX = Recipe(
             # the *reaction*, measured without the re-oxygenation the impeller adds.
             # Sulfite reaction consumes dissolved oxygen. Mixing distributes the chemical.
             commands=(),
-            params={"do_floor_mg_l": 3.0},
+            params={"do_floor_mg_l": 3.0, "safety_timeout_s": 600, "do_alert": True},
         ),
         Phase(
             phase_id="p1_end",
@@ -272,7 +272,7 @@ _PLANTA_2_STEP = Recipe(
             condition={"kind": "do_above", "threshold_mg_l": 6.00},
             timeout_s=900,
             commands=(),
-            params={"stop_do_mg_l": 6.00},
+            params={"stop_do_mg_l": 6.00, "safety_timeout_s": 900},
         ),
         Phase(
             phase_id="p2_analysis",
@@ -428,7 +428,7 @@ _PLANTA_COMBINADA_D = Recipe(
             },
             timeout_s=600,
             commands=(),
-            params={"do_floor_mg_l": 3.0},
+            params={"do_floor_mg_l": 3.0, "safety_timeout_s": 600, "do_alert": True},
         ),
         Phase(
             phase_id="pd_trans",
@@ -476,7 +476,7 @@ _PLANTA_COMBINADA_D = Recipe(
             condition={"kind": "do_above", "threshold_mg_l": 6.00},
             timeout_s=900,
             commands=(),
-            params={"stop_do_mg_l": 6.00},
+            params={"stop_do_mg_l": 6.00, "safety_timeout_s": 900},
         ),
         Phase(
             phase_id="pd_analysis",

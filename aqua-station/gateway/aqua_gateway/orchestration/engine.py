@@ -866,11 +866,21 @@ class Orchestrator:
         elif kind == "setpoint_reached":
             if "step_rpm" in effective:
                 cond["target"] = float(effective["step_rpm"])
+        elif kind == "do_stable":
+            if "warm_time_s" in effective:
+                cond["min_elapsed_s"] = float(effective["warm_time_s"])
+        elif kind == "elapsed":
+            if "run_time_s" in effective and phase.phase_id == "cl_run":
+                cond["seconds"] = float(effective["run_time_s"])
 
         # A supervised phase (`manual`/`hibrido`) may declare no timeout: the operator is the
         # clock, so there is nothing to run out. `auto` always declares one (enforced by
         # `validate_recipes`), so a mode that advances without a human is always bounded.
-        effective_timeout = int(effective["safety_timeout_s"]) if "safety_timeout_s" in effective else phase.timeout_s
+        effective_timeout = phase.timeout_s
+        if "safety_timeout_s" in effective:
+            effective_timeout = int(effective["safety_timeout_s"])
+        elif "run_time_s" in effective and phase.phase_id == "cl_run":
+            effective_timeout = int(effective["run_time_s"])
         timed_out = effective_timeout is not None and ctx.now_s - ctx.phase_entered_s >= effective_timeout
         satisfied = timed_out or evaluate(cond, ctx)
 
@@ -938,7 +948,12 @@ class Orchestrator:
                 status = "pending"
             cond_text = phase.condition_text
             effective_params = {**phase.params, **self._param_overrides.get(phase.phase_id, {})}
-            effective_timeout = int(effective_params["safety_timeout_s"]) if "safety_timeout_s" in effective_params else phase.timeout_s
+            effective_timeout = phase.timeout_s
+            if "safety_timeout_s" in effective_params:
+                effective_timeout = int(effective_params["safety_timeout_s"])
+            elif phase.phase_id == "cl_run" and "run_time_s" in effective_params:
+                effective_timeout = int(effective_params["run_time_s"])
+
             if phase.phase_id in ("p1_dose", "pd_dose") and "sulfite_g" in effective_params:
                 sg = float(effective_params["sulfite_g"])
                 conc = float(effective_params.get("stock_conc_gpl", 100.0))
@@ -952,7 +967,17 @@ class Orchestrator:
                 cond_text = f"DO ≥ {stop_do:.2f} mg/L ó timeout"
             elif "do_start_max_mg_l" in effective_params:
                 max_do = float(effective_params["do_start_max_mg_l"])
-                cond_text = f"DO inicial < {max_do:.1f} mg/L Y reposo estabilizado"
+                settle = int(effective_params.get("settle_time_s", 60))
+                cond_text = f"DO inicial < {max_do:.1f} mg/L Y estanque en reposo durante ≥ {settle} s"
+            elif phase.phase_id in ("p1_prep", "pd_prep") and "warm_time_s" in effective_params:
+                w_s = int(effective_params["warm_time_s"])
+                cond_text = f"DO estabilizado (|d[DO]/dt| < 0.05 mg/L/min) tras mezcla ≥ {w_s} s"
+            elif phase.phase_id == "cl_run" and "run_time_s" in effective_params:
+                r_s = int(effective_params["run_time_s"])
+                cond_text = f"Tiempo transcurrido ≥ duración fijada ({r_s} s)"
+            elif phase.phase_id in ("p2_step", "pd_step") and "step_rpm" in effective_params:
+                rpm = int(effective_params["step_rpm"])
+                cond_text = f"ODrive alcanza consigna ({rpm} RPM)"
 
             views.append(
                 {
