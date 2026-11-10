@@ -1359,7 +1359,7 @@ def create_app(gateway: "Gateway") -> FastAPI:
         phase_id = str(body["phase_id"])
         params = body.get("params") or {}
         if isinstance(params, dict):
-            gateway.orchestrator.set_phase_params(phase_id, params)
+            await gateway.orchestrator.set_phase_params(phase_id, params)
         return await gateway.orchestrator.current_state()
 
     @app.post("/api/state/pause")

@@ -192,6 +192,8 @@ export function createExperiment(body: {
   /** Per-phase modes chosen before launch, keyed by `phase_id`. Persisted to the phase rows
    *  so the run starts from the operator's plan rather than the recipe default. */
   phase_modes?: Record<string, string>;
+  /** Per-phase parameters chosen before launch, keyed by `phase_id`. */
+  phase_params?: Record<string, Record<string, unknown>>;
 }): Promise<Experiment> {
   return request<Experiment>('/api/experiments', {
     method: 'POST',

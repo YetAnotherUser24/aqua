@@ -330,9 +330,25 @@ class Orchestrator:
             )
         return await self.current_state()
 
-    def set_phase_params(self, phase_id: str, params: Mapping[str, Any]) -> None:
+    async def set_phase_params(self, phase_id: str, params: Mapping[str, Any]) -> None:
         """Override parameters for a phase (e.g. mixer_rpm, step_rpm, dose_ml)."""
         self._param_overrides.setdefault(phase_id, {}).update(params)
+        if self._experiment_id and self.gateway.db.available:
+            try:
+                import json
+                effective = json.dumps(self._param_overrides[phase_id])
+                await self.gateway.db.execute(
+                    """
+                    UPDATE experiment_phases
+                       SET params = params || $3::jsonb
+                     WHERE experiment_id = $1 AND phase_id = $2
+                    """,
+                    self._experiment_id,
+                    phase_id,
+                    effective,
+                )
+            except Exception:
+                pass
 
     async def _persist_phase_mode(self, *, experiment_id: str, phase_id: str, mode: str) -> None:
         """

@@ -78,6 +78,7 @@ export default function DashboardPage() {
   // experiment created on "Iniciar Ensayo" — that is what makes a pre-launch edit reach the
   // run. Cleared when a run starts, since the orchestrator owns modes from then on.
   const [draftModes, setDraftModes] = useState<Record<string, string>>({});
+  const [draftParams, setDraftParams] = useState<Record<string, Record<string, unknown>>>({});
   const [milestoneOpen, setMilestoneOpen] = useState(false);
   // The pre-start naming dialog. Open means "a run is waiting to be named"; nothing is
   // created until the operator confirms, so cancelling leaves the console exactly as it was.
@@ -145,6 +146,7 @@ export default function DashboardPage() {
           roles,
           recipe_id: recipeId,
           phase_modes: draftModes,
+          phase_params: draftParams,
         });
         setExperimentId(experiment.id);
         // Remembered so the header can show the operator's own name for the run. The gateway
@@ -157,13 +159,14 @@ export default function DashboardPage() {
         // The draft modes now live on the experiment's phase rows; keep the map only until the
         // run's own phase list takes over, so a later launch does not inherit stale choices.
         setDraftModes({});
+        setDraftParams({});
       } catch {
         /* the run-state read reconciles the screen; a failed create leaves it idle */
       } finally {
         setComposerBusy(false);
       }
     },
-    [run, shownRecipe, draftModes],
+    [run, shownRecipe, draftModes, draftParams],
   );
 
   // One button, three meanings: pause a running run, resume a paused one, start an idle one.
@@ -308,6 +311,8 @@ export default function DashboardPage() {
                   onToggleRun={handleToggleRun}
                   onRecipeChange={setShownRecipe}
                   onModeDraftChange={setDraftModes}
+                  onParamDraftChange={setDraftParams}
+                  onSetParams={(phaseId, params) => void run.setParams(phaseId, params)}
                   runTitle={runTitle}
                   runNotes={runNotes}
                 />

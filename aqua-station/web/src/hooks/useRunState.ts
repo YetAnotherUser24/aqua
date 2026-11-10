@@ -21,6 +21,7 @@ import {
   postState,
   resumeRun as apiResumeRun,
   setPhaseMode as apiSetPhaseMode,
+  setPhaseParams as apiSetPhaseParams,
   triggerPhaseAction as apiTriggerPhaseAction,
 } from '@/lib/api';
 import type { PhaseMode, RunState, RunStateResponse } from '@/lib/types';
@@ -40,6 +41,8 @@ export interface RunStateApi {
   confirm: () => Promise<void>;
   /** Fire the active MANUAL phase's held entry commands ("Disparar Acción"). */
   triggerAction: (params?: Record<string, unknown>) => Promise<void>;
+  /** Override parameters for a phase on the running experiment. */
+  setParams: (phaseId: string, params: Record<string, unknown>) => Promise<void>;
   /**
    * Set a phase's mode. Without `experimentId` this targets the running experiment; passing
    * one persists the choice for an experiment that has not launched yet.
@@ -86,6 +89,11 @@ export function useRunState(pollMs = 5_000): RunStateApi {
     (params?: Record<string, unknown>) => transition(() => apiTriggerPhaseAction(params)),
     [transition],
   );
+  const setParams = useCallback(
+    (phaseId: string, params: Record<string, unknown>) =>
+      transition(() => apiSetPhaseParams(phaseId, params)),
+    [transition],
+  );
   const setMode = useCallback(
     (phaseId: string, mode: PhaseMode, experimentId?: string | null) =>
       transition(() => apiSetPhaseMode(phaseId, mode, experimentId)),
@@ -108,6 +116,7 @@ export function useRunState(pollMs = 5_000): RunStateApi {
     resume,
     confirm,
     triggerAction,
+    setParams,
     setMode,
     setState,
   };

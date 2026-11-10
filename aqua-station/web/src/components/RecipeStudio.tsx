@@ -815,6 +815,8 @@ export function RecipeStudio({
   onToggleRun,
   onRecipeChange,
   onModeDraftChange,
+  onParamDraftChange,
+  onSetParams,
   runTitle,
   runNotes,
 }: {
@@ -836,6 +838,10 @@ export function RecipeStudio({
   /** Reports the operator's pre-launch mode choices, so the page can create the experiment
    *  with them. Ignored once a run is active (the orchestrator owns modes then). */
   onModeDraftChange?: (modes: Record<string, PhaseMode>) => void;
+  /** Reports the operator's pre-launch parameter choices, so the page can create the experiment with them. */
+  onParamDraftChange?: (params: Record<string, Record<string, unknown>>) => void;
+  /** Live parameter updates during active run. */
+  onSetParams?: (phaseId: string, params: Record<string, unknown>) => void;
   /** The name and description chosen in the pre-start dialog, echoed read-only in the footer. */
   runTitle?: string | null;
   runNotes?: string | null;
@@ -888,10 +894,18 @@ export function RecipeStudio({
   );
 
   const handleParam = (phaseId: string, key: string, value: number | string | boolean) => {
-    setParamEdits((prev) => ({
-      ...prev,
-      [phaseId]: { ...(prev[phaseId] ?? {}), [key]: value },
-    }));
+    const updated = { ...(paramEdits[phaseId] ?? {}), [key]: value };
+    const nextEdits = {
+      ...paramEdits,
+      [phaseId]: updated,
+    };
+    setParamEdits(nextEdits);
+
+    if (activeRecipeId) {
+      onSetParams?.(phaseId, updated);
+    } else {
+      onParamDraftChange?.(nextEdits);
+    }
   };
 
   const handleMode = (phaseId: string, mode: PhaseMode) => {
