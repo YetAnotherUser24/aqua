@@ -220,7 +220,7 @@ _PLANTA_2_STEP = Recipe(
     recipe_id="planta_2_step",
     title="Protocolo B — Planta 2: Escalón de Aireación",
     filename="EXP_02_STEP.CSV",
-    roles=("od_sensor", "aerator"),
+    roles=("od_sensor", "aerator", "mixer"),
     phases=(
         Phase(
             phase_id="p2_precond",
@@ -237,8 +237,11 @@ _PLANTA_2_STEP = Recipe(
             # No timeout: this phase waits for the operator. `None` is deliberate -- a number
             # here would look like a guarantee the engine no longer honours.
             timeout_s=None,
-            commands=(("aerator", "stop", {}),),
-            params={"do_start_max_mg_l": 3.5, "settle_time_s": 60},
+            commands=(
+                ("aerator", "stop", {}),
+                ("mixer", "start_mixer", {"target_rpm": 1000}),
+            ),
+            params={"do_start_max_mg_l": 3.5, "settle_time_s": 60, "mixer_enable": True, "mixer_rpm": 1000},
         ),
         Phase(
             phase_id="p2_step",
@@ -255,8 +258,11 @@ _PLANTA_2_STEP = Recipe(
             # No timeout: this phase waits for the operator. `None` is deliberate -- a number
             # here would look like a guarantee the engine no longer honours.
             timeout_s=None,
-            commands=(("aerator", "set_speed", {"speed_percent": 40, "target_rpm": 240, "step_rpm": 240}),),
-            params={"step_rpm": 240, "mixer_rpm": 0},
+            commands=(
+                ("aerator", "set_speed", {"speed_percent": 40, "target_rpm": 240, "step_rpm": 240}),
+                ("mixer", "start_mixer", {"target_rpm": 1000}),
+            ),
+            params={"step_rpm": 240, "mixer_enable": True, "mixer_rpm": 1000},
         ),
         Phase(
             phase_id="p2_acq",
@@ -288,7 +294,10 @@ _PLANTA_2_STEP = Recipe(
             # No timeout: this phase waits for the operator. `None` is deliberate -- a number
             # here would look like a guarantee the engine no longer honours.
             timeout_s=None,
-            commands=(("aerator", "stop", {}),),
+            commands=(
+                ("aerator", "stop", {}),
+                ("mixer", "stop_mixer", {}),
+            ),
             params={},
         ),
     ),
@@ -436,7 +445,7 @@ _PLANTA_COMBINADA_D = Recipe(
             title="Transición y Verificación Pre-Escalón (C₀)",
             desc=(
                 "<strong>Etapa 4 (Enlace A → B):</strong> Desarma la bomba peristáltica, verifica "
-                "DO inicial bajo C₀ ≤ 3.5 mg/L y estabiliza el fluido antes de arrancar el aireador."
+                "DO inicial bajo C₀ ≤ 3.5 mg/L y estabiliza el fluido con mezcla auxiliar antes de arrancar el aireador."
             ),
             mode="hibrido",
             condition_text="DO basal < 3.5 mg/L Y estanque en reposo durante ≥ 30 s",
@@ -445,8 +454,9 @@ _PLANTA_COMBINADA_D = Recipe(
             commands=(
                 ("pump", "force_off", {}),
                 ("aerator", "stop", {}),
+                ("mixer", "start_mixer", {"target_rpm": 1000}),
             ),
-            params={"do_start_max_mg_l": 3.5, "settle_time_s": 30},
+            params={"do_start_max_mg_l": 3.5, "settle_time_s": 30, "mixer_enable": True, "mixer_rpm": 1000},
         ),
         Phase(
             phase_id="pd_step",
@@ -460,8 +470,11 @@ _PLANTA_COMBINADA_D = Recipe(
             condition_text="ODrive alcanza consigna (240 RPM)",
             condition={"kind": "setpoint_reached", "role": "aerator", "field": "drv_rpm", "target": 240, "tol": 30},
             timeout_s=None,
-            commands=(("aerator", "set_speed", {"speed_percent": 40, "target_rpm": 240, "step_rpm": 240}),),
-            params={"step_rpm": 240, "mixer_rpm": 0},
+            commands=(
+                ("aerator", "set_speed", {"speed_percent": 40, "target_rpm": 240, "step_rpm": 240}),
+                ("mixer", "start_mixer", {"target_rpm": 1000}),
+            ),
+            params={"step_rpm": 240, "mixer_enable": True, "mixer_rpm": 1000},
         ),
         Phase(
             phase_id="pd_acq",
@@ -490,7 +503,10 @@ _PLANTA_COMBINADA_D = Recipe(
             condition_text="Operador valida dataset combinado y archiva reporte",
             condition={"kind": "elapsed", "seconds": 5},
             timeout_s=None,
-            commands=(("aerator", "stop", {}),),
+            commands=(
+                ("aerator", "stop", {}),
+                ("mixer", "stop_mixer", {}),
+            ),
             params={"kla_c_star": 7.15, "export_kla": True},
         ),
     ),

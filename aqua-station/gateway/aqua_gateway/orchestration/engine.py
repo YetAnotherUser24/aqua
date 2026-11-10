@@ -452,6 +452,7 @@ class Orchestrator:
             self._completed = set()
             self._awaiting_confirm = None
             self._action_pending = None
+            existing_param_overrides = dict(self._param_overrides)
             self._param_overrides = {}
             for row in phases_status:
                 raw_params = row.get("params")
@@ -463,6 +464,9 @@ class Orchestrator:
                             self._param_overrides[str(row["phase_id"])] = loaded
                     except Exception:
                         pass
+            # Preserve in-memory parameter overrides (e.g. set by set_phase_params before launch)
+            for p_id, p_dict in existing_param_overrides.items():
+                self._param_overrides.setdefault(p_id, {}).update(p_dict)
             # Seed the mode overrides from the persisted plan instead of clearing them. The
             # operator may have chosen each phase's mode *before* launching -- that choice lives
             # in ``experiment_phases.mode`` -- and the run must honour it. Only a mode that
@@ -715,12 +719,21 @@ class Orchestrator:
                         cmd_target["target_do"] = cmd_target["setpoint_mg_l"]
                     if "target_do" in cmd_target and "setpoint_mg_l" not in cmd_target:
                         cmd_target["setpoint_mg_l"] = cmd_target["target_do"]
-                elif role == "mixer" and action == "start_mixer":
+                elif role == "mixer" and action in ("start_mixer", "set_speed", "start"):
+                    mixer_enable = effective_params.get("mixer_enable", True)
+                    if isinstance(mixer_enable, str):
+                        mixer_enable = mixer_enable.strip().upper() not in ("APAGADO", "OFF", "0", "FALSE", "")
                     mixer_rpm = effective_params.get("mixer_rpm")
-                    if mixer_rpm is not None:
-                        cmd_target["target_rpm"] = mixer_rpm
-                        cmd_target["mixer_rpm"] = mixer_rpm
-                        cmd_target["actual_rpm"] = mixer_rpm
+                    if not mixer_enable or (mixer_rpm is not None and float(mixer_rpm) <= 0):
+                        action = "stop_mixer"
+                        cmd_target = {}
+                    else:
+                        action = "start_mixer"
+                        if mixer_rpm is not None:
+                            rpm_f = float(mixer_rpm)
+                            cmd_target["target_rpm"] = rpm_f
+                            cmd_target["mixer_rpm"] = rpm_f
+                            cmd_target["actual_rpm"] = rpm_f
                 elif role == "pump" and action == "dose":
                     stock_conc_gpl = float(effective_params.get("stock_conc_gpl", 100.0))
                     density_g_per_ml = float(effective_params.get("density_g_per_ml", 1.10))

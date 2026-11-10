@@ -71,6 +71,9 @@ export const PHASE_FORMS: Record<string, ParamControl[]> = {
     { kind: 'number', key: 'do_start_max_mg_l', label: 'DO inicial máximo permitido (C₀)', unit: 'mg/L', min: 0.5, max: 6, step: 0.1 },
     { kind: 'number', key: 'settle_time_s', label: 'Tiempo de reposo previo', unit: 's', min: 15, max: 300, step: 15 },
     { kind: 'static', label: 'Aireador ODrive', value: '0 RPM (EN REPOSO)' },
+    { kind: 'section', label: 'Mezclador T-200 Auxiliar' },
+    { kind: 'toggle', key: 'mixer_enable', label: 'Habilitar mezclador auxiliar al inicio', on: 'ACTIVO', off: 'APAGADO' },
+    { kind: 'number', key: 'mixer_rpm', label: 'Consigna Mezclador Auxiliar', unit: 'RPM', min: 100, max: 1500, step: 50 },
   ],
   p2_step: [
     { kind: 'section', label: 'Configuración del Salto' },
@@ -126,6 +129,9 @@ export const PHASE_FORMS: Record<string, ParamControl[]> = {
     { kind: 'section', label: 'Transición a Reoxigenación' },
     { kind: 'number', key: 'do_start_max_mg_l', label: 'DO máximo para iniciar escalón (C₀)', unit: 'mg/L', min: 0.5, max: 6, step: 0.1 },
     { kind: 'number', key: 'settle_time_s', label: 'Tiempo de reposo', unit: 's', min: 5, max: 300, step: 5 },
+    { kind: 'section', label: 'Mezclador T-200 Auxiliar' },
+    { kind: 'toggle', key: 'mixer_enable', label: 'Habilitar mezclador auxiliar al inicio', on: 'ACTIVO', off: 'APAGADO' },
+    { kind: 'number', key: 'mixer_rpm', label: 'Consigna Mezclador Auxiliar', unit: 'RPM', min: 100, max: 1500, step: 50 },
   ],
   pd_step: [
     { kind: 'section', label: 'Configuración del Salto' },

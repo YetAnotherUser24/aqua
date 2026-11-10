@@ -582,8 +582,9 @@ async def test_beginning_a_run_enters_the_first_phase_and_issues_its_commands() 
 
     assert out["state"] == STATE_ACTIVE
     assert out["recipe_id"] == "planta_2_step"
-    # planta_2_step's first phase stops the aerator and waits.
+    # planta_2_step's first phase stops the aerator and starts the auxiliary mixer at initial condition.
     assert ("aerator", "stop") in gw.commands.actions()
+    assert ("mixer", "start_mixer") in gw.commands.actions()
     # The experiment row was marked active.
     assert any("UPDATE experiments" in q for q, _ in gw.db.executed)
     # And an EXPERIMENT_STARTED event was emitted.
@@ -595,6 +596,33 @@ async def test_activating_without_an_experiment_is_refused() -> None:
     orch, _ = _make()
     with pytest.raises(ValueError, match="experiment_id"):
         await orch.request_state(state=STATE_ACTIVE, experiment_id=None)
+
+
+@pytest.mark.asyncio
+async def test_planta_2_step_respects_mixer_rpm_and_enable_toggle() -> None:
+    """Verifies that planta_2_step respects custom mixer_rpm and disables mixer when turned off."""
+    orch, gw = _make(metrics={"od_sensor": {"od_do_mg_l": 2.0}})
+    # 1. Start with custom mixer_rpm in p2_step
+    await orch.set_phase_params("p2_step", {"step_rpm": 300, "mixer_enable": True, "mixer_rpm": 1250})
+    await orch.request_state(state=STATE_ACTIVE, experiment_id="EXP-2026-10-10-01")
+
+    # Confirm initial phase started mixer at default 1000 RPM
+    init_cmd = next(cmd for cmd in gw.commands.calls if cmd["role"] == "mixer" and cmd["action"] == "start_mixer")
+    assert init_cmd["target"].get("target_rpm") == 1000.0
+
+    # Advance to p2_step
+    orch._phase_entered_s = time.time() - 120
+    await orch._tick()
+    await orch.confirm_phase()
+
+    step_cmd = [cmd for cmd in gw.commands.calls if cmd["role"] == "mixer" and cmd["action"] == "start_mixer"][-1]
+    assert step_cmd["target"].get("target_rpm") == 1250.0
+
+    # 2. When mixer_enable is False, it issues stop_mixer
+    await orch.set_phase_params("p2_step", {"mixer_enable": False})
+    await orch._issue_phase_commands(orch.active_phase, requested_by="operator:test")
+    stop_cmd = [cmd for cmd in gw.commands.calls if cmd["role"] == "mixer"][-1]
+    assert stop_cmd["action"] == "stop_mixer"
 
 
 @pytest.mark.asyncio
