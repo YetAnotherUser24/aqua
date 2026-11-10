@@ -823,16 +823,62 @@ export function ActuatorDeck({
             const computedSulfiteG = computedMl * (STOCK_CONC / 1000);
             const computedSolG = computedMl * DENSITY;
 
+            const pumpNode = snapshot?.nodes?.['pump'];
+            const rawDosed = pumpNode?.metrics?.['pump_dosed_ml'];
+            const dosedMl = Math.max(0, typeof rawDosed === 'number' ? rawDosed : (dosed.value ?? 0));
+            const dosedSulfiteG = dosedMl * (STOCK_CONC / 1000);
+            const dosedSolG = dosedMl * DENSITY;
+
+            const rawTarget = pumpNode?.metrics?.['pump_target_ml'];
+            const targetMl = typeof rawTarget === 'number' ? rawTarget : 0;
+            const pumpMode = pumpNode?.metrics?.['pump_mode'];
+            const isDosing = pumpMode === 'dose';
+            const flowRate = typeof pumpNode?.metrics?.['pump_flow_ml_min'] === 'number' ? pumpNode.metrics['pump_flow_ml_min'] : 0;
+
             return (
               <>
-                <div className="flex justify-between text-[11px] font-mono text-slate-400">
-                  <span>
-                    Volumen dosificado:{' '}
-                    <strong className="text-slate-200">{formatNumber(dosed.value, 2)} mL</strong>
-                  </span>
-                  <span className="text-[10px] text-slate-500">
-                    ρ = 1.10 g/mL • 100 g/L
-                  </span>
+                {/* Cuadro principal de telemetría de dosis entregada */}
+                <div className="bg-scada-surface/70 p-2.5 rounded-lg border border-scada-border flex flex-col gap-1.5">
+                  <div className="flex justify-between items-center text-[11px] font-mono">
+                    <span className="text-slate-400 font-semibold flex items-center gap-1.5">
+                      {isDosing && <span className="w-2 h-2 rounded-full bg-amber-400 animate-ping inline-block" />}
+                      {isDosing ? 'Inyectando reactivo:' : 'Entregado / Dosificado:'}
+                    </span>
+                    <span className="text-slate-100 font-bold text-sm tracking-wide">
+                      {doseUnit === 'sulfite_g'
+                        ? `${formatNumber(dosedSulfiteG, 2)} g Na₂SO₃`
+                        : doseUnit === 'solution_g'
+                        ? `${formatNumber(dosedSolG, 2)} g sol.`
+                        : `${formatNumber(dosedMl, 2)} mL`}
+                    </span>
+                  </div>
+
+                  <div className="flex justify-between items-center text-[10px] font-mono pt-1 border-t border-purple-900/30">
+                    <span className="text-slate-400">Equivalencias:</span>
+                    <span className="text-purple-300">
+                      <strong className="text-slate-200">{formatNumber(dosedMl, 2)} mL</strong>
+                      <span className="text-slate-500 mx-1">•</span>
+                      <strong className="text-purple-200">{formatNumber(dosedSolG, 2)} g sol.</strong>
+                      <span className="text-slate-500 mx-1">•</span>
+                      <strong className="text-purple-300">{formatNumber(dosedSulfiteG, 2)} g Na₂SO₃</strong>
+                    </span>
+                  </div>
+
+                  {/* Barra de progreso interactiva si está en proceso de inyección */}
+                  {isDosing && targetMl > 0 && (
+                    <div className="mt-1 pt-1 border-t border-purple-900/20">
+                      <div className="flex justify-between text-[9px] font-mono text-sky-400 mb-1">
+                        <span>Progreso: {Math.min(100, Math.round((dosedMl / targetMl) * 100))}% ({formatNumber(dosedMl, 2)} / {formatNumber(targetMl, 2)} mL)</span>
+                        <span>Flujo: {flowRate.toFixed(1)} mL/min</span>
+                      </div>
+                      <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                        <div
+                          className="bg-purple-500 h-full rounded-full transition-all duration-300"
+                          style={{ width: `${Math.min(100, Math.max(3, (dosedMl / targetMl) * 100))}%` }}
+                        />
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-1 bg-scada-surface/60 p-1 rounded-md border border-scada-border text-[10px] font-mono">

@@ -250,6 +250,7 @@ static void postTelemetry() {
 }
 
 /* --------------------------- Commands ------------------------------ */
+static volatile unsigned long g_lastTelemetry = 0;
 
 /**
  * Set when the end of a dose has been reported, cleared when a new dose starts.
@@ -258,7 +259,6 @@ static void postTelemetry() {
  * it — now lives outside that function. Only the core-0 cloud task touches it, so this is
  * not new cross-core state.
  */
-
 /**
  * Apply one command. **The single copy of the dosing semantics.**
  *
@@ -296,6 +296,7 @@ static void applyCommand(const String& cmdId, const String& action, JsonObjectCo
       handled = true;
       Serial.printf("[Cmd] Dosing %.2f mL (Controlled %.1f RPM)\n", targetMl, DOSE_TARGET_RPM);
       postPumpEvent("dose_started", 0.0f, targetMl, "ok");
+      g_lastTelemetry = 0; // Publicar telemetría inmediatamente al iniciar dosis
     }
   } else if (action == "prime") {
     float vol = 25.0f;
@@ -426,7 +427,6 @@ static void cloudWorkerTask(void* param) {
   WiFi.config(local_IP, gateway, subnet);
   WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
 
-  unsigned long lastTelemetry = 0;
   unsigned long lastPoll = 0;
   unsigned long lastWifiRetry = millis();
   bool wasConnected = false;
@@ -496,12 +496,13 @@ static void cloudWorkerTask(void* param) {
       reset.dose_completed = false;
       reset.dose_timed_out = false;
       setState(reset);
+      g_lastTelemetry = 0; // Publicar telemetría final inmediatamente al terminar
     }
 
-    // 2. Telemetría
-    unsigned long interval = (st.duty_percent > 1.0f) ? TELEMETRY_INTERVAL_MS : TELEMETRY_IDLE_INTERVAL_MS;
-    if (now - lastTelemetry >= interval) {
-      lastTelemetry = now;
+    // 2. Telemetría: 1000 ms durante dosificación para seguimiento fluido, 20000 ms en reposo
+    unsigned long interval = (st.mode == PUMP_DOSE || st.duty_percent > 1.0f) ? 1000 : TELEMETRY_IDLE_INTERVAL_MS;
+    if (now - g_lastTelemetry >= interval) {
+      g_lastTelemetry = now;
       postTelemetry();
     }
 
