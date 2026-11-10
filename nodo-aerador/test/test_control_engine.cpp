@@ -173,8 +173,52 @@ int main() {
   assert(hotStartRpm > 15.0f && hotStartRpm < 50.0f);
   printf("  -> Test 10 (Smart 2-DOF Hot-Start / Stair Step): PASSED (Immediate response: %.1f RPM, zero deadband lockout)\n", hotStartRpm);
 
+  // -------------------------------------------------------------
+  // Test 11: Sulfite Purge & Bumpless Capture for Low SP (0.70 mg/L)
+  // -------------------------------------------------------------
+  // Scenario: Conditioning deoxygenation. DO is near zero (0.05 mg/L),
+  // residual sulfite is active. The engine must:
+  // 1. Cruise at constant 250 RPM without integral windup while DO < 0.15 mg/L.
+  // 2. Transition bumplessly (around 250 RPM) when DO >= 0.15 mg/L.
+  // 3. Cut to 0 RPM via predictive coasting when C_pred >= 0.70 mg/L.
+  cfg.target_do_mg_l = 0.70f;
+  engine.configure(cfg);
+  engine.setArmed(true);
+
+  // Step 1: In purge zone (DO = 0.05 mg/L < 0.15 mg/L)
+  g_fakeMillis += 5000UL;
+  engine.updateProcessVariable(0.05f, 24.0f);
+  float purgeRpm1 = engine.computeOutputRpm(g_fakeMillis);
+  assert(fabsf(purgeRpm1 - 250.0f) < 0.01f);
+  printf("  -> Test 11a (Sulfite Purge Cruise): PASSED (250.0 RPM while DO=0.05 mg/L)\n");
+
+  // Step 2: Still in purge zone after 20 seconds, no windup occurs (still 250 RPM)
+  g_fakeMillis += 20000UL;
+  engine.updateProcessVariable(0.12f, 24.0f);
+  float purgeRpm2 = engine.computeOutputRpm(g_fakeMillis);
+  assert(fabsf(purgeRpm2 - 250.0f) < 0.01f);
+  printf("  -> Test 11b (No Integral Windup during Purge): PASSED (Held at 250.0 RPM while DO=0.12 mg/L)\n");
+
+  // Step 3: Sulfite Breakthrough! DO rises gently to 0.16 mg/L (>= 0.15 mg/L)
+  // dC_dt = (0.16 - 0.12) / 5.0 = 0.008 mg/L/s -> cPred = 0.16 + 30 * 0.008 = 0.40 mg/L < 0.70 mg/L
+  g_fakeMillis += 5000UL;
+  engine.updateProcessVariable(0.16f, 24.0f);
+  float breakthroughRpm = engine.computeOutputRpm(g_fakeMillis);
+  printf("  -> Bumpless Breakthrough RPM: %.2f RPM\n", breakthroughRpm);
+  // Output should be smoothly initialized around 250 RPM, not dropping to 0 or jumping to 600
+  assert(breakthroughRpm >= 230.0f && breakthroughRpm <= 270.0f);
+  printf("  -> Test 11c (Bumpless Transfer to PI): PASSED (Smooth transition at %.1f RPM)\n", breakthroughRpm);
+
+  // Step 4: Rapid rise to 0.45 mg/L with dC/dt = 0.01 mg/L/s -> C_pred = 0.45 + 30 * 0.01 = 0.75 >= 0.70 mg/L!
+  g_fakeMillis += 5000UL;
+  engine.updateProcessVariable(0.45f, 24.0f);
+  float lowSpCutoff = engine.computeOutputRpm(g_fakeMillis);
+  printf("  -> Low SP Predictive Cutoff RPM: %.2f RPM (C_meas=0.45 mg/L, C_pred=0.75 mg/L)\n", lowSpCutoff);
+  assert(lowSpCutoff == 0.0f);
+  printf("  -> Test 11d (Predictive Braking at 0.70 mg/L): PASSED (Exact 0 RPM brake before overshoot)\n");
+
   printf("=================================================================\n");
-  printf("[TEST] ALL 10 UNIT & INVARIANT TESTS PASSED PERFECTLY!\n");
+  printf("[TEST] ALL 11 UNIT & INVARIANT TESTS PASSED PERFECTLY!\n");
   printf("=================================================================\n");
   return 0;
 }

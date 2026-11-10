@@ -78,6 +78,7 @@ private:
   unsigned long _lastComputeMs = 0;
   unsigned long _lastSampleMs = 0;
   bool _newSampleAvailable = false;
+  bool _inPurgeMode = false;
 
   float runPid(float measuredDo, float dt, const ControlConfig& cfg);
   float runFuzzy(float error, float dError, const ControlConfig& cfg);

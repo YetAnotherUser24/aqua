@@ -22,6 +22,7 @@ void ControlEngine::configure(const ControlConfig& config) {
   if (_config.mode != config.mode) {
     _integral = 0.0f;
     _lastSampleMs = 0;
+    _inPurgeMode = false;
   }
   _config = config;
   if (_config.max_rpm < _config.min_rpm) _config.max_rpm = _config.min_rpm + 500.0f;
@@ -88,6 +89,7 @@ void ControlEngine::setArmed(bool armed) {
     _integral = 0.0f;
     _lastCommandedRpm = 0.0f;
     _lastSampleMs = 0;
+    _inPurgeMode = false;
   }
   portEXIT_CRITICAL(&_mux);
 }
@@ -262,36 +264,49 @@ float ControlEngine::runPid(float measuredDo, float dt, const ControlConfig& cfg
   float dC_dt = (dt > 0.001f) ? ((measuredDo - _prevDoSample) / dt) : 0.0f;
   float cPred = measuredDo + cfg.tau_lag * dC_dt;
 
-  // 1. Corte preventivo por inercia química y retardo de transporte
+  // 1. Zona de Purga Química de Sulfito (Deadband Químico: DO < 0.15 mg/L con consigna baja)
+  // Cuando la consigna es baja (ej. acondicionamiento basal SP <= 1.5 mg/L) y el OD medido
+  // está en el fondo (< 0.15 mg/L), existe sulfito residual activo consumiendo el O2.
+  // En esta zona, el motor gira a velocidad fija y suave (250 RPM) y se CONGELA el integrador
+  // en 0 para evitar windup violento a 600 RPM mientras el reactivo se oxida.
+  const float SULPHITE_BREAKTHROUGH_MG_L = 0.15f;
+  const float PURGE_CRUISE_RPM = 250.0f;
+
+  if (cfg.target_do_mg_l <= 1.5f && measuredDo < SULPHITE_BREAKTHROUGH_MG_L) {
+    _inPurgeMode = true;
+    _integral = 0.0f;
+    return constrain(PURGE_CRUISE_RPM, cfg.min_rpm, cfg.max_rpm);
+  }
+
+  // 2. Corte preventivo por inercia química y retardo de transporte
   if (cPred >= cfg.target_do_mg_l && dC_dt > 0.0001f) {
     _integral = fmaxf(0.0f, _integral - 50.0f * dt);
+    _inPurgeMode = false;
     return 0.0f;
   }
 
-  // 2. Error convencional y error de acción proporcional ponderada (Smart 2-DOF)
+  // 3. Error convencional y error de acción proporcional ponderada (Smart 2-DOF)
+  float effective_beta = (cfg.target_do_mg_l <= 1.5f) ? 1.0f : cfg.beta;
   float error = cfg.target_do_mg_l - measuredDo;
+  float p_target = fmaxf(effective_beta * cfg.target_do_mg_l, measuredDo);
+  float error_p = (cfg.target_do_mg_l > measuredDo) ? (p_target - measuredDo) : error;
 
-  // Smart 2-DOF (Adaptive Beta Floor): En procesos unidireccionales de agua limpia (u >= 0),
-  // si el estanque está por debajo de consigna (error > 0) pero el DO medido supera (beta * SP),
-  // la formulación estándar 2-DOF generaría un error proporcional negativo (e_P < 0).
-  // Esto provocaría un "freno fantasma" que bloquea el motor en 0 RPM durante arranques en
-  // caliente o cambios de consigna tipo escalera (staircase tests).
-  // Clampeando p_target >= measuredDo cuando SP > measuredDo, la acción proporcional nunca
-  // empuja en reversa desde reposo (e_P >= 0), permitiendo que la acción integral comience
-  // a acelerar de inmediato sin retraso ni bloqueo. Si se rebasa la consigna (measuredDo >= SP),
-  // se utiliza el error completo (SP - measuredDo) para frenar de inmediato.
-  float p_target = fmaxf(cfg.beta * cfg.target_do_mg_l, measuredDo);
-  float error_p = (cfg.target_do_mg_l > measuredDo) ? (p_target - measuredDo) : (cfg.target_do_mg_l - measuredDo);
+  // Transición suave (Bumpless Transfer) al salir de la zona de purga de sulfito
+  if (_inPurgeMode) {
+    _inPurgeMode = false;
+    float init_integral = PURGE_CRUISE_RPM - (cfg.kp * error_p);
+    _integral = constrain(init_integral, 0.0f, cfg.max_rpm);
+  }
 
   float u_unsat = (cfg.kp * error_p) + _integral;
   if (cfg.kd > 0.0001f) {
     u_unsat -= cfg.kd * dC_dt; // Derivada sobre la medición (Derivative on PV)
   }
 
-  // 3. Saturación
+  // 4. Saturación
   float u_sat = constrain(u_unsat, cfg.min_rpm, cfg.max_rpm);
 
-  // 4. Actualización integral con Back-Calculation anti-windup
+  // 5. Actualización integral con Back-Calculation anti-windup
   float tt = (cfg.tt > 0.1f) ? cfg.tt : 100.0f;
   _integral += (cfg.ki * error * dt) + ((u_sat - u_unsat) * (dt / tt));
   _integral = constrain(_integral, -2.0f * cfg.max_rpm, 2.0f * cfg.max_rpm);
