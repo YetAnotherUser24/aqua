@@ -128,12 +128,24 @@ def _do_below_and_stable(cond: Mapping[str, Any], ctx: PhaseContext) -> bool:
     below = ctx.value("od_sensor", "od_do_mg_l")
     if below is None or below >= float(cond["below_mg_l"]):
         return False
-    window_ms = int(float(cond.get("window_s", 30)) * 1000)
+    window_s = float(cond.get("window_s", 60))
+    window_ms = int(window_s * 1000)
     recent = [p for p in ctx.do_history if p[0] >= ctx.do_history[-1][0] - window_ms] if ctx.do_history else []
     if len(recent) < 2 or recent[-1][0] - recent[0][0] < window_ms:
         return False
-    rate = least_squares_rate_per_min(recent)
-    return rate is not None and abs(rate) < float(cond["eps_mg_l_per_min"])
+
+    # Option B: Stability tube (peak-to-peak amplitude check over the full window)
+    if "max_delta_mg_l" in cond:
+        values = [p[1] for p in recent]
+        if (max(values) - min(values)) > float(cond["max_delta_mg_l"]):
+            return False
+
+    if "eps_mg_l_per_min" in cond:
+        rate = least_squares_rate_per_min(recent)
+        if rate is None or abs(rate) >= float(cond["eps_mg_l_per_min"]):
+            return False
+
+    return True
 
 
 def _dose_complete(cond: Mapping[str, Any], ctx: PhaseContext) -> bool:

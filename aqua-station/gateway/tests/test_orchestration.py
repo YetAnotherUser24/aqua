@@ -366,6 +366,57 @@ def test_do_stable_needs_a_full_window_of_flat_history() -> None:
     assert C.evaluate({"kind": "do_stable", "eps_mg_l_per_min": 0.05, "window_s": 30}, _ctx(do_history=short)) is False
 
 
+def test_do_below_and_stable_peak_to_peak_envelope() -> None:
+    now = time.time()
+    cond = {
+        "kind": "do_below_and_stable",
+        "below_mg_l": 3.0,
+        "window_s": 60,
+        "max_delta_mg_l": 0.04,
+        "eps_mg_l_per_min": 0.15,
+        "min_elapsed_s": 180,
+    }
+
+    # Case 1: min_elapsed_s not met yet
+    ctx_early = _ctx(
+        metrics={("od_sensor", "od_do_mg_l"): 0.8},
+        now_s=now,
+        phase_entered_s=now - 100,  # only 100s elapsed < 180s
+        do_history=[(i * 1000, 0.8) for i in range(70)],
+    )
+    assert C.evaluate(cond, ctx_early) is False
+
+    # Case 2: DO is above threshold (3.5 >= 3.0)
+    ctx_high = _ctx(
+        metrics={("od_sensor", "od_do_mg_l"): 3.5},
+        now_s=now,
+        phase_entered_s=now - 200,
+        do_history=[(i * 1000, 3.5) for i in range(70)],
+    )
+    assert C.evaluate(cond, ctx_high) is False
+
+    # Case 3: DO is below threshold, but still falling fast (ΔDO = 0.20 mg/L in 60s > 0.04)
+    falling_history = [(i * 1000, 1.0 - (i / 60.0) * 0.20) for i in range(70)]
+    ctx_falling = _ctx(
+        metrics={("od_sensor", "od_do_mg_l"): 0.8},
+        now_s=now,
+        phase_entered_s=now - 200,
+        do_history=falling_history,
+    )
+    assert C.evaluate(cond, ctx_falling) is False
+
+    # Case 4: DO is below threshold and flat within stability tube (ΔDO <= 0.04 mg/L in 60s)
+    # e.g. sensor noise between 0.80 and 0.82 mg/L
+    flat_history = [(i * 1000, 0.80 + 0.02 * (i % 2)) for i in range(70)]
+    ctx_flat = _ctx(
+        metrics={("od_sensor", "od_do_mg_l"): 0.81},
+        now_s=now,
+        phase_entered_s=now - 200,
+        do_history=flat_history,
+    )
+    assert C.evaluate(cond, ctx_flat) is True
+
+
 def test_dose_complete_reads_the_pumps_own_tally() -> None:
     below = _ctx(metrics={("pump", "pump_dosed_ml"): 12.0})
     done = _ctx(metrics={("pump", "pump_dosed_ml"): 12.5})

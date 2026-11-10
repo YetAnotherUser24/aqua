@@ -889,6 +889,12 @@ class Orchestrator:
         elif kind == "do_below_and_stable":
             if "do_floor_mg_l" in effective:
                 cond["below_mg_l"] = float(effective["do_floor_mg_l"])
+            if "max_delta_mg_l" in effective:
+                cond["max_delta_mg_l"] = float(effective["max_delta_mg_l"])
+            if "window_s" in effective:
+                cond["window_s"] = float(effective["window_s"])
+            if "eps_mg_l_per_min" in effective:
+                cond["eps_mg_l_per_min"] = float(effective["eps_mg_l_per_min"])
         elif kind == "do_above":
             if "stop_do_mg_l" in effective:
                 cond["threshold_mg_l"] = float(effective["stop_do_mg_l"])
@@ -995,7 +1001,9 @@ class Orchestrator:
                 cond_text = f"Masa dispensada = {sg:.2f} g Na₂SO₃ ({v_ml:.1f} mL ± 0.2 mL) registrado por encoder"
             elif phase.phase_id in ("p1_deox", "pd_deox") and "do_floor_mg_l" in effective_params:
                 floor = float(effective_params["do_floor_mg_l"])
-                cond_text = f"DO < {floor:.1f} mg/L Y derivada en el fondo de respiración Y t > 180 s"
+                delta = float(effective_params.get("max_delta_mg_l", 0.04))
+                w_s = int(effective_params.get("window_s", 60))
+                cond_text = f"DO < {floor:.1f} mg/L Y estabilizado (ΔDO ≤ {delta:.2f} mg/L en {w_s} s) Y t > 180 s"
             elif "stop_do_mg_l" in effective_params:
                 stop_do = float(effective_params["stop_do_mg_l"])
                 cond_text = f"DO ≥ {stop_do:.2f} mg/L ó timeout"

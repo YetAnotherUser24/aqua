@@ -55,6 +55,8 @@ export const PHASE_FORMS: Record<string, ParamControl[]> = {
   p1_deox: [
     { kind: 'section', label: 'Monitoreo de Agotamiento de Reactivo' },
     { kind: 'number', key: 'do_floor_mg_l', label: 'DO piso objetivo', unit: 'mg/L', min: 0.5, max: 7, step: 0.1 },
+    { kind: 'number', key: 'max_delta_mg_l', label: 'Banda de estabilidad pico a pico (ΔDO)', unit: 'mg/L', min: 0.01, max: 0.20, step: 0.01 },
+    { kind: 'number', key: 'window_s', label: 'Ventana de estabilidad', unit: 's', min: 10, max: 300, step: 10 },
     { kind: 'number', key: 'safety_timeout_s', label: 'Timeout de seguridad', unit: 's', min: 60, max: 3600, step: 60 },
     { kind: 'toggle', key: 'do_alert', label: 'Alerta de seguridad si DO < 2.5 mg/L', on: 'ACTIVA', off: '' },
   ],
@@ -123,6 +125,8 @@ export const PHASE_FORMS: Record<string, ParamControl[]> = {
   pd_deox: [
     { kind: 'section', label: 'Caída Libre de DO' },
     { kind: 'number', key: 'do_floor_mg_l', label: 'DO piso meta', unit: 'mg/L', min: 0.5, max: 7, step: 0.1 },
+    { kind: 'number', key: 'max_delta_mg_l', label: 'Banda de estabilidad pico a pico (ΔDO)', unit: 'mg/L', min: 0.01, max: 0.20, step: 0.01 },
+    { kind: 'number', key: 'window_s', label: 'Ventana de estabilidad', unit: 's', min: 10, max: 300, step: 10 },
     { kind: 'number', key: 'safety_timeout_s', label: 'Timeout de seguridad', unit: 's', min: 60, max: 3600, step: 60 },
   ],
   pd_trans: [

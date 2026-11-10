@@ -162,10 +162,12 @@ _PLANTA_1_DEOX = Recipe(
                 "respiración) y se cumple el tiempo cinético de reacción (&gt; 180 s con cobalto)."
             ),
             mode="auto",
-            condition_text="DO < 3.0 mg/L Y derivada en el fondo de respiración Y t > 180 s",
+            condition_text="DO < 3.0 mg/L Y estabilizado (ΔDO ≤ 0.04 mg/L en 60 s) Y t > 180 s",
             condition={
                 "kind": "do_below_and_stable",
                 "below_mg_l": 3.0,
+                "window_s": 60,
+                "max_delta_mg_l": 0.04,
                 # 0.15, not the 0.02 this carried before. The two halves of this phase's
                 # condition have to be satisfiable at the same time, and with the constants in
                 # the plant model they were not:
@@ -195,7 +197,13 @@ _PLANTA_1_DEOX = Recipe(
             # the *reaction*, measured without the re-oxygenation the impeller adds.
             # Sulfite reaction consumes dissolved oxygen. Mixing distributes the chemical.
             commands=(),
-            params={"do_floor_mg_l": 3.0, "safety_timeout_s": 1800, "do_alert": True},
+            params={
+                "do_floor_mg_l": 3.0,
+                "max_delta_mg_l": 0.04,
+                "window_s": 60,
+                "safety_timeout_s": 1800,
+                "do_alert": True,
+            },
         ),
         Phase(
             phase_id="p1_end",
@@ -428,16 +436,24 @@ _PLANTA_COMBINADA_D = Recipe(
                 "la meseta desoxigenada."
             ),
             mode="auto",
-            condition_text="DO ≤ 3.0 mg/L Y estabilizado (|d[DO]/dt| < 0.15 mg/L/min) durante ≥ 180 s",
+            condition_text="DO ≤ 3.0 mg/L Y estabilizado (ΔDO ≤ 0.04 mg/L en 60 s) durante ≥ 180 s",
             condition={
                 "kind": "do_below_and_stable",
                 "below_mg_l": 3.0,
+                "window_s": 60,
+                "max_delta_mg_l": 0.04,
                 "eps_mg_l_per_min": 0.15,
                 "min_elapsed_s": 180,
             },
             timeout_s=1800,
             commands=(),
-            params={"do_floor_mg_l": 3.0, "safety_timeout_s": 1800, "do_alert": True},
+            params={
+                "do_floor_mg_l": 3.0,
+                "max_delta_mg_l": 0.04,
+                "window_s": 60,
+                "safety_timeout_s": 1800,
+                "do_alert": True,
+            },
         ),
         Phase(
             phase_id="pd_trans",
