@@ -44,18 +44,11 @@ export const PHASE_FORMS: Record<string, ParamControl[]> = {
     { kind: 'static', label: 'Aireador ODrive', value: '0 RPM (APAGADO)' },
   ],
   p1_dose: [
-    { kind: 'section', label: 'Cálculo de Volumen & Dosificación' },
-    {
-      kind: 'select',
-      key: 'dose_method',
-      label: 'Método de Cálculo',
-      options: [
-        { value: 'stoich', label: 'Estequiométrico (ΔDO × 87.5 L × 7.878)' },
-        { value: 'fixed', label: 'Volumen Fijo Personalizado (mL)' },
-      ],
-    },
-    { kind: 'number', key: 'dose_ml', label: 'Volumen de solución madre', unit: 'mL', min: 0.5, max: 100, step: 0.5 },
+    { kind: 'section', label: 'Cálculo de Reactivo & Dosificación' },
+    { kind: 'number', key: 'sulfite_g', label: 'Gramos de Na₂SO₃ deseados (Reactivo puro)', unit: 'g', min: 0.1, max: 20, step: 0.1 },
+    { kind: 'number', key: 'dose_ml', label: 'Volumen equivalente solución madre', unit: 'mL', min: 0.5, max: 200, step: 0.5 },
     { kind: 'number', key: 'stock_conc_gpl', label: 'Concentración madre Na₂SO₃', unit: 'g/L', min: 10, max: 200, step: 10 },
+    { kind: 'number', key: 'density_g_per_ml', label: 'Densidad de solución (ρ)', unit: 'g/mL', min: 0.9, max: 1.5, step: 0.01 },
     { kind: 'toggle', key: 'mix_during_dose', label: 'Agitación durante inyección', on: 'ACTIVA (Acelera disolución)', off: 'DETENIDA' },
   ],
   p1_deox: [
@@ -117,8 +110,10 @@ export const PHASE_FORMS: Record<string, ParamControl[]> = {
   ],
   pd_dose: [
     { kind: 'section', label: 'Dosificación Na₂SO₃ (Desoxigenación)' },
-    { kind: 'number', key: 'dose_ml', label: 'Volumen a inyectar', unit: 'mL', min: 0.5, max: 100, step: 0.5 },
+    { kind: 'number', key: 'sulfite_g', label: 'Gramos de Na₂SO₃ deseados (Reactivo puro)', unit: 'g', min: 0.1, max: 20, step: 0.1 },
+    { kind: 'number', key: 'dose_ml', label: 'Volumen equivalente solución madre', unit: 'mL', min: 0.5, max: 200, step: 0.5 },
     { kind: 'number', key: 'stock_conc_gpl', label: 'Concentración madre', unit: 'g/L', min: 10, max: 200, step: 10 },
+    { kind: 'number', key: 'density_g_per_ml', label: 'Densidad de solución (ρ)', unit: 'g/mL', min: 0.9, max: 1.5, step: 0.01 },
     { kind: 'toggle', key: 'mix_during_dose', label: 'Agitación continua', on: 'ACTIVA', off: 'DETENIDA' },
   ],
   pd_deox: [

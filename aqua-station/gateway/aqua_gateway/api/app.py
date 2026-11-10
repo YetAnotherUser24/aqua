@@ -469,6 +469,19 @@ def create_app(gateway: "Gateway") -> FastAPI:
             raise HTTPException(status_code=404, detail=f"unknown role {body.role!r}")
 
         schema = gateway.registry.for_role(body.role)
+
+        # Allow commanding pump doses in solution grams or pure sulfite grams directly
+        if body.role == "pump" and body.action == "dose":
+            density = float(body.target.get("density_g_per_ml", 1.10))
+            stock_conc = float(body.target.get("stock_conc_gpl", 100.0))
+            if "sulfite_g" in body.target and "target_ml" not in body.target:
+                body.target["target_ml"] = round(float(body.target["sulfite_g"]) / (stock_conc / 1000.0), 2)
+            elif ("target_g" in body.target or "grams_total" in body.target) and "target_ml" not in body.target:
+                g = float(body.target.get("target_g", body.target.get("grams_total", 0.0)))
+                body.target["target_ml"] = round(g / density, 2)
+            if "target_ml" in body.target and "dose_ml" not in body.target:
+                body.target["dose_ml"] = body.target["target_ml"]
+
         experiment_id = body.experiment_id
         if experiment_id is None and gateway.db.available:
             try:

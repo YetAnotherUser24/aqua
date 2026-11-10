@@ -695,9 +695,30 @@ class Orchestrator:
                         cmd_target["mixer_rpm"] = mixer_rpm
                         cmd_target["actual_rpm"] = mixer_rpm
                 elif role == "pump" and action == "dose":
-                    dose_ml = effective_params.get("dose_ml")
+                    stock_conc_gpl = float(effective_params.get("stock_conc_gpl", 100.0))
+                    density_g_per_ml = float(effective_params.get("density_g_per_ml", 1.10))
+                    sulfite_g = effective_params.get("sulfite_g")
+                    target_g = effective_params.get("target_g") or effective_params.get("grams_total")
+                    dose_ml = effective_params.get("dose_ml") or effective_params.get("target_ml")
+
+                    override = params_override or {}
+                    if "target_g" in override or "grams_total" in override:
+                        dose_ml = round(float(target_g) / density_g_per_ml, 2)
+                    elif sulfite_g is not None:
+                        # Pure Na2SO3 grams to volume (mL): 100 g/L = 0.100 g/mL => V = g / 0.100
+                        dose_ml = round(float(sulfite_g) / (stock_conc_gpl / 1000.0), 2)
+                    elif target_g is not None:
+                        # Solution total grams to volume (mL): V = g / density
+                        dose_ml = round(float(target_g) / density_g_per_ml, 2)
+
                     if dose_ml is not None:
+                        dose_ml = float(dose_ml)
+                        cmd_target["target_ml"] = dose_ml
                         cmd_target["dose_ml"] = dose_ml
+                    if sulfite_g is not None:
+                        cmd_target["sulfite_g"] = float(sulfite_g)
+                    if target_g is not None:
+                        cmd_target["target_g"] = float(target_g)
 
                 # The command's own deadline is bounded by the phase's timeout so a command
                 # cannot outlive the phase that issued it. A supervised phase may declare no

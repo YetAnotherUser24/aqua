@@ -115,6 +115,20 @@ def test_the_deox_dose_can_actually_reach_its_own_do_floor() -> None:
     )
 
 
+def test_deox_dose_configures_pure_sulfite_grams() -> None:
+    """The recipe phase must configure grams of pure sulfite (sulfite_g) consistent with dose_ml."""
+    for recipe_id in ("planta_1_deox", "planta_d_comb"):
+        recipe = RECIPES[recipe_id]
+        dose_phase = next(p for p in recipe.phases if p.phase_id in ("p1_dose", "pd_dose"))
+        assert "sulfite_g" in dose_phase.params
+        sulfite_g = float(dose_phase.params["sulfite_g"])
+        dose_ml = float(dose_phase.params["dose_ml"])
+        stock_conc_gpl = float(dose_phase.params.get("stock_conc_gpl", 100.0))
+        # 100 g/L stock -> 0.100 g/mL => dose_ml = sulfite_g / 0.100
+        expected_ml = sulfite_g / (stock_conc_gpl / 1000.0)
+        assert abs(dose_ml - expected_ml) < 0.01, f"{recipe_id}: dose_ml {dose_ml} != {expected_ml}"
+
+
 def test_a_deox_floor_below_the_mixed_equilibrium_stops_the_mixer() -> None:
     """
     A phase that waits for `DO < floor` must not leave the mixer running.
@@ -1139,3 +1153,33 @@ async def test_hibrido_phase_waits_for_confirmation_when_condition_met() -> None
     state = await orch.current_state()
     assert state["phase_id"] == "p2_precond"
     assert state["awaiting_confirm"] == "p2_precond"
+
+
+@pytest.mark.asyncio
+async def test_engine_pump_dose_calculates_target_ml_from_sulfite_g() -> None:
+    orch, gw = _make()
+    orch._recipe_id = "planta_1_deox"
+    recipe = RECIPES["planta_1_deox"]
+    phase = next(p for p in recipe.phases if p.phase_id == "p1_dose")
+    await orch._issue_phase_commands(phase, requested_by="operator:test", params_override={"sulfite_g": 5.0, "stock_conc_gpl": 100.0})
+    calls = [c for c in gw.commands.calls if c.get("role") == "pump" and c.get("action") == "dose"]
+    assert len(calls) == 1
+    target = calls[0]["target"]
+    assert target["target_ml"] == 50.0
+    assert target["dose_ml"] == 50.0
+    assert target["sulfite_g"] == 5.0
+
+
+@pytest.mark.asyncio
+async def test_engine_pump_dose_calculates_target_ml_from_target_g() -> None:
+    orch, gw = _make()
+    orch._recipe_id = "planta_1_deox"
+    recipe = RECIPES["planta_1_deox"]
+    phase = next(p for p in recipe.phases if p.phase_id == "p1_dose")
+    await orch._issue_phase_commands(phase, requested_by="operator:test", params_override={"target_g": 55.0, "density_g_per_ml": 1.10})
+    calls = [c for c in gw.commands.calls if c.get("role") == "pump" and c.get("action") == "dose"]
+    assert len(calls) == 1
+    target = calls[0]["target"]
+    assert target["target_ml"] == 50.0
+    assert target["dose_ml"] == 50.0
+    assert target["target_g"] == 55.0

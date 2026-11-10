@@ -113,21 +113,22 @@ _PLANTA_1_DEOX = Recipe(
             title="Dosificación Na₂SO₃ (Bomba Peristáltica)",
             desc=(
                 "<strong>Reacción química:</strong> 2 Na₂SO₃ + O₂ → 2 Na₂SO₄ (7.878 mg Na₂SO₃ "
-                "por mg O₂). El volumen de solución madre (100 g/L) se calcula para llevar el "
-                "estanque al DO piso objetivo."
+                "por mg O₂). El volumen de solución madre (100 g/L, ρ = 1.10 g/mL) se calcula a partir de "
+                "los gramos de sulfito deseados (3.80 g Na₂SO₃ = 38.0 mL) para llevar el estanque al DO piso objetivo."
             ),
             mode="hibrido",
-            condition_text="Volumen dispensado = objetivo (38.0 mL ± 0.2 mL) registrado por encoder",
+            condition_text="Masa dispensada = 3.80 g Na₂SO₃ (38.0 mL ± 0.2 mL) registrado por encoder",
             condition={"kind": "dose_complete", "target_ml": 38.0, "tol_ml": 0.2},
             # No timeout: this phase waits for the operator. `None` is deliberate -- a number
             # here would look like a guarantee the engine no longer honours.
             timeout_s=None,
-            commands=(("pump", "dose", {"target_ml": 38.0}),),
-            # 38.0 mL, not the 12.5 mL this carried before. The dose has to satisfy the *next*
+            commands=(("pump", "dose", {"target_ml": 38.0, "sulfite_g": 3.80}),),
+            # 38.0 mL (3.80 g Na2SO3 puro), not the 12.5 mL this carried before. The dose has to satisfy the *next*
             # phase, which waits for `DO < 3.0` (p1_deox, do_floor_mg_l 3.0), and the arithmetic
             # never worked:
             #
-            #   stock 100 g/L -> 100 mg Na2SO3 per mL
+            #   stock 100 g/L -> 100 mg Na2SO3 per mL (0.100 g/mL)
+            #   solución: 1000 mL agua + 100 g sulfito, densidad ρ = 1.10 g/mL
             #   2 Na2SO3 + O2 -> 2 Na2SO4, so 7.878 mg Na2SO3 per mg O2
             #   active volume 87.5 L
             #   => 1 mL removes 100 / 87.5 / 7.878 = 0.1450 mg/L
@@ -149,7 +150,7 @@ _PLANTA_1_DEOX = Recipe(
             # tank. Both ends keep a usable margin, which a value chosen for one starting
             # point cannot. Sized this way because undershooting makes the phase unreachable
             # -- which is what silently happened -- while overshooting only wastes reagent.
-            params={"dose_ml": 38.0, "stock_conc_gpl": 100},
+            params={"sulfite_g": 3.80, "dose_ml": 38.0, "stock_conc_gpl": 100, "density_g_per_ml": 1.10},
         ),
         Phase(
             phase_id="p1_deox",
@@ -400,14 +401,14 @@ _PLANTA_COMBINADA_D = Recipe(
             title="Dosificación Na₂SO₃ (Desoxigenación)",
             desc=(
                 "<strong>Etapa 2 (de Protocolo A):</strong> Inyección estequiométrica con bomba peristáltica "
-                "para consumir el oxígeno disuelto en el estanque."
+                "para consumir el oxígeno disuelto en el estanque a partir de los gramos de sulfito deseados."
             ),
             mode="hibrido",
-            condition_text="Volumen dispensado = objetivo (38.0 mL ± 0.2 mL)",
+            condition_text="Masa dispensada = 3.80 g Na₂SO₃ (38.0 mL ± 0.2 mL)",
             condition={"kind": "dose_complete", "target_ml": 38.0, "tol_ml": 0.2},
             timeout_s=None,
-            commands=(("pump", "dose", {"target_ml": 38.0}),),
-            params={"dose_ml": 38.0, "stock_conc_gpl": 100, "mix_during_dose": True},
+            commands=(("pump", "dose", {"target_ml": 38.0, "sulfite_g": 3.80}),),
+            params={"sulfite_g": 3.80, "dose_ml": 38.0, "stock_conc_gpl": 100, "density_g_per_ml": 1.10, "mix_during_dose": True},
         ),
         Phase(
             phase_id="pd_deox",

@@ -445,6 +445,7 @@ namespace pump_fields {
 constexpr const char* kDosedMl = "pump_dosed_ml";
 constexpr const char* kTargetMl = "pump_target_ml";
 constexpr const char* kRpm = "pump_rpm";
+constexpr const char* kFlowMlMin = "pump_flow_ml_min";
 constexpr const char* kMode = "pump_mode";
 constexpr const char* kDoseCompleted = "pump_dose_completed";
 constexpr const char* kDoseTimedOut = "pump_dose_timed_out";

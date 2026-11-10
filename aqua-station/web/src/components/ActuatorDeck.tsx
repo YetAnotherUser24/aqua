@@ -164,7 +164,8 @@ export function ActuatorDeck({
 }) {
   const [rpm, setRpm] = useState(210);
   const [mixerRpm, setMixerRpm] = useState(1000);
-  const [doseMl, setDoseMl] = useState(5.0);
+  const [doseUnit, setDoseUnit] = useState<'sulfite_g' | 'solution_g' | 'ml'>('sulfite_g');
+  const [doseAmount, setDoseAmount] = useState(3.8); // 3.80 g Na2SO3 = 38.0 mL
   const [busy, setBusy] = useState(false);
 
   // Lazo cerrado OD manual
@@ -811,36 +812,131 @@ export function ActuatorDeck({
             </span>
           }
         >
-          <div className="flex justify-between text-[11px] font-mono text-slate-400">
-            <span>
-              Volumen dosificado:{' '}
-              <strong className="text-slate-200">{formatNumber(dosed.value, 2)} mL</strong>
-            </span>
-          </div>
-          <div className="flex gap-2 items-end">
-            <div className="flex-1">
-              <label className="text-[10px] text-slate-400 font-mono block mb-1">
-                Volumen a Inyectar (mL):
-              </label>
-              <input
-                type="number"
-                min={0.5}
-                max={200}
-                step={0.5}
-                value={doseMl}
-                onChange={(e) => setDoseMl(Number(e.target.value))}
-                className="w-full bg-scada-elevated text-slate-100 text-xs border border-scada-border rounded-lg p-2 font-mono focus:outline-none focus:border-telemetry-pump"
-              />
-            </div>
-            <button
-              type="button"
-              disabled={busy}
-              onClick={() => run('pump', 'dose', { target_ml: doseMl })}
-              className="py-2 px-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-bold text-xs flex items-center gap-1 transition disabled:opacity-50"
-            >
-              <Play className="w-3.5 h-3.5 fill-white" /> Dosificar
-            </button>
-          </div>
+          {(() => {
+            const DENSITY = 1.10; // g/mL solución
+            const STOCK_CONC = 100.0; // g/L = 0.100 g Na2SO3 / mL
+            const computedMl = doseUnit === 'sulfite_g'
+              ? (doseAmount > 0 ? doseAmount / (STOCK_CONC / 1000) : 0)
+              : doseUnit === 'solution_g'
+              ? (doseAmount > 0 ? doseAmount / DENSITY : 0)
+              : (doseAmount > 0 ? doseAmount : 0);
+            const computedSulfiteG = computedMl * (STOCK_CONC / 1000);
+            const computedSolG = computedMl * DENSITY;
+
+            return (
+              <>
+                <div className="flex justify-between text-[11px] font-mono text-slate-400">
+                  <span>
+                    Volumen dosificado:{' '}
+                    <strong className="text-slate-200">{formatNumber(dosed.value, 2)} mL</strong>
+                  </span>
+                  <span className="text-[10px] text-slate-500">
+                    ρ = 1.10 g/mL • 100 g/L
+                  </span>
+                </div>
+
+                <div className="flex items-center gap-1 bg-scada-surface/60 p-1 rounded-md border border-scada-border text-[10px] font-mono">
+                  <span className="text-slate-400 px-1">Modo:</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (doseUnit !== 'sulfite_g') {
+                        setDoseUnit('sulfite_g');
+                        setDoseAmount(Number(computedSulfiteG.toFixed(2)));
+                      }
+                    }}
+                    className={cn(
+                      'px-2 py-0.5 rounded transition',
+                      doseUnit === 'sulfite_g'
+                        ? 'bg-purple-600 text-white font-bold shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-scada-elevated'
+                    )}
+                  >
+                    g Na₂SO₃ (Puro)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (doseUnit !== 'solution_g') {
+                        setDoseUnit('solution_g');
+                        setDoseAmount(Number(computedSolG.toFixed(2)));
+                      }
+                    }}
+                    className={cn(
+                      'px-2 py-0.5 rounded transition',
+                      doseUnit === 'solution_g'
+                        ? 'bg-purple-600 text-white font-bold shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-scada-elevated'
+                    )}
+                  >
+                    g Solución (Masa)
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (doseUnit !== 'ml') {
+                        setDoseUnit('ml');
+                        setDoseAmount(Number(computedMl.toFixed(2)));
+                      }
+                    }}
+                    className={cn(
+                      'px-2 py-0.5 rounded transition',
+                      doseUnit === 'ml'
+                        ? 'bg-purple-600 text-white font-bold shadow-sm'
+                        : 'text-slate-400 hover:text-slate-200 hover:bg-scada-elevated'
+                    )}
+                  >
+                    mL (Volumen)
+                  </button>
+                </div>
+
+                <div className="flex gap-2 items-end">
+                  <div className="flex-1">
+                    <label className="text-[10px] text-slate-400 font-mono block mb-1">
+                      {doseUnit === 'sulfite_g'
+                        ? 'Gramos de Na₂SO₃ puro deseados (g):'
+                        : doseUnit === 'solution_g'
+                        ? 'Gramos de solución totales (g):'
+                        : 'Volumen a inyectar (mL):'}
+                    </label>
+                    <input
+                      type="number"
+                      min={0.05}
+                      max={doseUnit === 'sulfite_g' ? 25 : doseUnit === 'solution_g' ? 250 : 200}
+                      step={doseUnit === 'sulfite_g' ? 0.05 : 0.5}
+                      value={doseAmount}
+                      onChange={(e) => setDoseAmount(Number(e.target.value))}
+                      className="w-full bg-scada-elevated text-slate-100 text-xs border border-scada-border rounded-lg p-2 font-mono focus:outline-none focus:border-telemetry-pump"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    disabled={busy || computedMl <= 0}
+                    onClick={() =>
+                      run('pump', 'dose', {
+                        target_ml: Number(computedMl.toFixed(2)),
+                        dose_ml: Number(computedMl.toFixed(2)),
+                        sulfite_g: Number(computedSulfiteG.toFixed(2)),
+                        target_g: Number(computedSolG.toFixed(2)),
+                      })
+                    }
+                    className="py-2 px-3 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-bold text-xs flex items-center gap-1 transition disabled:opacity-50"
+                  >
+                    <Play className="w-3.5 h-3.5 fill-white" /> Dosificar
+                  </button>
+                </div>
+
+                <div className="text-[10px] font-mono text-purple-300 bg-purple-950/40 border border-purple-900/60 rounded px-2 py-1 flex justify-between">
+                  <span>Equivalencia:</span>
+                  <span>
+                    <strong>{computedSulfiteG.toFixed(2)} g Na₂SO₃</strong> ↔{' '}
+                    <strong>{computedSolG.toFixed(2)} g sol.</strong> ↔{' '}
+                    <strong>{computedMl.toFixed(2)} mL</strong>
+                  </span>
+                </div>
+              </>
+            );
+          })()}
           <div className="flex flex-col gap-1.5 pt-2 border-t border-scada-border">
             <div className="flex justify-between items-center text-[10px] text-slate-400">
               <span>Gestión de línea:</span>
