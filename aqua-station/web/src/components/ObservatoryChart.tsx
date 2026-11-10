@@ -310,9 +310,10 @@ export function ObservatoryChart({
     }
 
     // 3. Rate of change of Dissolved Oxygen d[DO]/dt (mg/L/min):
-    // Calculated via sliding-window linear regression (OLS) on probe readings
-    // to provide an instantaneous mass-transfer / deoxygenation slope.
-    const WINDOW_MS = range === '10m' ? 30_000 : range === '1h' ? 60_000 : 120_000;
+    // Calculated via Weighted Least Squares (WLS) with a Hann taper window on probe readings.
+    // The smooth Hann window eliminates the 30s boxcar boundary jumps (ringing artifacts)
+    // as samples enter and leave the sliding window.
+    const WINDOW_MS = range === '10m' ? 35_000 : range === '1h' ? 60_000 : 120_000;
     let winStart = 0;
     for (let i = 0; i < sorted.length; i++) {
       const curMs = sorted[i].ms;
@@ -331,22 +332,26 @@ export function ObservatoryChart({
       const n = pts.length;
       if (n >= 3) {
         const t0 = pts[0].ms / 1000;
-        let sumT = 0;
-        let sumY = 0;
-        let sumT2 = 0;
-        let sumTY = 0;
+        let sumW = 0;
+        let sumWT = 0;
+        let sumWY = 0;
+        let sumWT2 = 0;
+        let sumWTY = 0;
         for (let k = 0; k < pts.length; k++) {
           const pt = pts[k];
+          const u = Math.max(0, Math.min(1, (pt.ms - minWindowMs) / WINDOW_MS));
+          const w = 0.5 * (1.0 - Math.cos(2.0 * Math.PI * u));
           const t = pt.ms / 1000 - t0;
           const y = pt.val;
-          sumT += t;
-          sumY += y;
-          sumT2 += t * t;
-          sumTY += t * y;
+          sumW += w;
+          sumWT += w * t;
+          sumWY += w * y;
+          sumWT2 += w * t * t;
+          sumWTY += w * t * y;
         }
-        const denom = n * sumT2 - sumT * sumT;
+        const denom = sumW * sumWT2 - sumWT * sumWT;
         if (denom > 1e-6) {
-          const slopePerSec = (n * sumTY - sumT * sumY) / denom;
+          const slopePerSec = (sumW * sumWTY - sumWT * sumWY) / denom;
           sorted[i].dDoDt = Math.round(slopePerSec * 60 * 1000) / 1000;
         } else {
           sorted[i].dDoDt = null;

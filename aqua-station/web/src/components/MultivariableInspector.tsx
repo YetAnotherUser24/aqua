@@ -247,10 +247,10 @@ export function MultivariableInspector({ registry }: { registry: Registry | null
         }
       }
     }
-    // Compute d[DO]/dt derivative (rate of change in mg/L/min) via sliding-window linear regression
+    // Compute d[DO]/dt derivative (rate of change in mg/L/min) via Weighted Least Squares (Hann WLS)
     if (active.has('dDoDt')) {
       const doRows = merged.filter((r) => typeof r.do === 'number' && Number.isFinite(r.do));
-      const WINDOW_MS = 30_000; // 30-second window gives smooth rate per minute
+      const WINDOW_MS = 35_000; // 35-second smooth Hann window eliminates edge jumping artifacts
       let winStart = 0;
       for (let i = 0; i < merged.length; i++) {
         const curMs = merged[i].ms;
@@ -265,22 +265,26 @@ export function MultivariableInspector({ registry }: { registry: Registry | null
         const n = winEnd - winStart;
         if (n >= 3) {
           const t0 = doRows[winStart].ms / 1000;
-          let sumT = 0;
-          let sumY = 0;
-          let sumT2 = 0;
-          let sumTY = 0;
+          let sumW = 0;
+          let sumWT = 0;
+          let sumWY = 0;
+          let sumWT2 = 0;
+          let sumWTY = 0;
           for (let k = winStart; k < winEnd; k++) {
             const pt = doRows[k];
+            const u = Math.max(0, Math.min(1, (pt.ms - minMs) / WINDOW_MS));
+            const w = 0.5 * (1.0 - Math.cos(2.0 * Math.PI * u));
             const t = pt.ms / 1000 - t0;
             const y = pt.do as number;
-            sumT += t;
-            sumY += y;
-            sumT2 += t * t;
-            sumTY += t * y;
+            sumW += w;
+            sumWT += w * t;
+            sumWY += w * y;
+            sumWT2 += w * t * t;
+            sumWTY += w * t * y;
           }
-          const denom = n * sumT2 - sumT * sumT;
+          const denom = sumW * sumWT2 - sumWT * sumWT;
           if (denom > 1e-6) {
-            const slopePerSec = (n * sumTY - sumT * sumY) / denom;
+            const slopePerSec = (sumW * sumWTY - sumWT * sumWY) / denom;
             const ratePerMin = slopePerSec * 60;
             merged[i].dDoDt = Math.round(ratePerMin * 1000) / 1000;
           } else {
