@@ -827,11 +827,20 @@ class Orchestrator:
         mode = self._mode_overrides.get(phase.phase_id, phase.mode)
         ctx = self._context()
 
+        cond = dict(phase.condition)
+        if cond.get("kind") == "dose_complete":
+            effective = {**phase.params, **self._param_overrides.get(phase.phase_id, {})}
+            conc = float(effective.get("stock_conc_gpl", 100.0))
+            if "sulfite_g" in effective:
+                cond["target_ml"] = round(float(effective["sulfite_g"]) / (conc / 1000.0), 2)
+            elif "dose_ml" in effective:
+                cond["target_ml"] = float(effective["dose_ml"])
+
         # A supervised phase (`manual`/`hibrido`) may declare no timeout: the operator is the
         # clock, so there is nothing to run out. `auto` always declares one (enforced by
         # `validate_recipes`), so a mode that advances without a human is always bounded.
         timed_out = phase.timeout_s is not None and ctx.now_s - ctx.phase_entered_s >= phase.timeout_s
-        satisfied = timed_out or evaluate(phase.condition, ctx)
+        satisfied = timed_out or evaluate(cond, ctx)
 
         if not satisfied:
             return
@@ -895,6 +904,14 @@ class Orchestrator:
                 status = "awaiting_confirm" if self._awaiting_confirm == phase.phase_id else "active"
             else:
                 status = "pending"
+            cond_text = phase.condition_text
+            effective_params = {**phase.params, **self._param_overrides.get(phase.phase_id, {})}
+            if phase.phase_id in ("p1_dose", "pd_dose") and "sulfite_g" in effective_params:
+                sg = float(effective_params["sulfite_g"])
+                conc = float(effective_params.get("stock_conc_gpl", 100.0))
+                v_ml = round(sg / (conc / 1000.0), 1)
+                cond_text = f"Masa dispensada = {sg:.2f} g Na₂SO₃ ({v_ml:.1f} mL ± 0.2 mL) registrado por encoder"
+
             views.append(
                 {
                     "phase_id": phase.phase_id,
@@ -903,8 +920,8 @@ class Orchestrator:
                     "desc": phase.desc,
                     "mode": self._mode_overrides.get(phase.phase_id, phase.mode),
                     "status": status,
-                    "condition_text": phase.condition_text,
-                    "params": {**phase.params, **self._param_overrides.get(phase.phase_id, {})},
+                    "condition_text": cond_text,
+                    "params": effective_params,
                     "timeout_s": phase.timeout_s,
                 }
             )

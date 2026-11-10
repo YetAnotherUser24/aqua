@@ -249,6 +249,25 @@ export function PhaseForm({
     );
   }
 
+  const handleNumberChange = (key: string, val: number) => {
+    onParam(key, val);
+    if (phaseId === 'p1_dose' || phaseId === 'pd_dose') {
+      const conc = Number(params['stock_conc_gpl']) || 100;
+      if (key === 'sulfite_g') {
+        const newMl = Number((val / (conc / 1000)).toFixed(1));
+        onParam('dose_ml', newMl);
+      } else if (key === 'dose_ml') {
+        const newG = Number((val * (conc / 1000)).toFixed(2));
+        onParam('sulfite_g', newG);
+      } else if (key === 'stock_conc_gpl' && val > 0) {
+        const g = Number(params['sulfite_g']);
+        if (g > 0) {
+          onParam('dose_ml', Number((g / (val / 1000)).toFixed(1)));
+        }
+      }
+    }
+  };
+
   return (
     <div className="space-y-2 text-[11px]">
       {spec.map((control, i) => {
@@ -279,7 +298,7 @@ export function PhaseForm({
                       min={control.min}
                       max={control.max}
                       step={control.step ?? 'any'}
-                      onChange={(e) => onParam(control.key, Number(e.target.value))}
+                      onChange={(e) => handleNumberChange(control.key, Number(e.target.value))}
                       className={numberInputClass}
                     />
                     {control.unit ? (
@@ -346,6 +365,21 @@ export function PhaseForm({
             return null;
         }
       })}
+
+      {(phaseId === 'p1_dose' || phaseId === 'pd_dose') && (
+        <div className="mt-2.5 p-2 rounded bg-purple-950/40 border border-purple-900/60 text-[10px] font-mono text-purple-300 flex justify-between items-center">
+          <span className="text-slate-400">Equivalencia automática:</span>
+          <span>
+            <strong>{(Number(params['sulfite_g']) || 0).toFixed(2)} g Na₂SO₃</strong>
+            <span className="text-slate-500 mx-1">↔</span>
+            <strong>{(Number(params['dose_ml']) || 0).toFixed(1)} mL</strong>
+            <span className="text-slate-500 mx-1">↔</span>
+            <strong className="text-purple-200">
+              {((Number(params['dose_ml']) || 0) * (Number(params['density_g_per_ml']) || 1.10)).toFixed(2)} g sol.
+            </strong>
+          </span>
+        </div>
+      )}
     </div>
   );
 }

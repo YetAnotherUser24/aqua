@@ -205,7 +205,15 @@ function PhaseCard({
               Condición para salir de esta fase:
             </div>
             <div className="text-[11px] text-slate-300 font-mono bg-scada-well rounded px-2.5 py-1.5 border border-scada-border">
-              {phase.condition_text}
+              {(() => {
+                if (phase.phase_id === 'p1_dose' || phase.phase_id === 'pd_dose') {
+                  const sG = Number(phase.params?.sulfite_g) || 3.80;
+                  const conc = Number(phase.params?.stock_conc_gpl) || 100;
+                  const dMl = Number(phase.params?.dose_ml) || (sG / (conc / 1000));
+                  return `Masa dispensada = ${sG.toFixed(2)} g Na₂SO₃ (${dMl.toFixed(1)} mL ± 0.2 mL) registrado por encoder`;
+                }
+                return phase.condition_text;
+              })()}
               <span className="text-slate-500">
                 {/* A null timeout is a supervised phase waiting for its operator, not a
                     missing value, so it reads as a statement rather than "nulls". */}
