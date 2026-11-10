@@ -310,28 +310,29 @@ export function ObservatoryChart({
     }
 
     // 3. Rate of change of Dissolved Oxygen d[DO]/dt (mg/L/min):
-    // Calculated via Weighted Least Squares (WLS) with a Hann taper window on probe readings.
-    // The smooth Hann window eliminates the 30s boxcar boundary jumps (ringing artifacts)
-    // as samples enter and leave the sliding window.
-    const WINDOW_MS = range === '10m' ? 35_000 : range === '1h' ? 60_000 : 120_000;
+    // Calculated via Gaussian Kernel Local Regression (C-infinity smooth).
+    // Eliminates all boundary and discrete sampling bumps, producing a smooth, continuous
+    // derivative that visually matches the continuous Dissolved Oxygen trajectory.
+    const SIGMA_S = range === '10m' ? 25 : range === '1h' ? 45 : 90;
+    const CUTOFF_MS = 3 * SIGMA_S * 1000;
+
     let winStart = 0;
     for (let i = 0; i < sorted.length; i++) {
       const curMs = sorted[i].ms;
-      const minWindowMs = curMs - WINDOW_MS;
-      while (winStart < parsedDo.length && parsedDo[winStart].ms < minWindowMs) {
+      const curS = curMs / 1000;
+      const minMs = curMs - CUTOFF_MS;
+      const maxMs = curMs + CUTOFF_MS;
+
+      while (winStart < parsedDo.length && parsedDo[winStart].ms < minMs) {
         winStart++;
       }
       let winEnd = winStart;
-      while (winEnd < parsedDo.length && parsedDo[winEnd].ms <= curMs) {
+      while (winEnd < parsedDo.length && parsedDo[winEnd].ms <= maxMs) {
         winEnd++;
       }
-      let pts = parsedDo.slice(winStart, winEnd);
-      if (pts.length < 3 && parsedDo.length >= 3 && curMs - parsedDo[0].ms < WINDOW_MS) {
-        pts = parsedDo.slice(0, Math.min(6, parsedDo.length));
-      }
-      const n = pts.length;
-      if (n >= 3) {
-        const t0 = pts[0].ms / 1000;
+
+      const pts = parsedDo.slice(winStart, winEnd);
+      if (pts.length >= 3) {
         let sumW = 0;
         let sumWT = 0;
         let sumWY = 0;
@@ -339,15 +340,14 @@ export function ObservatoryChart({
         let sumWTY = 0;
         for (let k = 0; k < pts.length; k++) {
           const pt = pts[k];
-          const u = Math.max(0, Math.min(1, (pt.ms - minWindowMs) / WINDOW_MS));
-          const w = 0.5 * (1.0 - Math.cos(2.0 * Math.PI * u));
-          const t = pt.ms / 1000 - t0;
+          const dt = pt.ms / 1000 - curS;
+          const w = Math.exp(-0.5 * (dt / SIGMA_S) * (dt / SIGMA_S));
           const y = pt.val;
           sumW += w;
-          sumWT += w * t;
+          sumWT += w * dt;
           sumWY += w * y;
-          sumWT2 += w * t * t;
-          sumWTY += w * t * y;
+          sumWT2 += w * dt * dt;
+          sumWTY += w * dt * y;
         }
         const denom = sumW * sumWT2 - sumWT * sumWT;
         if (denom > 1e-6) {

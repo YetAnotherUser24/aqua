@@ -247,40 +247,41 @@ export function MultivariableInspector({ registry }: { registry: Registry | null
         }
       }
     }
-    // Compute d[DO]/dt derivative (rate of change in mg/L/min) via Weighted Least Squares (Hann WLS)
+    // Compute d[DO]/dt derivative (rate of change in mg/L/min) via Gaussian Kernel Local Regression (C-infinity smooth)
     if (active.has('dDoDt')) {
       const doRows = merged.filter((r) => typeof r.do === 'number' && Number.isFinite(r.do));
-      const WINDOW_MS = 35_000; // 35-second smooth Hann window eliminates edge jumping artifacts
+      const SIGMA_S = 25;
+      const CUTOFF_MS = 3 * SIGMA_S * 1000;
       let winStart = 0;
       for (let i = 0; i < merged.length; i++) {
         const curMs = merged[i].ms;
-        const minMs = curMs - WINDOW_MS;
+        const curS = curMs / 1000;
+        const minMs = curMs - CUTOFF_MS;
+        const maxMs = curMs + CUTOFF_MS;
         while (winStart < doRows.length && doRows[winStart].ms < minMs) {
           winStart++;
         }
         let winEnd = winStart;
-        while (winEnd < doRows.length && doRows[winEnd].ms <= curMs) {
+        while (winEnd < doRows.length && doRows[winEnd].ms <= maxMs) {
           winEnd++;
         }
-        const n = winEnd - winStart;
-        if (n >= 3) {
-          const t0 = doRows[winStart].ms / 1000;
+        const pts = doRows.slice(winStart, winEnd);
+        if (pts.length >= 3) {
           let sumW = 0;
           let sumWT = 0;
           let sumWY = 0;
           let sumWT2 = 0;
           let sumWTY = 0;
-          for (let k = winStart; k < winEnd; k++) {
-            const pt = doRows[k];
-            const u = Math.max(0, Math.min(1, (pt.ms - minMs) / WINDOW_MS));
-            const w = 0.5 * (1.0 - Math.cos(2.0 * Math.PI * u));
-            const t = pt.ms / 1000 - t0;
+          for (let k = 0; k < pts.length; k++) {
+            const pt = pts[k];
+            const dt = pt.ms / 1000 - curS;
+            const w = Math.exp(-0.5 * (dt / SIGMA_S) * (dt / SIGMA_S));
             const y = pt.do as number;
             sumW += w;
-            sumWT += w * t;
+            sumWT += w * dt;
             sumWY += w * y;
-            sumWT2 += w * t * t;
-            sumWTY += w * t * y;
+            sumWT2 += w * dt * dt;
+            sumWTY += w * dt * y;
           }
           const denom = sumW * sumWT2 - sumWT * sumWT;
           if (denom > 1e-6) {
