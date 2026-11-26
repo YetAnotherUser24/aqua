@@ -113,7 +113,8 @@ def _do_stable(cond: Mapping[str, Any], ctx: PhaseContext) -> bool:
     window_s = float(cond.get("window_s", 30))
     window_ms = int(window_s * 1000)
     recent = [p for p in ctx.do_history if p[0] >= ctx.do_history[-1][0] - window_ms] if ctx.do_history else []
-    if not recent or recent[-1][0] - recent[0][0] < window_ms:
+    # Allow 85% of window_ms to account for discrete sampling interval jitter (e.g. 5s sampling)
+    if not recent or (recent[-1][0] - recent[0][0]) < (window_ms * 0.85):
         # Not enough history yet: cannot claim stability, so do not.
         return False
     rate = least_squares_rate_per_min(recent)
@@ -131,10 +132,40 @@ def _do_below_and_stable(cond: Mapping[str, Any], ctx: PhaseContext) -> bool:
     window_s = float(cond.get("window_s", 60))
     window_ms = int(window_s * 1000)
     recent = [p for p in ctx.do_history if p[0] >= ctx.do_history[-1][0] - window_ms] if ctx.do_history else []
-    if len(recent) < 2 or recent[-1][0] - recent[0][0] < window_ms:
+    # Allow 85% of window_ms to account for discrete sampling interval jitter (e.g. 5s sampling)
+    if len(recent) < 2 or (recent[-1][0] - recent[0][0]) < (window_ms * 0.85):
         return False
 
     # Option B: Stability tube (peak-to-peak amplitude check over the full window)
+    if "max_delta_mg_l" in cond:
+        values = [p[1] for p in recent]
+        if (max(values) - min(values)) > float(cond["max_delta_mg_l"]):
+            return False
+
+    if "eps_mg_l_per_min" in cond:
+        rate = least_squares_rate_per_min(recent)
+        if rate is None or abs(rate) >= float(cond["eps_mg_l_per_min"]):
+            return False
+
+    return True
+
+
+def _do_above_and_stable(cond: Mapping[str, Any], ctx: PhaseContext) -> bool:
+    """
+    Oxygen reached saturation plateau: DO >= above_mg_l and trend is flat.
+    """
+    if ctx.now_s - ctx.phase_entered_s < float(cond.get("min_elapsed_s", 0)):
+        return False
+    val = ctx.value("od_sensor", "od_do_mg_l")
+    if val is None or val < float(cond.get("above_mg_l", 0.0)):
+        return False
+    window_s = float(cond.get("window_s", 60))
+    window_ms = int(window_s * 1000)
+    recent = [p for p in ctx.do_history if p[0] >= ctx.do_history[-1][0] - window_ms] if ctx.do_history else []
+    # Allow 85% of window_ms to account for discrete sampling interval jitter (e.g. 5s sampling)
+    if len(recent) < 2 or (recent[-1][0] - recent[0][0]) < (window_ms * 0.85):
+        return False
+
     if "max_delta_mg_l" in cond:
         values = [p[1] for p in recent]
         if (max(values) - min(values)) > float(cond["max_delta_mg_l"]):
@@ -168,6 +199,60 @@ def _setpoint_reached(cond: Mapping[str, Any], ctx: PhaseContext) -> bool:
     return abs(measured - float(cond["target"])) <= float(cond.get("tol", 1.0))
 
 
+def _sulfite_exhausted_post_hold(cond: Mapping[str, Any], ctx: PhaseContext) -> bool:
+    """
+    Certifies that post-aeration hold verifies zero residual sulfite:
+    1. Holds for at least min_elapsed_s (default 60 s).
+    2. DO level is at or above min_do_mg_l (default 0.60 mg/L).
+    3. Peak-to-peak amplitude in the window is <= max_delta_mg_l (default 0.04 mg/L).
+    4. Slope is not falling chemically: rate >= min_slope_mg_l_per_min (default -0.02 mg/L/min).
+    """
+    # 0. Rest hold & pulse safety: do NOT certify exhaustion if aerator is running
+    # or if an adaptive pulse ended too recently (< rest_cooldown_s).
+    if bool(cond.get("require_rest_motor", True)):
+        aerator_rpm = ctx.value("aerator", "drv_rpm")
+        if aerator_rpm is not None and aerator_rpm > float(cond.get("max_rest_rpm", 5.0)):
+            return False
+
+    rest_cooldown_s = float(cond.get("rest_cooldown_s", 60.0))
+    last_pulse_end_s = cond.get("last_pulse_end_s")
+    if last_pulse_end_s is not None:
+        if (ctx.now_s - float(last_pulse_end_s)) < rest_cooldown_s:
+            return False
+
+    min_elapsed = float(cond.get("min_elapsed_s", 60))
+    if ctx.now_s - ctx.phase_entered_s < min_elapsed:
+        return False
+
+    current_do = ctx.value("od_sensor", "od_do_mg_l")
+    if current_do is None and ctx.do_history:
+        current_do = ctx.do_history[-1][1]
+    min_do = float(cond.get("min_do_mg_l", 0.60))
+    if current_do is None or current_do < min_do:
+        return False
+
+    window_s = float(cond.get("window_s", 60))
+    window_ms = int(window_s * 1000)
+    recent = [p for p in ctx.do_history if p[0] >= ctx.do_history[-1][0] - window_ms] if ctx.do_history else []
+    # Allow 85% of window_ms to account for discrete sampling interval jitter (e.g. 5s sampling)
+    if len(recent) < 2 or (recent[-1][0] - recent[0][0]) < (window_ms * 0.85):
+        return False
+
+    # Stability tube: max - min <= max_delta_mg_l
+    max_delta = float(cond.get("max_delta_mg_l", 0.04))
+    values = [p[1] for p in recent]
+    if (max(values) - min(values)) > max_delta:
+        return False
+
+    # Slope check: verify signal is not chemically falling
+    rate = least_squares_rate_per_min(recent)
+    min_slope = float(cond.get("min_slope_mg_l_per_min", -0.02))
+    if rate is None or rate < min_slope:
+        return False
+
+    return True
+
+
 _HANDLERS = {
     "elapsed": _elapsed,
     "do_below": _do_below,
@@ -176,4 +261,6 @@ _HANDLERS = {
     "do_below_and_stable": _do_below_and_stable,
     "dose_complete": _dose_complete,
     "setpoint_reached": _setpoint_reached,
+    "sulfite_exhausted_post_hold": _sulfite_exhausted_post_hold,
+    "do_above_and_stable": _do_above_and_stable,
 }

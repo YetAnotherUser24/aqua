@@ -213,15 +213,41 @@ function PhaseCard({
             </div>
             <div className="text-[11px] text-slate-300 font-mono bg-scada-well rounded px-2.5 py-1.5 border border-scada-border">
               {(() => {
-                if (phase.phase_id === 'p1_dose' || phase.phase_id === 'pd_dose') {
-                  const sG = Number(phase.params?.sulfite_g) || 3.80;
+                if (
+                  phase.phase_id === 'p1_dose' ||
+                  phase.phase_id === 'pd_dose' ||
+                  phase.phase_id === 'abk_dose' ||
+                  phase.phase_id === 'abc_dose' ||
+                  phase.params?.sulfite_g !== undefined
+                ) {
+                  const sG = Number(phase.params?.sulfite_g) || 8.00;
                   const conc = Number(phase.params?.stock_conc_gpl) || 100;
                   const dMl = Number(phase.params?.dose_ml) || (sG / (conc / 1000));
                   return `Masa dispensada = ${sG.toFixed(2)} g Na₂SO₃ (${dMl.toFixed(1)} mL ± 0.2 mL) registrado por encoder`;
                 }
-                if (phase.phase_id === 'p1_deox' || phase.phase_id === 'pd_deox') {
-                  const floor = Number(phase.params?.do_floor_mg_l) ?? 3.0;
-                  return `DO < ${floor.toFixed(1)} mg/L Y derivada en el fondo de respiración Y t > 180 s`;
+                if (
+                  phase.phase_id === 'p1_deox' ||
+                  phase.phase_id === 'pd_deox' ||
+                  phase.phase_id === 'abk_deox' ||
+                  phase.phase_id === 'abc_deox'
+                ) {
+                  const floor = Number(phase.params?.do_floor_mg_l) ?? 0.25;
+                  const delta = Number(phase.params?.max_delta_mg_l) ?? 0.04;
+                  const win = Number(phase.params?.window_s) ?? 60;
+                  return `DO ≤ ${floor.toFixed(2)} mg/L Y estabilizado (ΔDO ≤ ${delta.toFixed(2)} mg/L en ${win} s) durante ≥ 180 s`;
+                }
+                if (phase.phase_id === 'abk_burn' || phase.phase_id === 'abc_burn') {
+                  const stopDo = Number(phase.params?.stop_do_mg_l) || 0.65;
+                  return `DO ≥ ${stopDo.toFixed(2)} mg/L alcanzado tras quemar sulfito residual`;
+                }
+                if (phase.phase_id === 'abk_verify' || phase.phase_id === 'abc_verify') {
+                  const minDo = Number(phase.params?.min_do_mg_l) || 0.60;
+                  const hold = Number(phase.params?.hold_time_s) || 60;
+                  return `DO ≥ ${minDo.toFixed(2)} mg/L sostenido y sin caída química durante ${hold} s`;
+                }
+                if (phase.phase_id === 'abc_arm') {
+                  const targetDo = Number(phase.params?.target_do) || 5.00;
+                  return `Lazo PID armado y configurado hacia SP = ${targetDo.toFixed(2)} mg/L`;
                 }
                 if (phase.params?.stop_do_mg_l !== undefined) {
                   const stopDo = Number(phase.params.stop_do_mg_l);
@@ -232,15 +258,27 @@ function PhaseCard({
                   const settle = Number(phase.params?.settle_time_s) || 60;
                   return `DO inicial < ${maxDo.toFixed(1)} mg/L Y estanque en reposo durante ≥ ${settle} s`;
                 }
-                if (phase.params?.step_rpm !== undefined && (phase.phase_id === 'p2_step' || phase.phase_id === 'pd_step')) {
+                if (
+                  phase.params?.step_rpm !== undefined &&
+                  (phase.phase_id === 'p2_step' || phase.phase_id === 'pd_step' || phase.phase_id === 'abk_step')
+                ) {
                   const rpm = Number(phase.params.step_rpm);
                   return `ODrive alcanza consigna (${rpm} RPM)`;
                 }
-                if (phase.phase_id === 'cl_run' && phase.params?.run_time_s !== undefined) {
+                if (
+                  (phase.phase_id === 'cl_run' || phase.phase_id === 'abc_run') &&
+                  phase.params?.run_time_s !== undefined
+                ) {
                   const rSec = Number(phase.params.run_time_s);
                   return `Tiempo transcurrido ≥ duración fijada (${rSec} s)`;
                 }
-                if ((phase.phase_id === 'p1_prep' || phase.phase_id === 'pd_prep') && phase.params?.warm_time_s !== undefined) {
+                if (
+                  (phase.phase_id === 'p1_prep' ||
+                    phase.phase_id === 'pd_prep' ||
+                    phase.phase_id === 'abk_prep' ||
+                    phase.phase_id === 'abc_prep') &&
+                  phase.params?.warm_time_s !== undefined
+                ) {
                   const warm = Number(phase.params.warm_time_s);
                   return `DO estabilizado (|d[DO]/dt| < 0.05 mg/L/min) tras mezcla ≥ ${warm} s`;
                 }
@@ -250,7 +288,7 @@ function PhaseCard({
                 {(() => {
                   const timeout = phase.params?.safety_timeout_s !== undefined
                     ? Number(phase.params.safety_timeout_s)
-                    : phase.phase_id === 'cl_run' && phase.params?.run_time_s !== undefined
+                    : (phase.phase_id === 'cl_run' || phase.phase_id === 'abc_run') && phase.params?.run_time_s !== undefined
                     ? Number(phase.params.run_time_s)
                     : phase.timeout_s;
                   return timeout === null
@@ -934,12 +972,25 @@ export function RecipeStudio({
     setParamEdits((prev) => {
       const current = prev[phaseId] ?? {};
       const updated = { ...current, ...updates };
-      const nextEdits = {
+      const nextEdits: Record<string, Record<string, unknown>> = {
         ...prev,
         [phaseId]: updated,
       };
+
+      // Keep target_do synchronized between abc_arm and abc_run
+      if (phaseId === 'abc_arm' && 'target_do' in updates) {
+        nextEdits['abc_run'] = { ...(prev['abc_run'] ?? {}), target_do: updates['target_do'] };
+      } else if (phaseId === 'abc_run' && 'target_do' in updates) {
+        nextEdits['abc_arm'] = { ...(prev['abc_arm'] ?? {}), target_do: updates['target_do'] };
+      }
+
       if (activeRecipeId) {
         onSetParams?.(phaseId, updated);
+        if (phaseId === 'abc_arm' && 'target_do' in updates) {
+          onSetParams?.('abc_run', nextEdits['abc_run']);
+        } else if (phaseId === 'abc_run' && 'target_do' in updates) {
+          onSetParams?.('abc_arm', nextEdits['abc_arm']);
+        }
       } else {
         onParamDraftChange?.(nextEdits);
       }

@@ -33,7 +33,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ..events.model import Event, EventType, Scope, Source
-from .conditions import PhaseContext, evaluate
+from .conditions import PhaseContext, evaluate, least_squares_rate_per_min
+from .kla_metrics import compute_kla_metrics
 from .recipes import RECIPES, Phase
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -86,6 +87,22 @@ class Orchestrator:
         #: Recent ``(t_dev_ms, do_mg_l)``, oldest first.
         self._do_history: list[tuple[int, float]] = []
 
+        #: Accumulated samples for control benchmark KPI evaluation during abc_run
+        self._abc_samples: list[dict[str, float]] = []
+        self._last_drv_power_w: float = 0.0
+        self._last_control_kpis: dict[str, Any] | None = None
+
+        #: Samples accumulated during reaeration step (abk_acq, pd_acq, p2_acq) for ASCE 2-22 KLa fit
+        self._kla_samples: list[dict[str, float]] = []
+        self._kla_temps: list[float] = []
+        self._last_kla_metrics: dict[str, Any] | None = None
+
+        #: Adaptive pulse control state during residual sulfite verification (abk_verify, abc_verify)
+        self._pulse_active: bool = False
+        self._pulse_start_s: float | None = None
+        self._last_pulse_end_s: float | None = None
+        self._pulse_trigger_was_low_do: bool = False
+
         #: True while the run is paused. Pause holds the timer and stops phase advancement;
         #: it deliberately does NOT disarm the actuators. Whether a paused run should also
         #: stop the physical loop is a separate decision, and conflating the two would make
@@ -129,6 +146,16 @@ class Orchestrator:
         self._action_pending = None
         self._mode_overrides = {}
         self._param_overrides = {}
+        self._abc_samples = []
+        self._last_drv_power_w = 0.0
+        self._last_control_kpis = None
+        self._kla_samples = []
+        self._kla_temps = []
+        self._last_kla_metrics = None
+        self._pulse_active = False
+        self._pulse_start_s = None
+        self._last_pulse_end_s = None
+        self._pulse_trigger_was_low_do = False
         self._paused = False
         self._paused_accum_s = 0.0
         self._paused_at_s = None
@@ -177,18 +204,47 @@ class Orchestrator:
         """
         Fold one sample into the orchestrator's view.
 
-        Called from the MQTT ingest loop. Kept deliberately minimal — it appends to a
-        bounded DO history and does nothing else — because it runs per sample and the
-        engine's real work happens on its own cadence, not here.
+        Called from the MQTT ingest loop. Keeps the bounded DO history and captures
+        aerator electrical telemetry for benchmark KPI integration.
         """
+        if role == "aerator":
+            p = row.get("drv_power_w")
+            if p is not None:
+                self._last_drv_power_w = float(p)
+            return
+
         if role != "od_sensor":
             return
         value = row.get("od_do_mg_l")
         if value is None:
             return
-        self._do_history.append((t_dev_ms, float(value)))
+        do_f = float(value)
+        self._do_history.append((t_dev_ms, do_f))
         if len(self._do_history) > _DO_HISTORY_MAX:
             del self._do_history[: len(self._do_history) - _DO_HISTORY_MAX]
+
+        # Record control benchmark sample during abc_run
+        phase = self.active_phase
+        if phase and phase.phase_id == "abc_run":
+            now = time.time()
+            t_rel = now - getattr(self, "_phase_entered_s", now)
+            self._abc_samples.append({
+                "t_s": max(0.0, t_rel),
+                "do_mg_l": do_f,
+                "drv_power_w": self._last_drv_power_w,
+            })
+
+        # Record reaeration samples during acquisition phases for ASCE 2-22 KLa fit
+        if phase and phase.phase_id in ("abk_acq", "pd_acq", "p2_acq"):
+            now = time.time()
+            t_rel = now - getattr(self, "_phase_entered_s", now)
+            self._kla_samples.append({
+                "t_s": max(0.0, t_rel),
+                "do_mg_l": do_f,
+            })
+            temp_val = row.get("od_temp_c")
+            if temp_val is not None:
+                self._kla_temps.append(float(temp_val))
 
     # -- state machine -----------------------------------------------------
 
@@ -215,6 +271,8 @@ class Orchestrator:
             "started_at": self._started_at_iso,
             "t_rel_s": self._t_rel_s(),
             "phases": self._phase_views(),
+            "control_kpis": self._last_control_kpis,
+            "kla_metrics": self._last_kla_metrics,
         }
 
     @property
@@ -452,6 +510,14 @@ class Orchestrator:
             self._completed = set()
             self._awaiting_confirm = None
             self._action_pending = None
+            self._abc_samples = []
+            self._last_control_kpis = None
+            self._kla_samples = []
+            self._kla_temps = []
+            self._last_kla_metrics = None
+            self._pulse_active = False
+            self._pulse_start_s = None
+            self._last_pulse_end_s = None
             existing_param_overrides = dict(self._param_overrides)
             self._param_overrides = {}
             for row in phases_status:
@@ -566,25 +632,50 @@ class Orchestrator:
             experiment_id=experiment_id,
             detail={"requested_by": requested_by, "t_rel_s": self._t_rel_s()},
         )
-        asyncio.create_task(self._auto_export_and_upload(experiment_id))
+        asyncio.create_task(
+            self._auto_export_and_upload(
+                experiment_id,
+                kpis=self._last_control_kpis,
+                kla_metrics=self._last_kla_metrics,
+            )
+        )
         self._experiment_id = None
         self._recipe_id = None
         self._phase_index = 0
         self._awaiting_confirm = None
         self._action_pending = None
+        self._pulse_active = False
+        self._pulse_start_s = None
+        self._last_pulse_end_s = None
+        self._pulse_trigger_was_low_do = False
         self._paused = False
         self._paused_accum_s = 0.0
         self._paused_at_s = None
         await self._persist_state(STATE_IDLE)
 
-    async def _auto_export_and_upload(self, experiment_id: str) -> None:
+    async def _auto_export_and_upload(
+        self,
+        experiment_id: str,
+        kpis: dict[str, Any] | None = None,
+        kla_metrics: dict[str, Any] | None = None,
+    ) -> None:
         """
         Build exports and sync them to Cloudflare R2 immediately after experiment completion.
         Runs in background without delaying state transition to IDLE.
         """
         try:
-            # Short grace period for trailing telemetry flushes to settle
+            # Short grace period for trailing telemetry in-flight to arrive
             await asyncio.sleep(4.0)
+
+            # Force an immediate disk flush of all open telemetry buffers so low-cadence
+            # nodes (like od_sensor at 0.2 Hz) have all their final samples written to CSV.
+            if hasattr(self.gateway, "archive") and hasattr(self.gateway.archive, "flush_all"):
+                try:
+                    flushed_count = await self.gateway.archive.flush_all(sync=True)
+                    log.info("auto-export: flushed %d telemetry buffer(s) to disk before export", flushed_count)
+                except Exception as e:
+                    log.warning("auto-export: failed to flush telemetry buffers: %s", e)
+
             log.info("auto-export: building aligned and native bundles for %s", experiment_id)
 
             from ..export.bundle import build_bundle
@@ -605,6 +696,26 @@ class Orchestrator:
                 )
             except Exception as e:
                 log.warning("auto-export: build_bundle failed for %s: %s", experiment_id, e)
+
+            # Control benchmark KPIs export if available
+            if kpis is not None:
+                try:
+                    import json
+                    kpi_path = aligned_dir / "control_kpis.json"
+                    kpi_path.write_text(json.dumps(kpis, indent=2))
+                    log.info("auto-export: saved control_kpis.json for %s", experiment_id)
+                except Exception as e:
+                    log.warning("auto-export: failed to write control_kpis.json: %s", e)
+
+            # KLa reaeration metrics export if available
+            if kla_metrics is not None:
+                try:
+                    import json
+                    kla_path = aligned_dir / "kla_metrics.json"
+                    kla_path.write_text(json.dumps(kla_metrics, indent=2))
+                    log.info("auto-export: saved kla_metrics.json for %s", experiment_id)
+                except Exception as e:
+                    log.warning("auto-export: failed to write kla_metrics.json: %s", e)
 
             # 2. Native rate export
             native_dir = self.gateway.settings.export_root / f"{experiment_id}_native"
@@ -672,6 +783,35 @@ class Orchestrator:
             experiment_id=self._experiment_id,
             detail={"phase_id": phase.phase_id, "num": phase.num, "title": phase.title, "event": "entered"},
         )
+        if phase.phase_id == "abc_run":
+            self._abc_samples = []
+        elif phase.phase_id == "abc_eval":
+            from .control_metrics import compute_control_kpis
+            effective = {**phase.params, **self._param_overrides.get(phase.phase_id, {})}
+            target_sp = float(effective.get("target_do", 5.00))
+            self._last_control_kpis = compute_control_kpis(self._abc_samples, target_sp=target_sp)
+            await self._emit(
+                EventType.EXPERIMENT_PHASE_CHANGE,
+                experiment_id=self._experiment_id,
+                detail={"phase_id": phase.phase_id, "event": "kpis_computed", "kpis": self._last_control_kpis},
+            )
+        elif phase.phase_id in ("abk_acq", "pd_acq", "p2_acq"):
+            self._kla_samples = []
+            self._kla_temps = []
+        elif phase.phase_id in ("abk_eval", "pd_analysis", "p2_eval"):
+            effective = {**phase.params, **self._param_overrides.get(phase.phase_id, {})}
+            c_star = float(effective.get("kla_c_star", 6.70))
+            avg_temp = (sum(self._kla_temps) / len(self._kla_temps)) if self._kla_temps else 20.0
+            self._last_kla_metrics = compute_kla_metrics(self._kla_samples, c_star=c_star, water_temp_c=avg_temp)
+            await self._emit(
+                EventType.EXPERIMENT_PHASE_CHANGE,
+                experiment_id=self._experiment_id,
+                detail={"phase_id": phase.phase_id, "event": "kla_computed", "kla": self._last_kla_metrics},
+            )
+        elif phase.phase_id in ("abk_verify", "abc_verify"):
+            self._pulse_active = False
+            self._pulse_start_s = None
+            self._last_pulse_end_s = None
         # MANUAL means "control directo": the operator fires each actuator. Issuing the phase's
         # commands on entry is exactly the automatic action the mode forbids, so they are held
         # until the operator asks for them (``trigger_phase_action``). AUTO and HIBRIDO issue
@@ -910,8 +1050,26 @@ class Orchestrator:
             if "warm_time_s" in effective:
                 cond["min_elapsed_s"] = float(effective["warm_time_s"])
         elif kind == "elapsed":
-            if "run_time_s" in effective and phase.phase_id == "cl_run":
+            if "run_time_s" in effective and phase.phase_id in ("cl_run", "abc_run"):
                 cond["seconds"] = float(effective["run_time_s"])
+        elif kind == "sulfite_exhausted_post_hold":
+            if "hold_time_s" in effective:
+                cond["hold_time_s"] = float(effective["hold_time_s"])
+                cond["min_elapsed_s"] = float(effective["hold_time_s"])
+            if "min_do_mg_l" in effective:
+                cond["min_do_mg_l"] = float(effective["min_do_mg_l"])
+            if "max_delta_mg_l" in effective:
+                cond["max_delta_mg_l"] = float(effective["max_delta_mg_l"])
+            if "min_slope_mg_l_per_min" in effective:
+                cond["min_slope_mg_l_per_min"] = float(effective["min_slope_mg_l_per_min"])
+            if "rest_cooldown_s" in effective:
+                cond["rest_cooldown_s"] = float(effective["rest_cooldown_s"])
+            # Pass orchestrator pulse state to condition
+            if self._last_pulse_end_s is not None:
+                cond["last_pulse_end_s"] = self._last_pulse_end_s
+            if self._pulse_active:
+                # If pulse is active right now, require_rest_motor will fail, and we force last_pulse_end_s = now
+                cond["last_pulse_end_s"] = ctx.now_s
 
         # A supervised phase (`manual`/`hibrido`) may declare no timeout: the operator is the
         # clock, so there is nothing to run out. `auto` always declares one (enforced by
@@ -919,10 +1077,153 @@ class Orchestrator:
         effective_timeout = phase.timeout_s
         if "safety_timeout_s" in effective:
             effective_timeout = int(effective["safety_timeout_s"])
-        elif "run_time_s" in effective and phase.phase_id == "cl_run":
+        elif "run_time_s" in effective and phase.phase_id in ("cl_run", "abc_run"):
             effective_timeout = int(effective["run_time_s"])
         timed_out = effective_timeout is not None and ctx.now_s - ctx.phase_entered_s >= effective_timeout
-        satisfied = timed_out or evaluate(cond, ctx)
+        cond_met = evaluate(cond, ctx)
+
+        # Handle timeout policies: abort / pause on critical phase timeout
+        if timed_out and not cond_met:
+            on_timeout = getattr(phase, "on_timeout", "advance")
+            if on_timeout == "abort":
+                log.warning(
+                    "phase %s TIMED OUT after %s s with condition unsatisfied. Aborting experiment.",
+                    phase.phase_id,
+                    effective_timeout,
+                )
+                await self._disarm(experiment_id=self._experiment_id, requested_by="orchestrator")
+                await self._mark_experiment(self._experiment_id, status="aborted", ended=True)
+                await self._emit(
+                    EventType.EXPERIMENT_ABORTED,
+                    experiment_id=self._experiment_id,
+                    detail={
+                        "phase_id": phase.phase_id,
+                        "reason": f"timeout_in_critical_phase_{phase.phase_id}",
+                        "timeout_s": effective_timeout,
+                    },
+                )
+                self._experiment_id = None
+                self._recipe_id = None
+                self._phase_index = 0
+                self._awaiting_confirm = None
+                self._action_pending = None
+                self._pulse_active = False
+                self._paused = False
+                await self._persist_state(STATE_IDLE)
+                return
+            elif on_timeout == "pause":
+                log.warning(
+                    "phase %s TIMED OUT after %s s. Pausing experiment for operator review.",
+                    phase.phase_id,
+                    effective_timeout,
+                )
+                await self.pause(requested_by="orchestrator:timeout")
+                return
+
+        # Adaptive pulse control in residual sulfite verification phases (abk_verify, abc_verify)
+        if phase.phase_id in ("abk_verify", "abc_verify") and not cond_met:
+            pulse_rpm = float(effective.get("pulse_rpm", 100))
+            pulse_trigger_slope = float(effective.get("pulse_trigger_slope", -0.015))
+            pulse_trigger_do = float(effective.get("pulse_trigger_do", 0.45))
+            pulse_brake_do = float(effective.get("pulse_brake_do", 0.60))
+            pulse_tau_lag_s = float(effective.get("pulse_tau_lag_s", 20.0))
+            max_pulse_s = float(effective.get("max_pulse_s", 20))
+
+            current_do = ctx.value("od_sensor", "od_do_mg_l")
+            if current_do is None and ctx.do_history:
+                current_do = ctx.do_history[-1][1]
+
+            # Calculate recent rate
+            recent_rate = None
+            if ctx.do_history:
+                window_ms = 60_000
+                recent_pts = [p for p in ctx.do_history if p[0] >= ctx.do_history[-1][0] - window_ms]
+                if len(recent_pts) >= 2:
+                    recent_rate = least_squares_rate_per_min(recent_pts)
+
+            # Predictive DO estimating sensor lag and micro-bubble hold-up
+            pred_do = current_do
+            if current_do is not None and recent_rate is not None and recent_rate > 0.0:
+                # rate in mg/L/min converted to mg/L/s: recent_rate / 60.0
+                pred_do = current_do + (recent_rate / 60.0) * pulse_tau_lag_s
+
+            now_s = ctx.now_s
+
+            if self._pulse_active:
+                pulse_duration = now_s - (self._pulse_start_s or now_s)
+                # Predictive braking condition:
+                # Brake if max duration elapsed, OR if either current_do or pred_do reaches pulse_brake_do
+                should_brake = False
+                brake_reason = ""
+                if pulse_duration >= max_pulse_s:
+                    should_brake = True
+                    brake_reason = f"max_duration_{pulse_duration:.1f}s"
+                elif pred_do is not None and pred_do >= pulse_brake_do:
+                    should_brake = True
+                    brake_reason = f"pred_do_reached_{pred_do:.2f}_meas_{current_do:.2f}"
+                elif current_do is not None and current_do >= pulse_brake_do:
+                    should_brake = True
+                    brake_reason = f"do_reached_{current_do:.2f}"
+
+                if should_brake:
+                    log.info(
+                        "phase %s: stopping adaptive pulse (%s), returning to rest hold",
+                        phase.phase_id,
+                        brake_reason,
+                    )
+                    self._pulse_active = False
+                    self._pulse_start_s = None
+                    self._last_pulse_end_s = now_s
+                    try:
+                        await self.gateway.commands.issue(
+                            role="aerator",
+                            action="stop",
+                            target={},
+                            experiment_id=self._experiment_id,
+                            requested_by="orchestrator:pulse_brake",
+                            deadline_s=30,
+                        )
+                    except Exception as e:
+                        log.warning("failed to issue aerator stop in pulse control: %s", e)
+            else:
+                # Aerator is currently at 0 RPM. Check if DO drop triggers a new gentle pulse.
+                # Allow a short rest cooldown of 15 s after a previous pulse before triggering another.
+                cooldown_ok = self._last_pulse_end_s is None or (now_s - self._last_pulse_end_s >= 15.0)
+                falling_chemically = recent_rate is not None and recent_rate < pulse_trigger_slope
+                below_trigger = current_do is not None and current_do < pulse_trigger_do
+
+                if cooldown_ok and (falling_chemically or below_trigger):
+                    log.info(
+                        "phase %s: triggering gentle adaptive pulse at %d RPM (rate=%.4f mg/L/min, DO=%.2f mg/L)",
+                        phase.phase_id,
+                        pulse_rpm,
+                        recent_rate if recent_rate is not None else 0.0,
+                        current_do if current_do is not None else 0.0,
+                    )
+                    self._pulse_active = True
+                    self._pulse_start_s = now_s
+                    self._pulse_trigger_was_low_do = bool(below_trigger)
+                    try:
+                        await self.gateway.commands.issue(
+                            role="aerator",
+                            action="set_mode",
+                            target={"mode": "manual"},
+                            experiment_id=self._experiment_id,
+                            requested_by="orchestrator:pulse_mode",
+                            deadline_s=30,
+                        )
+                        await self.gateway.commands.issue(
+                            role="aerator",
+                            action="set_speed",
+                            target={"step_rpm": pulse_rpm, "target_rpm": pulse_rpm, "speed_percent": round((pulse_rpm / 600.0) * 100)},
+                            experiment_id=self._experiment_id,
+                            requested_by="orchestrator:pulse_speed",
+                            deadline_s=30,
+                        )
+                    except Exception as e:
+                        log.warning("failed to trigger aerator pulse: %s", e)
+
+        satisfied = timed_out or cond_met
 
         if not satisfied:
             return
@@ -991,19 +1292,23 @@ class Orchestrator:
             effective_timeout = phase.timeout_s
             if "safety_timeout_s" in effective_params:
                 effective_timeout = int(effective_params["safety_timeout_s"])
-            elif phase.phase_id == "cl_run" and "run_time_s" in effective_params:
+            elif phase.phase_id in ("cl_run", "abc_run") and "run_time_s" in effective_params:
                 effective_timeout = int(effective_params["run_time_s"])
 
-            if phase.phase_id in ("p1_dose", "pd_dose") and "sulfite_g" in effective_params:
+            if phase.phase_id in ("p1_dose", "pd_dose", "abk_dose", "abc_dose") and "sulfite_g" in effective_params:
                 sg = float(effective_params["sulfite_g"])
                 conc = float(effective_params.get("stock_conc_gpl", 100.0))
                 v_ml = round(sg / (conc / 1000.0), 1)
                 cond_text = f"Masa dispensada = {sg:.2f} g Na₂SO₃ ({v_ml:.1f} mL ± 0.2 mL) registrado por encoder"
-            elif phase.phase_id in ("p1_deox", "pd_deox") and "do_floor_mg_l" in effective_params:
+            elif phase.phase_id in ("p1_deox", "pd_deox", "abk_deox", "abc_deox") and "do_floor_mg_l" in effective_params:
                 floor = float(effective_params["do_floor_mg_l"])
                 delta = float(effective_params.get("max_delta_mg_l", 0.04))
                 w_s = int(effective_params.get("window_s", 60))
                 cond_text = f"DO < {floor:.1f} mg/L Y estabilizado (ΔDO ≤ {delta:.2f} mg/L en {w_s} s) Y t > 180 s"
+            elif phase.phase_id in ("abk_verify", "abc_verify") and "min_do_mg_l" in effective_params:
+                m_do = float(effective_params["min_do_mg_l"])
+                h_s = int(effective_params.get("hold_time_s", 60))
+                cond_text = f"DO ≥ {m_do:.2f} mg/L sostenido y sin caída química durante {h_s} s"
             elif "stop_do_mg_l" in effective_params:
                 stop_do = float(effective_params["stop_do_mg_l"])
                 cond_text = f"DO ≥ {stop_do:.2f} mg/L ó timeout"
@@ -1011,13 +1316,13 @@ class Orchestrator:
                 max_do = float(effective_params["do_start_max_mg_l"])
                 settle = int(effective_params.get("settle_time_s", 60))
                 cond_text = f"DO inicial < {max_do:.1f} mg/L Y estanque en reposo durante ≥ {settle} s"
-            elif phase.phase_id in ("p1_prep", "pd_prep") and "warm_time_s" in effective_params:
+            elif phase.phase_id in ("p1_prep", "pd_prep", "abk_prep", "abc_prep") and "warm_time_s" in effective_params:
                 w_s = int(effective_params["warm_time_s"])
                 cond_text = f"DO estabilizado (|d[DO]/dt| < 0.05 mg/L/min) tras mezcla ≥ {w_s} s"
-            elif phase.phase_id == "cl_run" and "run_time_s" in effective_params:
+            elif phase.phase_id in ("cl_run", "abc_run") and "run_time_s" in effective_params:
                 r_s = int(effective_params["run_time_s"])
                 cond_text = f"Tiempo transcurrido ≥ duración fijada ({r_s} s)"
-            elif phase.phase_id in ("p2_step", "pd_step") and "step_rpm" in effective_params:
+            elif phase.phase_id in ("p2_step", "pd_step", "abk_step") and "step_rpm" in effective_params:
                 rpm = int(effective_params["step_rpm"])
                 cond_text = f"ODrive alcanza consigna ({rpm} RPM)"
 

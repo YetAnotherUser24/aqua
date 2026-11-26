@@ -64,6 +64,11 @@ class Phase:
     commands: tuple[PhaseCommand, ...] = ()
     #: Parameter defaults surfaced in the UI (names are free-form, used only for display).
     params: Mapping[str, Any] = field(default_factory=dict)
+    #: What to do if timeout_s expires before exit condition is satisfied:
+    #: "advance" (default: mark phase completed and advance to next)
+    #: "abort" (abort experiment immediately to prevent invalid downstream phases)
+    #: "pause" (pause experiment and alert operator)
+    on_timeout: str = "advance"
 
 
 @dataclass(frozen=True, slots=True)
@@ -529,7 +534,382 @@ _PLANTA_COMBINADA_D = Recipe(
 )
 
 
-RECIPES: dict[str, Recipe] = {r.recipe_id: r for r in (_PLANTA_1_DEOX, _PLANTA_2_STEP, _CLOSED_LOOP, _PLANTA_COMBINADA_D)}
+_AUTO_BENCHMARK_KLA = Recipe(
+    recipe_id="auto_benchmark_kla",
+    title="Protocolo Automatizado: Curva de Reacción (KLa)",
+    filename="EXP_KLA_AUTO.CSV",
+    roles=("od_sensor", "aerator", "mixer", "pump"),
+    phases=(
+        Phase(
+            phase_id="abk_prep",
+            num="1",
+            title="Homogenización y Estabilización Inicial",
+            desc=(
+                "Homogeniza los 87.5 L de agua con mezcla auxiliar para estabilizar "
+                "gradientes térmicos y de OD antes de dosificar reactivos."
+            ),
+            mode="auto",
+            condition_text="DO estabilizado (|d[DO]/dt| < 0.05 mg/L/min) tras mezcla ≥ 60 s",
+            condition={"kind": "do_stable", "eps_mg_l_per_min": 0.05, "window_s": 30, "min_elapsed_s": 60},
+            timeout_s=300,
+            commands=(
+                ("mixer", "start_mixer", {"target_rpm": 1000}),
+                ("aerator", "stop", {}),
+            ),
+            params={"mixer_rpm": 1000, "warm_time_s": 60},
+        ),
+        Phase(
+            phase_id="abk_dose",
+            num="2",
+            title="Dosificación Rápida de Na₂SO₃ (Sin Cobalto)",
+            desc=(
+                "Dosificación peristáltica de sulfito (8.0 g Na₂SO₃ = 80.0 mL solución madre 100 g/L) "
+                "para forzar una desoxigenación rápida del estanque."
+            ),
+            mode="hibrido",
+            condition_text="Masa dispensada = 8.00 g Na₂SO₃ (80.0 mL ± 0.2 mL) registrado por encoder",
+            condition={"kind": "dose_complete", "target_ml": 80.0, "tol_ml": 0.2},
+            timeout_s=None,
+            commands=(("pump", "dose", {"target_ml": 80.0, "sulfite_g": 8.00}),),
+            params={"sulfite_g": 8.00, "dose_ml": 80.0, "stock_conc_gpl": 100, "density_g_per_ml": 1.10, "mix_during_dose": True},
+        ),
+        Phase(
+            phase_id="abk_deox",
+            num="3",
+            title="Desoxigenación Profunda y Detección de Fondo",
+            desc=(
+                "Espera la caída libre de DO sin catalizador de cobalto hasta alcanzar el fondo "
+                "asintótico (DO ≤ 0.25 mg/L con meseta plana en tubo de estabilidad)."
+            ),
+            mode="auto",
+            condition_text="DO ≤ 0.25 mg/L Y estabilizado (ΔDO ≤ 0.04 mg/L en 60 s) durante ≥ 180 s",
+            condition={
+                "kind": "do_below_and_stable",
+                "below_mg_l": 0.25,
+                "window_s": 60,
+                "max_delta_mg_l": 0.04,
+                "eps_mg_l_per_min": 0.15,
+                "min_elapsed_s": 180,
+            },
+            timeout_s=2700,
+            commands=(),
+            params={"do_floor_mg_l": 0.25, "max_delta_mg_l": 0.04, "window_s": 60, "safety_timeout_s": 2700, "do_alert": True},
+        ),
+        Phase(
+            phase_id="abk_burn",
+            num="4",
+            title="Purga de Sulfito Residual y Captura Basal (C₀ = 0.70 mg/L)",
+            desc=(
+                "El aerador realiza purga activa a 250 RPM para oxidar forzadamente el reactivo residual. "
+                "El firmware del ESP32 frena predictivamente a 0 RPM al alcanzar el setpoint C₀ = 0.70 mg/L."
+            ),
+            mode="auto",
+            condition_text="DO ≥ 0.60 mg/L alcanzado tras quemar sulfito residual",
+            condition={"kind": "do_above", "threshold_mg_l": 0.60},
+            timeout_s=1800,
+            commands=(
+                ("aerator", "set_mode", {"mode": "pid"}),
+                ("aerator", "set_config", {
+                    "target_do": 0.65,
+                    "setpoint_mg_l": 0.65,
+                    "kp": 221.65,
+                    "ki": 1.915,
+                    "kd": 0.0,
+                    "beta": 1.0,
+                    "tt": 100.0,
+                    "tau_lag": 25.0,
+                    "max_rpm": 300.0,
+                }),
+                ("aerator", "start", {}),
+                ("mixer", "start_mixer", {"target_rpm": 1000}),
+            ),
+            params={"target_do": 0.65, "stop_do_mg_l": 0.60, "safety_timeout_s": 1800},
+        ),
+        Phase(
+            phase_id="abk_verify",
+            num="5",
+            title="Verificación Post-Corte de Cero Sulfito Residual",
+            desc=(
+                "Aerador en 0 RPM y mezclador a 1000 RPM. Se verifica durante al menos 120 s que no haya caída "
+                "química de DO (pendiente ≥ -0.005 mg/L/min), garantizando meseta plana y ausencia de reactivo libre. "
+                "Si se detecta caída residual, el orquestador aplica micro-pulsos adaptativos suaves hasta neutralizar."
+            ),
+            mode="auto",
+            condition_text="DO ≥ 0.60 mg/L sostenido y meseta plana (t ≥ 120 s, tasa ≥ -0.005 mg/L/min)",
+            condition={
+                "kind": "sulfite_exhausted_post_hold",
+                "min_elapsed_s": 120,
+                "min_do_mg_l": 0.60,
+                "window_s": 60,
+                "max_delta_mg_l": 0.04,
+                "min_slope_mg_l_per_min": -0.005,
+                "rest_cooldown_s": 60.0,
+            },
+            timeout_s=1800,
+            on_timeout="abort",
+            commands=(
+                ("aerator", "stop", {}),
+                ("mixer", "start_mixer", {"target_rpm": 1000}),
+            ),
+            params={
+                "hold_time_s": 120,
+                "min_do_mg_l": 0.60,
+                "safety_timeout_s": 1800,
+                "rest_cooldown_s": 60.0,
+                "pulse_rpm": 100,
+                "pulse_trigger_slope": -0.015,
+                "pulse_trigger_do": 0.45,
+                "pulse_brake_do": 0.60,
+                "pulse_tau_lag_s": 20.0,
+                "max_pulse_s": 20,
+            },
+        ),
+        Phase(
+            phase_id="abk_step",
+            num="6",
+            title="Arranque del Escalón de Aireación (Marca t₀)",
+            desc="Arranque automático del aerador a consigna fijada (default 360 RPM) para el salto de reoxigenación.",
+            mode="auto",
+            condition_text="ODrive alcanza consigna (360 RPM)",
+            condition={"kind": "setpoint_reached", "role": "aerator", "field": "drv_rpm", "target": 360, "tol": 30},
+            timeout_s=180,
+            commands=(
+                ("aerator", "set_mode", {"mode": "manual"}),
+                ("aerator", "set_speed", {"speed_percent": 60, "target_rpm": 360, "step_rpm": 360}),
+                ("mixer", "start_mixer", {"target_rpm": 1000}),
+            ),
+            params={"step_rpm": 360, "mixer_enable": True, "mixer_rpm": 1000},
+        ),
+        Phase(
+            phase_id="abk_acq",
+            num="7",
+            title="Adquisición de Curva DO(t) hasta Saturación Completa C*",
+            desc=(
+                "Registro continuo de reoxigenación a régimen permanente hasta alcanzar la saturación asintótica "
+                "(DO ≥ 6.40 mg/L con meseta estable |d[DO]/dt| < 0.03 mg/L/min en 60 s)."
+            ),
+            mode="auto",
+            condition_text="Saturación alcanzada (DO ≥ 6.40 mg/L y meseta estable |d[DO]/dt| < 0.03 mg/L/min en 60 s)",
+            condition={
+                "kind": "do_above_and_stable",
+                "above_mg_l": 6.40,
+                "window_s": 60,
+                "eps_mg_l_per_min": 0.03,
+                "min_elapsed_s": 180,
+            },
+            timeout_s=2700,
+            commands=(),
+            params={
+                "stop_do_mg_l": 6.40,
+                "kla_c_star": 6.70,
+                "window_s": 60,
+                "eps_mg_l_per_min": 0.03,
+                "safety_timeout_s": 2700,
+            },
+        ),
+        Phase(
+            phase_id="abk_eval",
+            num="8",
+            title="Finalización y Ajuste OLS KLa (ASCE 2-22)",
+            desc="Detiene actuadores y consolida la estimación de KLa con ventana de truncamiento estándar [0.20, 0.80] C*.",
+            mode="auto",
+            condition_text="Consolidación completa del dataset y cálculo KLa",
+            condition={"kind": "elapsed", "seconds": 5},
+            timeout_s=30,
+            commands=(
+                ("aerator", "stop", {}),
+                ("mixer", "stop_mixer", {}),
+            ),
+            params={"kla_c_star": 6.70, "export_kla": True},
+        ),
+    ),
+)
+
+
+_AUTO_BENCHMARK_CONTROL = Recipe(
+    recipe_id="auto_benchmark_control",
+    title="Protocolo Automatizado: Benchmark PID 2-DOF",
+    filename="EXP_PID_BENCHMARK.CSV",
+    roles=("od_sensor", "aerator", "mixer", "pump"),
+    phases=(
+        Phase(
+            phase_id="abc_prep",
+            num="1",
+            title="Homogenización y Estabilización Inicial",
+            desc="Homogeniza los 87.5 L de agua con mezcla auxiliar para estabilizar gradientes térmicos y de OD.",
+            mode="auto",
+            condition_text="DO estabilizado (|d[DO]/dt| < 0.05 mg/L/min) tras mezcla ≥ 60 s",
+            condition={"kind": "do_stable", "eps_mg_l_per_min": 0.05, "window_s": 30, "min_elapsed_s": 60},
+            timeout_s=300,
+            commands=(
+                ("mixer", "start_mixer", {"target_rpm": 1000}),
+                ("aerator", "stop", {}),
+            ),
+            params={"mixer_rpm": 1000, "warm_time_s": 60},
+        ),
+        Phase(
+            phase_id="abc_dose",
+            num="2",
+            title="Dosificación Rápida de Na₂SO₃ (Sin Cobalto)",
+            desc="Dosificación peristáltica de sulfito (8.0 g Na₂SO₃ = 80.0 mL solución madre 100 g/L).",
+            mode="hibrido",
+            condition_text="Masa dispensada = 8.00 g Na₂SO₃ (80.0 mL ± 0.2 mL) registrado por encoder",
+            condition={"kind": "dose_complete", "target_ml": 80.0, "tol_ml": 0.2},
+            timeout_s=None,
+            commands=(("pump", "dose", {"target_ml": 80.0, "sulfite_g": 8.00}),),
+            params={"sulfite_g": 8.00, "dose_ml": 80.0, "stock_conc_gpl": 100, "density_g_per_ml": 1.10, "mix_during_dose": True},
+        ),
+        Phase(
+            phase_id="abc_deox",
+            num="3",
+            title="Desoxigenación Profunda y Detección de Fondo",
+            desc="Espera la caída libre de DO hasta alcanzar el fondo asintótico (DO ≤ 0.25 mg/L con meseta plana).",
+            mode="auto",
+            condition_text="DO ≤ 0.25 mg/L Y estabilizado (ΔDO ≤ 0.04 mg/L en 60 s) durante ≥ 180 s",
+            condition={
+                "kind": "do_below_and_stable",
+                "below_mg_l": 0.25,
+                "window_s": 60,
+                "max_delta_mg_l": 0.04,
+                "eps_mg_l_per_min": 0.15,
+                "min_elapsed_s": 180,
+            },
+            timeout_s=2700,
+            commands=(),
+            params={"do_floor_mg_l": 0.25, "max_delta_mg_l": 0.04, "window_s": 60, "safety_timeout_s": 2700, "do_alert": True},
+        ),
+        Phase(
+            phase_id="abc_burn",
+            num="4",
+            title="Purga de Sulfito Residual y Captura Basal (C₀ = 0.70 mg/L)",
+            desc="El aerador oxida el reactivo residual a 250 RPM y frena predictivamente a C₀ = 0.70 mg/L.",
+            mode="auto",
+            condition_text="DO ≥ 0.60 mg/L alcanzado tras quemar sulfito residual",
+            condition={"kind": "do_above", "threshold_mg_l": 0.60},
+            timeout_s=1800,
+            commands=(
+                ("aerator", "set_mode", {"mode": "pid"}),
+                ("aerator", "set_config", {
+                    "target_do": 0.65,
+                    "setpoint_mg_l": 0.65,
+                    "kp": 221.65,
+                    "ki": 1.915,
+                    "kd": 0.0,
+                    "beta": 1.0,
+                    "tt": 100.0,
+                    "tau_lag": 25.0,
+                    "max_rpm": 300.0,
+                }),
+                ("aerator", "start", {}),
+                ("mixer", "start_mixer", {"target_rpm": 1000}),
+            ),
+            params={"target_do": 0.65, "stop_do_mg_l": 0.60, "safety_timeout_s": 1800},
+        ),
+        Phase(
+            phase_id="abc_verify",
+            num="5",
+            title="Verificación Post-Corte de Cero Sulfito Residual",
+            desc="Verifica durante al menos 120 s en reposo que el DO no caiga químicamente antes del salto de control. Aplica micro-pulsos adaptativos si hay sulfito persistente.",
+            mode="auto",
+            condition_text="DO ≥ 0.60 mg/L sostenido y meseta plana (t ≥ 120 s, tasa ≥ -0.005 mg/L/min)",
+            condition={
+                "kind": "sulfite_exhausted_post_hold",
+                "min_elapsed_s": 120,
+                "min_do_mg_l": 0.60,
+                "window_s": 60,
+                "max_delta_mg_l": 0.04,
+                "min_slope_mg_l_per_min": -0.005,
+                "rest_cooldown_s": 60.0,
+            },
+            timeout_s=1800,
+            on_timeout="abort",
+            commands=(
+                ("aerator", "stop", {}),
+                ("mixer", "start_mixer", {"target_rpm": 1000}),
+            ),
+            params={
+                "hold_time_s": 120,
+                "min_do_mg_l": 0.60,
+                "safety_timeout_s": 1800,
+                "rest_cooldown_s": 60.0,
+                "pulse_rpm": 100,
+                "pulse_trigger_slope": -0.015,
+                "pulse_trigger_do": 0.45,
+                "pulse_brake_do": 0.60,
+                "pulse_tau_lag_s": 20.0,
+                "max_pulse_s": 20,
+            },
+        ),
+        Phase(
+            phase_id="abc_arm",
+            num="6",
+            title="Armado del Lazo PID y Consigna SP = 5.00 mg/L",
+            desc="Configura parámetros de control 2-DOF PI y fija consigna del escalón a SP = 5.00 mg/L (configurable).",
+            mode="auto",
+            condition_text="Lazo PID armado y configurado hacia SP = 5.00 mg/L",
+            condition={"kind": "elapsed", "seconds": 3},
+            timeout_s=30,
+            commands=(
+                ("aerator", "set_mode", {"mode": "pid"}),
+                ("aerator", "set_config", {
+                    "target_do": 5.00,
+                    "setpoint_mg_l": 5.00,
+                    "kp": 221.65,
+                    "ki": 1.915,
+                    "kd": 0.0,
+                    "beta": 0.35,
+                    "tt": 100.0,
+                    "tau_lag": 30.0,
+                    "max_rpm": 600.0,
+                }),
+            ),
+            params={"target_do": 5.00, "kp": 221.65, "ki": 1.915, "kd": 0.0, "beta": 0.35, "tt": 100.0, "tau_lag": 30.0},
+        ),
+        Phase(
+            phase_id="abc_run",
+            num="7",
+            title="Lazo Cerrado Activo: Escalón de Control hacia SP",
+            desc="Regulación autónoma en lazo cerrado durante 600 s para caracterización de respuesta temporal y energía.",
+            mode="auto",
+            condition_text="Tiempo transcurrido ≥ duración fijada (600 s)",
+            condition={"kind": "elapsed", "seconds": 600},
+            timeout_s=600,
+            commands=(
+                ("aerator", "start", {}),
+                ("mixer", "start_mixer", {"target_rpm": 1000}),
+            ),
+            params={"target_do": 5.00, "run_time_s": 600},
+        ),
+        Phase(
+            phase_id="abc_eval",
+            num="8",
+            title="Cierre del Ensayo y Reporte Automatizado de KPIs",
+            desc="Detiene actuadores y calcula tr, ts(5%), ts(2%), Mp%, IAE, ITAE y consumo energético exclusivo de ODrive (W·h).",
+            mode="auto",
+            condition_text="Cálculo de métricas KPI de control consolidado",
+            condition={"kind": "elapsed", "seconds": 5},
+            timeout_s=30,
+            commands=(
+                ("aerator", "stop", {}),
+                ("mixer", "stop_mixer", {}),
+            ),
+            params={"target_do": 5.00, "eval_kpi": True},
+        ),
+    ),
+)
+
+
+RECIPES: dict[str, Recipe] = {
+    r.recipe_id: r
+    for r in (
+        _PLANTA_1_DEOX,
+        _PLANTA_2_STEP,
+        _CLOSED_LOOP,
+        _PLANTA_COMBINADA_D,
+        _AUTO_BENCHMARK_KLA,
+        _AUTO_BENCHMARK_CONTROL,
+    )
+}
 
 
 # ---------------------------------------------------------------------------
@@ -537,6 +917,7 @@ RECIPES: dict[str, Recipe] = {r.recipe_id: r for r in (_PLANTA_1_DEOX, _PLANTA_2
 # ---------------------------------------------------------------------------
 
 _VALID_MODES = frozenset({"auto", "hibrido", "manual"})
+_VALID_ON_TIMEOUT = frozenset({"advance", "abort", "pause"})
 _VALID_CONDITIONS = frozenset(
     {
         "elapsed",
@@ -546,6 +927,8 @@ _VALID_CONDITIONS = frozenset(
         "do_below_and_stable",
         "dose_complete",
         "setpoint_reached",
+        "sulfite_exhausted_post_hold",
+        "do_above_and_stable",
     }
 )
 
@@ -569,6 +952,8 @@ def validate_recipes(recipes: Mapping[str, Recipe] | None = None) -> None:
             seen.add(phase.phase_id)
             if phase.mode not in _VALID_MODES:
                 raise ValueError(f"{recipe.recipe_id}.{phase.phase_id}: bad mode {phase.mode!r}")
+            if phase.on_timeout not in _VALID_ON_TIMEOUT:
+                raise ValueError(f"{recipe.recipe_id}.{phase.phase_id}: bad on_timeout {phase.on_timeout!r}")
             kind = phase.condition.get("kind")
             if kind not in _VALID_CONDITIONS:
                 raise ValueError(f"{recipe.recipe_id}.{phase.phase_id}: unknown condition {kind!r}")

@@ -1262,3 +1262,195 @@ async def test_engine_pump_dose_calculates_target_ml_from_target_g() -> None:
     assert target["target_ml"] == 50.0
     assert target["dose_ml"] == 50.0
     assert target["target_g"] == 55.0
+
+
+def test_sulfite_exhausted_post_hold_evaluation() -> None:
+    from aqua_gateway.orchestration.conditions import evaluate, PhaseContext
+
+    cond = {
+        "kind": "sulfite_exhausted_post_hold",
+        "min_elapsed_s": 60,
+        "min_do_mg_l": 0.60,
+        "window_s": 60,
+        "max_delta_mg_l": 0.04,
+        "min_slope_mg_l_per_min": -0.02,
+    }
+
+    # Case 1: Elapsed time < 60s -> False
+    ctx_early = PhaseContext(
+        metrics={},
+        do_history=[(1000, 0.70), (50000, 0.70)],
+        now_s=100.0,
+        phase_entered_s=60.0,  # 40s elapsed < 60s
+        run_started_s=0.0,
+    )
+    assert not evaluate(cond, ctx_early)
+
+    # Case 2: DO < 0.60 mg/L -> False
+    ctx_low_do = PhaseContext(
+        metrics={},
+        do_history=[(0, 0.50), (30000, 0.52), (65000, 0.53)],
+        now_s=100.0,
+        phase_entered_s=30.0,  # 70s elapsed >= 60s
+        run_started_s=0.0,
+    )
+    assert not evaluate(cond, ctx_low_do)
+
+    # Case 3: High fluctuation (delta > 0.04) -> False
+    ctx_noisy = PhaseContext(
+        metrics={},
+        do_history=[(0, 0.70), (30000, 0.78), (65000, 0.71)],
+        now_s=100.0,
+        phase_entered_s=30.0,
+        run_started_s=0.0,
+    )
+    assert not evaluate(cond, ctx_noisy)
+
+    # Case 4: Chemical consumption drop (slope < -0.02 mg/L/min) -> False
+    # Drop of 0.03 mg/L in 30s = -0.06 mg/L/min < -0.02
+    ctx_chemical_drop = PhaseContext(
+        metrics={},
+        do_history=[(0, 0.73), (30000, 0.71), (60000, 0.70)],
+        now_s=100.0,
+        phase_entered_s=30.0,
+        run_started_s=0.0,
+    )
+    assert not evaluate(cond, ctx_chemical_drop)
+
+    # Case 5: Stable baseline >= 0.60 mg/L, delta <= 0.04, flat or positive slope -> True
+    ctx_valid = PhaseContext(
+        metrics={},
+        do_history=[(0, 0.70), (20000, 0.705), (40000, 0.71), (60000, 0.71)],
+        now_s=100.0,
+        phase_entered_s=30.0,
+        run_started_s=0.0,
+    )
+    assert evaluate(cond, ctx_valid)
+
+    # Case 6: Motor is running (drv_rpm > 5.0) -> False (Must be in rest)
+    ctx_motor_running = PhaseContext(
+        metrics={("aerator", "drv_rpm"): 120.0},
+        do_history=[(0, 0.70), (20000, 0.705), (40000, 0.71), (60000, 0.71)],
+        now_s=100.0,
+        phase_entered_s=30.0,
+        run_started_s=0.0,
+    )
+    assert not evaluate(cond, ctx_motor_running)
+
+    # Case 7: Adaptive pulse finished too recently (within rest_cooldown_s) -> False
+    cond_with_cooldown = dict(cond)
+    cond_with_cooldown["rest_cooldown_s"] = 60.0
+    cond_with_cooldown["last_pulse_end_s"] = 80.0  # now_s(100) - 80 = 20s < 60s
+    assert not evaluate(cond_with_cooldown, ctx_valid)
+
+    # Case 8: Adaptive pulse cooldown satisfied (now_s - last_pulse_end_s >= 60s) -> True
+    cond_cooldown_ok = dict(cond)
+    cond_cooldown_ok["rest_cooldown_s"] = 60.0
+    cond_cooldown_ok["last_pulse_end_s"] = 30.0  # now_s(100) - 30 = 70s >= 60s
+    assert evaluate(cond_cooldown_ok, ctx_valid)
+
+
+def test_auto_benchmark_recipes_registered() -> None:
+    assert "auto_benchmark_kla" in RECIPES
+    assert "auto_benchmark_control" in RECIPES
+
+    r_kla = RECIPES["auto_benchmark_kla"]
+    r_ctrl = RECIPES["auto_benchmark_control"]
+
+    assert len(r_kla.phases) == 8
+    assert len(r_ctrl.phases) == 8
+
+    # Verify key phases in auto_benchmark_kla
+    phase_ids_kla = [p.phase_id for p in r_kla.phases]
+    assert phase_ids_kla == [
+        "abk_prep", "abk_dose", "abk_deox", "abk_burn",
+        "abk_verify", "abk_step", "abk_acq", "abk_eval",
+    ]
+
+    # Verify key phases in auto_benchmark_control
+    phase_ids_ctrl = [p.phase_id for p in r_ctrl.phases]
+    assert phase_ids_ctrl == [
+        "abc_prep", "abc_dose", "abc_deox", "abc_burn",
+        "abc_verify", "abc_arm", "abc_run", "abc_eval",
+    ]
+
+    # Check that abc_arm targets SP = 5.00
+    p_arm = next(p for p in r_ctrl.phases if p.phase_id == "abc_arm")
+    assert p_arm.params.get("target_do") == 5.00
+    aerator_cfg = next(c[2] for c in p_arm.commands if c[0] == "aerator" and c[1] == "set_config")
+    assert aerator_cfg["target_do"] == 5.00
+    assert aerator_cfg["beta"] == 0.35
+
+
+@pytest.mark.asyncio
+async def test_critical_phase_aborts_on_timeout() -> None:
+    """Verifies that a phase with on_timeout='abort' aborts the experiment instead of advancing."""
+    from unittest.mock import patch
+    from aqua_gateway.orchestration.recipes import Phase, Recipe
+    from aqua_gateway.orchestration.engine import STATE_ACTIVE, STATE_IDLE
+
+    # Mock recipe with an abort-on-timeout verify phase
+    orch, _gw = _make(metrics={"od_sensor": {"od_do_mg_l": 0.30}})
+    test_recipe = Recipe(
+        recipe_id="test_abort_recipe",
+        title="Test Abort Recipe",
+        filename="TEST.CSV",
+        roles=("od_sensor", "aerator"),
+        phases=(
+            Phase(
+                phase_id="p_crit",
+                num="1",
+                title="Critical Verify",
+                mode="auto",
+                condition={"kind": "do_above", "threshold_mg_l": 0.60},
+                timeout_s=10,
+                on_timeout="abort",
+            ),
+            Phase(
+                phase_id="p_step",
+                num="2",
+                title="Downstream Step",
+                mode="auto",
+                condition={"kind": "elapsed", "seconds": 10},
+                timeout_s=30,
+            ),
+        ),
+    )
+    with patch.dict("aqua_gateway.orchestration.recipes.RECIPES", {"test_abort_recipe": test_recipe}):
+        with patch.object(orch, "_load_experiment", return_value=("test_abort_recipe", [])):
+            await orch.request_state(state=STATE_ACTIVE, experiment_id="EXP-ABORT-01")
+            assert orch.state == STATE_ACTIVE
+            assert orch.active_phase.phase_id == "p_crit"
+
+            # Simulate timeout elapsed while DO condition is NOT met (0.30 < 0.60)
+            orch._phase_entered_s = time.time() - 15
+
+            await orch._tick()
+
+            # The experiment MUST be aborted and return to IDLE, never advancing to p_step
+            assert orch.state == STATE_IDLE
+            assert orch._experiment_id is None
+
+
+def test_kla_metrics_fit_asce() -> None:
+    """Test compute_kla_metrics with synthetic reaeration curve."""
+    from aqua_gateway.orchestration.kla_metrics import compute_kla_metrics
+    import math
+
+    c_star = 7.0
+    c_0 = 0.5
+    kla_true = 0.005  # s^-1 (~18 hr^-1)
+    samples = []
+    for t in range(0, 600, 5):
+        # C(t) = C* - (C* - C0) * exp(-KLa * t)
+        do_val = c_star - (c_star - c_0) * math.exp(-kla_true * t)
+        samples.append({"t_s": float(t), "do_mg_l": round(do_val, 3)})
+
+    res = compute_kla_metrics(samples, c_star=c_star, water_temp_c=20.0)
+    assert res["valid_fit"] is True
+    assert res["kla_s"] is not None
+    assert abs(res["kla_s"] - kla_true) < 0.0005
+    assert res["r_squared"] > 0.99
+    assert res["kla_20_hr"] is not None
+
+

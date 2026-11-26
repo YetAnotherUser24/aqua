@@ -267,7 +267,8 @@ class DerivedRules:
 
         if len(recent) < 2:
             return None
-        if recent[-1][0] - recent[0][0] < window_ms:
+        # Allow 85% of window_ms to account for discrete sampling jitter (~5s sampling)
+        if (recent[-1][0] - recent[0][0]) < (window_ms * 0.85):
             return None
 
         # Shared with the orchestrator's phase conditions so the two cannot disagree about

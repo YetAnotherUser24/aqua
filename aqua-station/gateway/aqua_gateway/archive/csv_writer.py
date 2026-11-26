@@ -325,6 +325,21 @@ class CsvArchiveWriter:
                 await self._flush_buffer(handle, sync=True)
             return len(aged)
 
+    async def flush_all(self, *, sync: bool = True) -> int:
+        """
+        Immediately release every open role buffer to disk regardless of age or size.
+
+        Called prior to generating experiment export bundles to ensure all trailing
+        telemetry (e.g. from low-frequency nodes like od_sensor) is visible on disk.
+        """
+        async with self._lock:
+            flushed = 0
+            for handle in self._open.values():
+                if handle.buffer.tell() > 0:
+                    await self._flush_buffer(handle, sync=sync)
+                    flushed += 1
+            return flushed
+
     async def rotate_if_needed(self, *, today: date) -> list[_OpenFile]:
         """Called by a midninght timer in America/Lima. Returns the files it closed."""
         closed: list[_OpenFile] = []

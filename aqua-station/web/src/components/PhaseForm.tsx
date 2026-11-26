@@ -185,6 +185,111 @@ export const PHASE_FORMS: Record<string, ParamControl[]> = {
     { kind: 'toggle', key: 'metrics', label: 'Cálculo de métricas IAE/ISE en vivo', on: 'SÍ (Tiempo Real)', off: '' },
   ],
   cl_eval: [],
+
+  // -- Automatización Curva de Reacción (KLa) ---------------------------------
+  abk_prep: [
+    { kind: 'section', label: 'Homogenización Previa' },
+    { kind: 'number', key: 'mixer_rpm', label: 'Mezclador T-200 (Lazo PI)', unit: 'RPM', min: 200, max: 3000, step: 50 },
+    { kind: 'number', key: 'warm_time_s', label: 'Tiempo de homogenización', unit: 's', min: 10, max: 300, step: 10 },
+    { kind: 'static', label: 'Aireador ODrive', value: '0 RPM (APAGADO)' },
+  ],
+  abk_dose: [
+    { kind: 'section', label: 'Dosificación Na₂SO₃ (Desoxigenación)' },
+    { kind: 'number', key: 'sulfite_g', label: 'Gramos Na₂SO₃ (Reactivo puro)', unit: 'g', min: 0.1, max: 100, step: 0.1 },
+    { kind: 'number', key: 'dose_ml', label: 'Volumen equivalente solución madre', unit: 'mL', min: 0.5, max: 1000, step: 0.5 },
+    { kind: 'number', key: 'stock_conc_gpl', label: 'Concentración madre', unit: 'g/L', min: 10, max: 200, step: 10 },
+    { kind: 'number', key: 'density_g_per_ml', label: 'Densidad de solución (ρ)', unit: 'g/mL', min: 0.9, max: 1.5, step: 0.01 },
+  ],
+  abk_deox: [
+    { kind: 'section', label: 'Monitoreo de Desoxigenación y Meseta Cero' },
+    { kind: 'number', key: 'do_floor_mg_l', label: 'DO piso meseta', unit: 'mg/L', min: 0.0, max: 2.0, step: 0.05 },
+    { kind: 'number', key: 'max_delta_mg_l', label: 'Banda de estabilidad pico a pico (ΔDO)', unit: 'mg/L', min: 0.01, max: 0.20, step: 0.01 },
+    { kind: 'number', key: 'window_s', label: 'Ventana de estabilidad', unit: 's', min: 10, max: 300, step: 10 },
+    { kind: 'number', key: 'safety_timeout_s', label: 'Timeout de desoxigenación', unit: 's', min: 60, max: 3600, step: 60 },
+  ],
+  abk_burn: [
+    { kind: 'section', label: 'Purga de Sulfito & Salida de Meseta Cero' },
+    { kind: 'number', key: 'target_do', label: 'DO consigna de purga (C₀)', unit: 'mg/L', min: 0.5, max: 1.5, step: 0.05 },
+    { kind: 'number', key: 'stop_do_mg_l', label: 'DO corte de purga', unit: 'mg/L', min: 0.5, max: 1.5, step: 0.05 },
+    { kind: 'number', key: 'safety_timeout_s', label: 'Timeout de purga', unit: 's', min: 60, max: 1800, step: 60 },
+    { kind: 'static', label: 'Aireador ODrive', value: '250 RPM constante (Purge Cruise)' },
+  ],
+  abk_verify: [
+    { kind: 'section', label: 'Verificación Post-Corte (Cero Sulfito Residual)' },
+    { kind: 'number', key: 'hold_time_s', label: 'Tiempo de reposo de verificación', unit: 's', min: 15, max: 300, step: 15 },
+    { kind: 'number', key: 'min_do_mg_l', label: 'DO mínimo admisible en reposo', unit: 'mg/L', min: 0.4, max: 1.5, step: 0.05 },
+    { kind: 'number', key: 'safety_timeout_s', label: 'Timeout de verificación', unit: 's', min: 30, max: 600, step: 30 },
+  ],
+  abk_step: [
+    { kind: 'section', label: 'Escalón de Aireación (Marca t₀)' },
+    { kind: 'number', key: 'step_rpm', label: 'Escalón ODrive', unit: 'RPM', min: 50, max: 600, step: 10 },
+    { kind: 'toggle', key: 'mixer_enable', label: 'Mezclador T-200 Auxiliar', on: 'ACTIVO', off: 'APAGADO' },
+    { kind: 'number', key: 'mixer_rpm', label: 'Consigna Mezclador', unit: 'RPM', min: 100, max: 1500, step: 50 },
+  ],
+  abk_acq: [
+    { kind: 'section', label: 'Adquisición de Curva DO(t)' },
+    { kind: 'number', key: 'stop_do_mg_l', label: 'DO meta de corte (80% C*)', unit: 'mg/L', min: 2.0, max: 6.7, step: 0.05 },
+    { kind: 'number', key: 'safety_timeout_s', label: 'Timeout de adquisición', unit: 's', min: 120, max: 3600, step: 60 },
+  ],
+  abk_eval: [
+    { kind: 'section', label: 'Cierre y Análisis de Curva KLa' },
+    { kind: 'static', label: 'Ajuste ASCE 2-22', value: 'Exportación y cálculo automático de KLa' },
+  ],
+
+  // -- Automatización Benchmark de Control OD ----------------------------------
+  abc_prep: [
+    { kind: 'section', label: 'Homogenización Previa' },
+    { kind: 'number', key: 'mixer_rpm', label: 'Mezclador T-200 (Lazo PI)', unit: 'RPM', min: 200, max: 3000, step: 50 },
+    { kind: 'number', key: 'warm_time_s', label: 'Tiempo de homogenización', unit: 's', min: 10, max: 300, step: 10 },
+    { kind: 'static', label: 'Aireador ODrive', value: '0 RPM (APAGADO)' },
+  ],
+  abc_dose: [
+    { kind: 'section', label: 'Dosificación Na₂SO₃ (Desoxigenación)' },
+    { kind: 'number', key: 'sulfite_g', label: 'Gramos Na₂SO₃ (Reactivo puro)', unit: 'g', min: 0.1, max: 100, step: 0.1 },
+    { kind: 'number', key: 'dose_ml', label: 'Volumen equivalente solución madre', unit: 'mL', min: 0.5, max: 1000, step: 0.5 },
+    { kind: 'number', key: 'stock_conc_gpl', label: 'Concentración madre', unit: 'g/L', min: 10, max: 200, step: 10 },
+    { kind: 'number', key: 'density_g_per_ml', label: 'Densidad de solución (ρ)', unit: 'g/mL', min: 0.9, max: 1.5, step: 0.01 },
+  ],
+  abc_deox: [
+    { kind: 'section', label: 'Monitoreo de Desoxigenación y Meseta Cero' },
+    { kind: 'number', key: 'do_floor_mg_l', label: 'DO piso meseta', unit: 'mg/L', min: 0.0, max: 2.0, step: 0.05 },
+    { kind: 'number', key: 'max_delta_mg_l', label: 'Banda de estabilidad pico a pico (ΔDO)', unit: 'mg/L', min: 0.01, max: 0.20, step: 0.01 },
+    { kind: 'number', key: 'window_s', label: 'Ventana de estabilidad', unit: 's', min: 10, max: 300, step: 10 },
+    { kind: 'number', key: 'safety_timeout_s', label: 'Timeout de desoxigenación', unit: 's', min: 60, max: 3600, step: 60 },
+  ],
+  abc_burn: [
+    { kind: 'section', label: 'Purga de Sulfito & Salida de Meseta Cero' },
+    { kind: 'number', key: 'target_do', label: 'DO consigna de purga (C₀)', unit: 'mg/L', min: 0.5, max: 1.5, step: 0.05 },
+    { kind: 'number', key: 'stop_do_mg_l', label: 'DO corte de purga', unit: 'mg/L', min: 0.5, max: 1.5, step: 0.05 },
+    { kind: 'number', key: 'safety_timeout_s', label: 'Timeout de purga', unit: 's', min: 60, max: 1800, step: 60 },
+    { kind: 'static', label: 'Aireador ODrive', value: '250 RPM constante (Purge Cruise)' },
+  ],
+  abc_verify: [
+    { kind: 'section', label: 'Verificación Post-Corte (Cero Sulfito Residual)' },
+    { kind: 'number', key: 'hold_time_s', label: 'Tiempo de reposo de verificación', unit: 's', min: 15, max: 300, step: 15 },
+    { kind: 'number', key: 'min_do_mg_l', label: 'DO mínimo admisible en reposo', unit: 'mg/L', min: 0.4, max: 1.5, step: 0.05 },
+    { kind: 'number', key: 'safety_timeout_s', label: 'Timeout de verificación', unit: 's', min: 30, max: 600, step: 30 },
+  ],
+  abc_arm: [
+    { kind: 'section', label: 'Configuración del Lazo 2-DOF PI y Escalón' },
+    { kind: 'number', key: 'target_do', label: 'Consigna Escalón de Control (SP)', unit: 'mg/L', min: 1.0, max: 6.5, step: 0.1 },
+    { kind: 'number', key: 'kp', label: 'Ganancia Proporcional (Kp)', min: 0, max: 2000, step: 0.1 },
+    { kind: 'number', key: 'ki', label: 'Ganancia Integral (Ki)', min: 0, max: 50, step: 0.001 },
+    { kind: 'number', key: 'kd', label: 'Ganancia Derivativa (Kd)', min: 0, max: 10, step: 0.001 },
+    { kind: 'number', key: 'beta', label: 'Ponderación Consigna (beta, 2-DOF)', min: 0.0, max: 1.0, step: 0.05 },
+    { kind: 'number', key: 'tt', label: 'Constante Anti-Windup Tt', unit: 's', min: 1.0, max: 500.0, step: 5.0 },
+    { kind: 'number', key: 'tau_lag', label: 'Horizonte Predictivo tau_lag', unit: 's', min: 0.0, max: 120.0, step: 5.0 },
+  ],
+  abc_run: [
+    { kind: 'section', label: 'Lazo Cerrado Activo: Escalón de Control' },
+    { kind: 'number', key: 'target_do', label: 'Consigna Activa (SP)', unit: 'mg/L', min: 1.0, max: 6.5, step: 0.1 },
+    { kind: 'number', key: 'run_time_s', label: 'Duración del escalón de control', unit: 's', min: 60, max: 3600, step: 60 },
+  ],
+  abc_eval: [
+    { kind: 'section', label: 'Reporte Automatizado de KPIs' },
+    { kind: 'static', label: 'Métricas de Control', value: 'tr, ts(5%), ts(2%), Mp%, IAE, ITAE' },
+    { kind: 'static', label: 'Consumo Energético', value: 'Energía eléctrica motor ODrive (W·h)' },
+  ],
 };
 
 /** The default value a toggle/'select' falls back to when the phase has not set one. */
@@ -334,8 +439,17 @@ export function PhaseForm({
     );
   }
 
+  const isDosePhase =
+    phaseId === 'p1_dose' ||
+    phaseId === 'pd_dose' ||
+    phaseId === 'abk_dose' ||
+    phaseId === 'abc_dose' ||
+    params['sulfite_g'] !== undefined;
+
+  const isBurnPhase = phaseId === 'abk_burn' || phaseId === 'abc_burn';
+
   const handleNumberChange = (key: string, val: number) => {
-    if (phaseId === 'p1_dose' || phaseId === 'pd_dose') {
+    if (isDosePhase) {
       const conc = Number(params['stock_conc_gpl']) || 100;
       if (key === 'sulfite_g') {
         const newMl = Number((val / (conc / 1000)).toFixed(1));
@@ -367,6 +481,17 @@ export function PhaseForm({
           }
           return;
         }
+      }
+    } else if (isBurnPhase) {
+      if (key === 'target_do') {
+        const newStop = Number(Math.max(0.1, val - 0.05).toFixed(2));
+        if (onParams) {
+          onParams({ target_do: val, stop_do_mg_l: newStop });
+        } else {
+          onParam('target_do', val);
+          onParam('stop_do_mg_l', newStop);
+        }
+        return;
       }
     }
     onParam(key, val);
@@ -468,7 +593,7 @@ export function PhaseForm({
         }
       })}
 
-      {(phaseId === 'p1_dose' || phaseId === 'pd_dose') && (
+      {isDosePhase && (
         <div className="mt-2.5 p-2 rounded bg-purple-950/40 border border-purple-900/60 text-[10px] font-mono text-purple-300 flex justify-between items-center">
           <span className="text-slate-400">Equivalencia automática:</span>
           <span>

@@ -701,7 +701,7 @@
       </button>
       <button class="nav-tab" id="tab-btn-exps" onclick="switchTab('exps')">
         <span>📦 Catálogo de Ensayos</span>
-        <span class="tab-badge">24</span>
+        <span class="tab-badge" id="exp-badge-count">0</span>
       </button>
       <button class="nav-tab" id="tab-btn-raw" onclick="switchTab('raw')">
         <span>⚡ Telemetría Diaria Combinada</span>
@@ -716,30 +716,7 @@
         <div class="select-wrap">
           <span class="select-label">Ensayo:</span>
           <select id="exp-select" class="scada-select" onchange="onExperimentChange(this.value)">
-<option value="EXP-2026-10-28-04" selected>EXP-2026-10-28-04 — curva a 400 [⚡ Nativo + ⏱ 1 Hz]</option>
-<option value="EXP-2026-10-28-02" >EXP-2026-10-28-02 — escalon a 170 RPM [⚡ Nativo + ⏱ 1 Hz]</option>
-<option value="EXP-2026-10-28-01" >EXP-2026-10-28-01 — Prueba de controlador [⚡ Nativo + ⏱ 1 Hz]</option>
-<option value="EXP-2026-10-27-02" >EXP-2026-10-27-02 — EnsayoBomba2 [⚡ Solo Nativo]</option>
-<option value="EXP-2026-10-27-01" >EXP-2026-10-27-01 — PruebaDeBomba [⚡ Nativo + ⏱ 1 Hz]</option>
-<option value="EXP-2026-10-26-04" >EXP-2026-10-26-04 — ensayo escalon a 600 RPM [⚡ Nativo + ⏱ 1 Hz]</option>
-<option value="EXP-2026-10-26-03" >EXP-2026-10-26-03 — ensayo de escalon a 600 [⚡ Nativo + ⏱ 1 Hz]</option>
-<option value="EXP-2026-10-26-02" >EXP-2026-10-26-02 — Ensayo a escalon a 250 RPM a 4 mg/l [⚡ Nativo + ⏱ 1 Hz]</option>
-<option value="EXP-2026-10-26-01" >EXP-2026-10-26-01 — Ensayo de modelo a 300 rpm hasta 4 mg/l [⚡ Solo Nativo]</option>
-<option value="EXP-2026-10-24-02" >EXP-2026-10-24-02 — Ensayo de escala 2 [⚡ Nativo + ⏱ 1 Hz]</option>
-<option value="EXP-2026-10-24-01" >EXP-2026-10-24-01 — ensayos con delay a diferentes velocidades [⚡ Nativo + ⏱ 1 Hz]</option>
-<option value="EXP-2026-10-15-01" >EXP-2026-10-15-01 — Ensayo1 [⚡ Solo Nativo]</option>
-<option value="EXP-2026-10-14-04" >EXP-2026-10-14-04 — Protocolo D — Ensayo Combinado (Desoxigenación A + Escalón de Reoxigenación B) [⚡ Solo Nativo]</option>
-<option value="EXP-2026-10-14-03" >EXP-2026-10-14-03 — Protocolo D — Ensayo Combinado (Desoxigenación A + Escalón de Reoxigenación B) [⚡ Solo Nativo]</option>
-<option value="EXP-2026-10-14-02" >EXP-2026-10-14-02 — Protocolo A — Planta 1: Desoxigenación Química (Na₂SO₃) [⚡ Solo Nativo]</option>
-<option value="EXP-2026-10-13-06" >EXP-2026-10-13-06 — Protocolo B — Planta 2: Escalón de Aireación [⚡ Nativo + ⏱ 1 Hz]</option>
-<option value="EXP-2026-10-13-05" >EXP-2026-10-13-05 — Protocolo A — Planta 1: Desoxigenación Química (Na₂SO₃) [⚡ Nativo + ⏱ 1 Hz]</option>
-<option value="EXP-2026-10-13-04" >EXP-2026-10-13-04 — Prueba4 [⚡ Solo Nativo]</option>
-<option value="EXP-2026-10-13-03" >EXP-2026-10-13-03 — Prueba3 [⚡ Solo Nativo]</option>
-<option value="EXP-2026-10-13-02" >EXP-2026-10-13-02 — Prueba2 [⚡ Solo Nativo]</option>
-<option value="EXP-2026-10-13-01" >EXP-2026-10-13-01 — Prueba1 [⚡ Solo Nativo]</option>
-<option value="EXP-2026-10-12-04" >EXP-2026-10-12-04 — Protocolo B — Planta 2: Escalón de Aireación [⚡ Nativo + ⏱ 1 Hz]</option>
-<option value="EXP-2026-10-12-03" >EXP-2026-10-12-03 — Protocolo A — Planta 1: Desoxigenación Química (Na₂SO₃) [⚡ Solo Nativo]</option>
-<option value="EXP-2026-10-11-02" >EXP-2026-10-11-02 — pi bench closed_loop [⚡ Solo Nativo]</option>
+            <option value="">Cargando ensayos...</option>
           </select>
         </div>
 
@@ -920,701 +897,6 @@
       </div>
 
       <div class="exp-grid" id="exp-grid-container">
-
-        <div class="exp-card" data-id="EXP-2026-10-28-04" data-title="curva a 400">
-          <div>
-            <div class="exp-card-header">
-              <span class="exp-card-title">EXP-2026-10-28-04</span>
-              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span> <span class="role-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">⏱ 1 Hz</span></div>
-            </div>
-            <div class="exp-card-subtitle">curva a 400</div>
-            <div class="role-badges">
-              <span class="role-badge">od_sensor</span><span class="role-badge">mixer</span><span class="role-badge">pump</span><span class="role-badge">aerator</span>
-            </div>
-          </div>
-          <div class="exp-card-actions">
-            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-28-04')">
-              <span>📈 Cargar en Visualizador</span>
-            </button>
-            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-              <a href="/exports/EXP-2026-10-28-04_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
-                <span>⚡ CSV Nativo (Tesis)</span>
-              </a>
-              <a href="/exports/EXP-2026-10-28-04/telemetry.csv" class="btn-action" style="justify-content: center;" download title="Descargar CSV wide sincronizado a 1 Hz">
-                <span>📄 CSV 1 Hz</span>
-              </a>
-              <a href="/exports/EXP-2026-10-28-04_native/EXP-2026-10-28-04_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
-                <span>📦 .tar.gz</span>
-              </a>
-            </div>
-          </div>
-        </div>
-    
-
-        <div class="exp-card" data-id="EXP-2026-10-28-02" data-title="escalon a 170 rpm">
-          <div>
-            <div class="exp-card-header">
-              <span class="exp-card-title">EXP-2026-10-28-02</span>
-              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span> <span class="role-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">⏱ 1 Hz</span></div>
-            </div>
-            <div class="exp-card-subtitle">escalon a 170 RPM</div>
-            <div class="role-badges">
-              <span class="role-badge">od_sensor</span><span class="role-badge">mixer</span><span class="role-badge">pump</span><span class="role-badge">aerator</span>
-            </div>
-          </div>
-          <div class="exp-card-actions">
-            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-28-02')">
-              <span>📈 Cargar en Visualizador</span>
-            </button>
-            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-              <a href="/exports/EXP-2026-10-28-02_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
-                <span>⚡ CSV Nativo (Tesis)</span>
-              </a>
-              <a href="/exports/EXP-2026-10-28-02/telemetry.csv" class="btn-action" style="justify-content: center;" download title="Descargar CSV wide sincronizado a 1 Hz">
-                <span>📄 CSV 1 Hz</span>
-              </a>
-              <a href="/exports/EXP-2026-10-28-02_native/EXP-2026-10-28-02_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
-                <span>📦 .tar.gz</span>
-              </a>
-            </div>
-          </div>
-        </div>
-    
-        <div class="exp-card" data-id="EXP-2026-10-28-01" data-title="prueba de controlador">
-          <div>
-            <div class="exp-card-header">
-              <span class="exp-card-title">EXP-2026-10-28-01</span>
-              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span> <span class="role-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">⏱ 1 Hz</span></div>
-            </div>
-            <div class="exp-card-subtitle">Prueba de controlador</div>
-            <div class="role-badges">
-              <span class="role-badge">od_sensor</span><span class="role-badge">mixer</span><span class="role-badge">pump</span><span class="role-badge">aerator</span>
-            </div>
-          </div>
-          <div class="exp-card-actions">
-            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-28-01')">
-              <span>📈 Cargar en Visualizador</span>
-            </button>
-            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-              <a href="/exports/EXP-2026-10-28-01_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
-                <span>⚡ CSV Nativo (Tesis)</span>
-              </a>
-              <a href="/exports/EXP-2026-10-28-01/telemetry.csv" class="btn-action" style="justify-content: center;" download title="Descargar CSV wide sincronizado a 1 Hz">
-        <span>📄 CSV 1 Hz</span>
-      </a>
-              <a href="/exports/EXP-2026-10-28-01_native/EXP-2026-10-28-01_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
-                <span>📦 .tar.gz</span>
-              </a>
-            </div>
-          </div>
-        </div>
-    
-
-        <div class="exp-card" data-id="EXP-2026-10-27-02" data-title="ensayobomba2">
-          <div>
-            <div class="exp-card-header">
-              <span class="exp-card-title">EXP-2026-10-27-02</span>
-              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span></div>
-            </div>
-            <div class="exp-card-subtitle">EnsayoBomba2</div>
-            <div class="role-badges">
-              <span class="role-badge">od_sensor</span><span class="role-badge">mixer</span><span class="role-badge">pump</span><span class="role-badge">aerator</span>
-            </div>
-          </div>
-          <div class="exp-card-actions">
-            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-27-02')">
-              <span>📈 Cargar en Visualizador</span>
-            </button>
-            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-              <a href="/exports/EXP-2026-10-27-02_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
-                <span>⚡ CSV Nativo (Tesis)</span>
-              </a>
-              
-              <a href="/exports/EXP-2026-10-27-02_native/EXP-2026-10-27-02_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
-                <span>📦 .tar.gz</span>
-              </a>
-            </div>
-          </div>
-        </div>
-    
-
-        <div class="exp-card" data-id="EXP-2026-10-27-01" data-title="pruebadebomba">
-          <div>
-            <div class="exp-card-header">
-              <span class="exp-card-title">EXP-2026-10-27-01</span>
-              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span> <span class="role-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">⏱ 1 Hz</span></div>
-            </div>
-            <div class="exp-card-subtitle">PruebaDeBomba</div>
-            <div class="role-badges">
-              <span class="role-badge">od_sensor</span><span class="role-badge">mixer</span><span class="role-badge">pump</span><span class="role-badge">aerator</span>
-            </div>
-          </div>
-          <div class="exp-card-actions">
-            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-27-01')">
-              <span>📈 Cargar en Visualizador</span>
-            </button>
-            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-              <a href="/exports/EXP-2026-10-27-01_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
-                <span>⚡ CSV Nativo (Tesis)</span>
-              </a>
-              <a href="/exports/EXP-2026-10-27-01/telemetry.csv" class="btn-action" style="justify-content: center;" download title="Descargar CSV wide sincronizado a 1 Hz">
-        <span>📄 CSV 1 Hz</span>
-      </a>
-              <a href="/exports/EXP-2026-10-27-01_native/EXP-2026-10-27-01_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
-                <span>📦 .tar.gz</span>
-              </a>
-            </div>
-          </div>
-        </div>
-    
-
-        <div class="exp-card" data-id="EXP-2026-10-26-04" data-title="ensayo escalon a 600 rpm">
-          <div>
-            <div class="exp-card-header">
-              <span class="exp-card-title">EXP-2026-10-26-04</span>
-              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span> <span class="role-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">⏱ 1 Hz</span></div>
-            </div>
-            <div class="exp-card-subtitle">ensayo escalon a 600 RPM</div>
-            <div class="role-badges">
-              <span class="role-badge">od_sensor</span><span class="role-badge">aerator</span><span class="role-badge">mixer</span>
-            </div>
-          </div>
-          <div class="exp-card-actions">
-            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-26-04')">
-              <span>📈 Cargar en Visualizador</span>
-            </button>
-            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-              <a href="/exports/EXP-2026-10-26-04_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
-                <span>⚡ CSV Nativo (Tesis)</span>
-              </a>
-              <a href="/exports/EXP-2026-10-26-04/telemetry.csv" class="btn-action" style="justify-content: center;" download title="Descargar CSV wide sincronizado a 1 Hz">
-        <span>📄 CSV 1 Hz</span>
-      </a>
-              <a href="/exports/EXP-2026-10-26-04_native/EXP-2026-10-26-04_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
-                <span>📦 .tar.gz</span>
-              </a>
-            </div>
-          </div>
-        </div>
-    
-
-        <div class="exp-card" data-id="EXP-2026-10-26-03" data-title="ensayo de escalon a 600">
-          <div>
-            <div class="exp-card-header">
-              <span class="exp-card-title">EXP-2026-10-26-03</span>
-              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span> <span class="role-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">⏱ 1 Hz</span></div>
-            </div>
-            <div class="exp-card-subtitle">ensayo de escalon a 600</div>
-            <div class="role-badges">
-              <span class="role-badge">od_sensor</span><span class="role-badge">mixer</span><span class="role-badge">aerator</span>
-            </div>
-          </div>
-          <div class="exp-card-actions">
-            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-26-03')">
-              <span>📈 Cargar en Visualizador</span>
-            </button>
-            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-              <a href="/exports/EXP-2026-10-26-03_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
-                <span>⚡ CSV Nativo (Tesis)</span>
-              </a>
-              <a href="/exports/EXP-2026-10-26-03/telemetry.csv" class="btn-action" style="justify-content: center;" download title="Descargar CSV wide sincronizado a 1 Hz">
-        <span>📄 CSV 1 Hz</span>
-      </a>
-              <a href="/exports/EXP-2026-10-26-03_native/EXP-2026-10-26-03_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
-                <span>📦 .tar.gz</span>
-              </a>
-            </div>
-          </div>
-        </div>
-    
-
-        <div class="exp-card" data-id="EXP-2026-10-26-02" data-title="ensayo a escalon a 250 rpm a 4 mg/l">
-          <div>
-            <div class="exp-card-header">
-              <span class="exp-card-title">EXP-2026-10-26-02</span>
-              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span> <span class="role-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">⏱ 1 Hz</span></div>
-            </div>
-            <div class="exp-card-subtitle">Ensayo a escalon a 250 RPM a 4 mg/l</div>
-            <div class="role-badges">
-              <span class="role-badge">od_sensor</span><span class="role-badge">aerator</span><span class="role-badge">mixer</span>
-            </div>
-          </div>
-          <div class="exp-card-actions">
-            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-26-02')">
-              <span>📈 Cargar en Visualizador</span>
-            </button>
-            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-              <a href="/exports/EXP-2026-10-26-02_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
-                <span>⚡ CSV Nativo (Tesis)</span>
-              </a>
-              <a href="/exports/EXP-2026-10-26-02/telemetry.csv" class="btn-action" style="justify-content: center;" download title="Descargar CSV wide sincronizado a 1 Hz">
-        <span>📄 CSV 1 Hz</span>
-      </a>
-              <a href="/exports/EXP-2026-10-26-02_native/EXP-2026-10-26-02_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
-                <span>📦 .tar.gz</span>
-              </a>
-            </div>
-          </div>
-        </div>
-    
-
-        <div class="exp-card" data-id="EXP-2026-10-26-01" data-title="ensayo de modelo a 300 rpm hasta 4 mg/l">
-          <div>
-            <div class="exp-card-header">
-              <span class="exp-card-title">EXP-2026-10-26-01</span>
-              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span></div>
-            </div>
-            <div class="exp-card-subtitle">Ensayo de modelo a 300 rpm hasta 4 mg/l</div>
-            <div class="role-badges">
-              <span class="role-badge">od_sensor</span><span class="role-badge">mixer</span><span class="role-badge">aerator</span>
-            </div>
-          </div>
-          <div class="exp-card-actions">
-            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-26-01')">
-              <span>📈 Cargar en Visualizador</span>
-            </button>
-            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-              <a href="/exports/EXP-2026-10-26-01_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
-                <span>⚡ CSV Nativo (Tesis)</span>
-              </a>
-              
-              <a href="/exports/EXP-2026-10-26-01_native/EXP-2026-10-26-01_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
-                <span>📦 .tar.gz</span>
-              </a>
-            </div>
-          </div>
-        </div>
-    
-
-        <div class="exp-card" data-id="EXP-2026-10-24-02" data-title="ensayo de escala 2">
-          <div>
-            <div class="exp-card-header">
-              <span class="exp-card-title">EXP-2026-10-24-02</span>
-              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span> <span class="role-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">⏱ 1 Hz</span></div>
-            </div>
-            <div class="exp-card-subtitle">Ensayo de escala 2</div>
-            <div class="role-badges">
-              <span class="role-badge">od_sensor</span><span class="role-badge">mixer</span><span class="role-badge">aerator</span>
-            </div>
-          </div>
-          <div class="exp-card-actions">
-            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-24-02')">
-              <span>📈 Cargar en Visualizador</span>
-            </button>
-            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-              <a href="/exports/EXP-2026-10-24-02_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
-                <span>⚡ CSV Nativo (Tesis)</span>
-              </a>
-              <a href="/exports/EXP-2026-10-24-02/telemetry.csv" class="btn-action" style="justify-content: center;" download title="Descargar CSV wide sincronizado a 1 Hz">
-        <span>📄 CSV 1 Hz</span>
-      </a>
-              <a href="/exports/EXP-2026-10-24-02_native/EXP-2026-10-24-02_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
-                <span>📦 .tar.gz</span>
-              </a>
-            </div>
-          </div>
-        </div>
-    
-
-        <div class="exp-card" data-id="EXP-2026-10-24-01" data-title="ensayos con delay a diferentes velocidades">
-          <div>
-            <div class="exp-card-header">
-              <span class="exp-card-title">EXP-2026-10-24-01</span>
-              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span> <span class="role-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">⏱ 1 Hz</span></div>
-            </div>
-            <div class="exp-card-subtitle">ensayos con delay a diferentes velocidades</div>
-            <div class="role-badges">
-              <span class="role-badge">od_sensor</span><span class="role-badge">mixer</span><span class="role-badge">aerator</span>
-            </div>
-          </div>
-          <div class="exp-card-actions">
-            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-24-01')">
-              <span>📈 Cargar en Visualizador</span>
-            </button>
-            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-              <a href="/exports/EXP-2026-10-24-01_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
-                <span>⚡ CSV Nativo (Tesis)</span>
-              </a>
-              <a href="/exports/EXP-2026-10-24-01/telemetry.csv" class="btn-action" style="justify-content: center;" download title="Descargar CSV wide sincronizado a 1 Hz">
-        <span>📄 CSV 1 Hz</span>
-      </a>
-              <a href="/exports/EXP-2026-10-24-01_native/EXP-2026-10-24-01_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
-                <span>📦 .tar.gz</span>
-              </a>
-            </div>
-          </div>
-        </div>
-    
-
-        <div class="exp-card" data-id="EXP-2026-10-15-01" data-title="ensayo1">
-          <div>
-            <div class="exp-card-header">
-              <span class="exp-card-title">EXP-2026-10-15-01</span>
-              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span></div>
-            </div>
-            <div class="exp-card-subtitle">Ensayo1</div>
-            <div class="role-badges">
-              <span class="role-badge">od_sensor</span><span class="role-badge">aerator</span><span class="role-badge">mixer</span>
-            </div>
-          </div>
-          <div class="exp-card-actions">
-            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-15-01')">
-              <span>📈 Cargar en Visualizador</span>
-            </button>
-            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-              <a href="/exports/EXP-2026-10-15-01_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
-                <span>⚡ CSV Nativo (Tesis)</span>
-              </a>
-              
-              <a href="/exports/EXP-2026-10-15-01_native/EXP-2026-10-15-01_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
-                <span>📦 .tar.gz</span>
-              </a>
-            </div>
-          </div>
-        </div>
-    
-
-        <div class="exp-card" data-id="EXP-2026-10-14-04" data-title="protocolo d — ensayo combinado (desoxigenación a + escalón de reoxigenación b)">
-          <div>
-            <div class="exp-card-header">
-              <span class="exp-card-title">EXP-2026-10-14-04</span>
-              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span></div>
-            </div>
-            <div class="exp-card-subtitle">Protocolo D — Ensayo Combinado (Desoxigenación A + Escalón de Reoxigenación B)</div>
-            <div class="role-badges">
-              <span class="role-badge">od_sensor</span><span class="role-badge">aerator</span><span class="role-badge">mixer</span>
-            </div>
-          </div>
-          <div class="exp-card-actions">
-            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-14-04')">
-              <span>📈 Cargar en Visualizador</span>
-            </button>
-            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-              <a href="/exports/EXP-2026-10-14-04_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
-                <span>⚡ CSV Nativo (Tesis)</span>
-              </a>
-              
-              <a href="/exports/EXP-2026-10-14-04_native/EXP-2026-10-14-04_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
-                <span>📦 .tar.gz</span>
-              </a>
-            </div>
-          </div>
-        </div>
-    
-
-        <div class="exp-card" data-id="EXP-2026-10-14-03" data-title="protocolo d — ensayo combinado (desoxigenación a + escalón de reoxigenación b)">
-          <div>
-            <div class="exp-card-header">
-              <span class="exp-card-title">EXP-2026-10-14-03</span>
-              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span></div>
-            </div>
-            <div class="exp-card-subtitle">Protocolo D — Ensayo Combinado (Desoxigenación A + Escalón de Reoxigenación B)</div>
-            <div class="role-badges">
-              <span class="role-badge">od_sensor</span><span class="role-badge">aerator</span><span class="role-badge">mixer</span>
-            </div>
-          </div>
-          <div class="exp-card-actions">
-            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-14-03')">
-              <span>📈 Cargar en Visualizador</span>
-            </button>
-            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-              <a href="/exports/EXP-2026-10-14-03_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
-                <span>⚡ CSV Nativo (Tesis)</span>
-              </a>
-              
-              <a href="/exports/EXP-2026-10-14-03_native/EXP-2026-10-14-03_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
-                <span>📦 .tar.gz</span>
-              </a>
-            </div>
-          </div>
-        </div>
-    
-
-        <div class="exp-card" data-id="EXP-2026-10-14-02" data-title="protocolo a — planta 1: desoxigenación química (na₂so₃)">
-          <div>
-            <div class="exp-card-header">
-              <span class="exp-card-title">EXP-2026-10-14-02</span>
-              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span></div>
-            </div>
-            <div class="exp-card-subtitle">Protocolo A — Planta 1: Desoxigenación Química (Na₂SO₃)</div>
-            <div class="role-badges">
-              <span class="role-badge">od_sensor</span><span class="role-badge">mixer</span><span class="role-badge">aerator</span>
-            </div>
-          </div>
-          <div class="exp-card-actions">
-            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-14-02')">
-              <span>📈 Cargar en Visualizador</span>
-            </button>
-            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-              <a href="/exports/EXP-2026-10-14-02_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
-                <span>⚡ CSV Nativo (Tesis)</span>
-              </a>
-              
-              <a href="/exports/EXP-2026-10-14-02_native/EXP-2026-10-14-02_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
-                <span>📦 .tar.gz</span>
-              </a>
-            </div>
-          </div>
-        </div>
-    
-
-        <div class="exp-card" data-id="EXP-2026-10-13-06" data-title="protocolo b — planta 2: escalón de aireación">
-          <div>
-            <div class="exp-card-header">
-              <span class="exp-card-title">EXP-2026-10-13-06</span>
-              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span> <span class="role-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">⏱ 1 Hz</span></div>
-            </div>
-            <div class="exp-card-subtitle">Protocolo B — Planta 2: Escalón de Aireación</div>
-            <div class="role-badges">
-              <span class="role-badge">od_sensor</span><span class="role-badge">aerator</span>
-            </div>
-          </div>
-          <div class="exp-card-actions">
-            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-13-06')">
-              <span>📈 Cargar en Visualizador</span>
-            </button>
-            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-              <a href="/exports/EXP-2026-10-13-06_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
-                <span>⚡ CSV Nativo (Tesis)</span>
-              </a>
-              <a href="/exports/EXP-2026-10-13-06/telemetry.csv" class="btn-action" style="justify-content: center;" download title="Descargar CSV wide sincronizado a 1 Hz">
-        <span>📄 CSV 1 Hz</span>
-      </a>
-              <a href="/exports/EXP-2026-10-13-06_native/EXP-2026-10-13-06_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
-                <span>📦 .tar.gz</span>
-              </a>
-            </div>
-          </div>
-        </div>
-    
-
-        <div class="exp-card" data-id="EXP-2026-10-13-05" data-title="protocolo a — planta 1: desoxigenación química (na₂so₃)">
-          <div>
-            <div class="exp-card-header">
-              <span class="exp-card-title">EXP-2026-10-13-05</span>
-              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span> <span class="role-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">⏱ 1 Hz</span></div>
-            </div>
-            <div class="exp-card-subtitle">Protocolo A — Planta 1: Desoxigenación Química (Na₂SO₃)</div>
-            <div class="role-badges">
-              <span class="role-badge">od_sensor</span><span class="role-badge">mixer</span>
-            </div>
-          </div>
-          <div class="exp-card-actions">
-            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-13-05')">
-              <span>📈 Cargar en Visualizador</span>
-            </button>
-            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-              <a href="/exports/EXP-2026-10-13-05_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
-                <span>⚡ CSV Nativo (Tesis)</span>
-              </a>
-              <a href="/exports/EXP-2026-10-13-05/telemetry.csv" class="btn-action" style="justify-content: center;" download title="Descargar CSV wide sincronizado a 1 Hz">
-        <span>📄 CSV 1 Hz</span>
-      </a>
-              <a href="/exports/EXP-2026-10-13-05_native/EXP-2026-10-13-05_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
-                <span>📦 .tar.gz</span>
-              </a>
-            </div>
-          </div>
-        </div>
-    
-
-        <div class="exp-card" data-id="EXP-2026-10-13-04" data-title="prueba4">
-          <div>
-            <div class="exp-card-header">
-              <span class="exp-card-title">EXP-2026-10-13-04</span>
-              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span></div>
-            </div>
-            <div class="exp-card-subtitle">Prueba4</div>
-            <div class="role-badges">
-              <span class="role-badge">mixer</span><span class="role-badge">aerator</span>
-            </div>
-          </div>
-          <div class="exp-card-actions">
-            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-13-04')">
-              <span>📈 Cargar en Visualizador</span>
-            </button>
-            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-              <a href="/exports/EXP-2026-10-13-04_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
-                <span>⚡ CSV Nativo (Tesis)</span>
-              </a>
-              
-              <a href="/exports/EXP-2026-10-13-04_native/EXP-2026-10-13-04_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
-                <span>📦 .tar.gz</span>
-              </a>
-            </div>
-          </div>
-        </div>
-    
-
-        <div class="exp-card" data-id="EXP-2026-10-13-03" data-title="prueba3">
-          <div>
-            <div class="exp-card-header">
-              <span class="exp-card-title">EXP-2026-10-13-03</span>
-              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span></div>
-            </div>
-            <div class="exp-card-subtitle">Prueba3</div>
-            <div class="role-badges">
-              <span class="role-badge">mixer</span><span class="role-badge">aerator</span>
-            </div>
-          </div>
-          <div class="exp-card-actions">
-            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-13-03')">
-              <span>📈 Cargar en Visualizador</span>
-            </button>
-            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-              <a href="/exports/EXP-2026-10-13-03_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
-                <span>⚡ CSV Nativo (Tesis)</span>
-              </a>
-              
-              <a href="/exports/EXP-2026-10-13-03_native/EXP-2026-10-13-03_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
-                <span>📦 .tar.gz</span>
-              </a>
-            </div>
-          </div>
-        </div>
-    
-
-        <div class="exp-card" data-id="EXP-2026-10-13-02" data-title="prueba2">
-          <div>
-            <div class="exp-card-header">
-              <span class="exp-card-title">EXP-2026-10-13-02</span>
-              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span></div>
-            </div>
-            <div class="exp-card-subtitle">Prueba2</div>
-            <div class="role-badges">
-              <span class="role-badge">mixer</span><span class="role-badge">aerator</span>
-            </div>
-          </div>
-          <div class="exp-card-actions">
-            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-13-02')">
-              <span>📈 Cargar en Visualizador</span>
-            </button>
-            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-              <a href="/exports/EXP-2026-10-13-02_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
-                <span>⚡ CSV Nativo (Tesis)</span>
-              </a>
-              
-              <a href="/exports/EXP-2026-10-13-02_native/EXP-2026-10-13-02_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
-                <span>📦 .tar.gz</span>
-              </a>
-            </div>
-          </div>
-        </div>
-    
-
-        <div class="exp-card" data-id="EXP-2026-10-13-01" data-title="prueba1">
-          <div>
-            <div class="exp-card-header">
-              <span class="exp-card-title">EXP-2026-10-13-01</span>
-              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span></div>
-            </div>
-            <div class="exp-card-subtitle">Prueba1</div>
-            <div class="role-badges">
-              <span class="role-badge">mixer</span><span class="role-badge">aerator</span>
-            </div>
-          </div>
-          <div class="exp-card-actions">
-            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-13-01')">
-              <span>📈 Cargar en Visualizador</span>
-            </button>
-            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-              <a href="/exports/EXP-2026-10-13-01_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
-                <span>⚡ CSV Nativo (Tesis)</span>
-              </a>
-              
-              <a href="/exports/EXP-2026-10-13-01_native/EXP-2026-10-13-01_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
-                <span>📦 .tar.gz</span>
-              </a>
-            </div>
-          </div>
-        </div>
-    
-
-        <div class="exp-card" data-id="EXP-2026-10-12-04" data-title="protocolo b — planta 2: escalón de aireación">
-          <div>
-            <div class="exp-card-header">
-              <span class="exp-card-title">EXP-2026-10-12-04</span>
-              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span> <span class="role-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">⏱ 1 Hz</span></div>
-            </div>
-            <div class="exp-card-subtitle">Protocolo B — Planta 2: Escalón de Aireación</div>
-            <div class="role-badges">
-              <span class="role-badge">od_sensor</span><span class="role-badge">aerator</span>
-            </div>
-          </div>
-          <div class="exp-card-actions">
-            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-12-04')">
-              <span>📈 Cargar en Visualizador</span>
-            </button>
-            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-              <a href="/exports/EXP-2026-10-12-04_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
-                <span>⚡ CSV Nativo (Tesis)</span>
-              </a>
-              <a href="/exports/EXP-2026-10-12-04/telemetry.csv" class="btn-action" style="justify-content: center;" download title="Descargar CSV wide sincronizado a 1 Hz">
-        <span>📄 CSV 1 Hz</span>
-      </a>
-              <a href="/exports/EXP-2026-10-12-04_native/EXP-2026-10-12-04_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
-                <span>📦 .tar.gz</span>
-              </a>
-            </div>
-          </div>
-        </div>
-    
-
-        <div class="exp-card" data-id="EXP-2026-10-12-03" data-title="protocolo a — planta 1: desoxigenación química (na₂so₃)">
-          <div>
-            <div class="exp-card-header">
-              <span class="exp-card-title">EXP-2026-10-12-03</span>
-              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span></div>
-            </div>
-            <div class="exp-card-subtitle">Protocolo A — Planta 1: Desoxigenación Química (Na₂SO₃)</div>
-            <div class="role-badges">
-              <span class="role-badge">aerator</span>
-            </div>
-          </div>
-          <div class="exp-card-actions">
-            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-12-03')">
-              <span>📈 Cargar en Visualizador</span>
-            </button>
-            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-              <a href="/exports/EXP-2026-10-12-03_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
-                <span>⚡ CSV Nativo (Tesis)</span>
-              </a>
-              
-              <a href="/exports/EXP-2026-10-12-03_native/EXP-2026-10-12-03_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
-                <span>📦 .tar.gz</span>
-              </a>
-            </div>
-          </div>
-        </div>
-    
-
-        <div class="exp-card" data-id="EXP-2026-10-11-02" data-title="pi bench closed_loop">
-          <div>
-            <div class="exp-card-header">
-              <span class="exp-card-title">EXP-2026-10-11-02</span>
-              <div><span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span></div>
-            </div>
-            <div class="exp-card-subtitle">pi bench closed_loop</div>
-            <div class="role-badges">
-              <span class="role-badge">od_sensor</span><span class="role-badge">aerator</span>
-            </div>
-          </div>
-          <div class="exp-card-actions">
-            <button class="btn-action btn-primary" onclick="selectAndGraph('EXP-2026-10-11-02')">
-              <span>📈 Cargar en Visualizador</span>
-            </button>
-            <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
-              <a href="/exports/EXP-2026-10-11-02_native/telemetry_native.csv" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis">
-                <span>⚡ CSV Nativo (Tesis)</span>
-              </a>
-              
-              <a href="/exports/EXP-2026-10-11-02_native/EXP-2026-10-11-02_native.tar.gz" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)">
-                <span>📦 .tar.gz</span>
-              </a>
-            </div>
-          </div>
-        </div>
-    
       </div>
     </div>
 
@@ -1821,11 +1103,85 @@
     // Constant reference C*
     const C_STAR_REF = 7.15;
 
+    // Render UI dynamically from EXPERIMENTS array
+    function renderExperimentUI() {
+      if (!EXPERIMENTS || EXPERIMENTS.length === 0) return;
+
+      // Update badge
+      const badge = document.getElementById('exp-badge-count');
+      if (badge) badge.textContent = EXPERIMENTS.length;
+
+      // Populate Select Dropdown
+      const select = document.getElementById('exp-select');
+      if (select) {
+        select.innerHTML = EXPERIMENTS.map(e => {
+          let badgeStr = '';
+          if (e.native_csv && e.wide_csv) badgeStr = ' [⚡ Nativo + ⏱ 1 Hz]';
+          else if (e.native_csv) badgeStr = ' [⚡ Solo Nativo]';
+          else if (e.wide_csv) badgeStr = ' [⏱ Solo 1 Hz]';
+          const titleStr = e.title ? (' — ' + e.title) : '';
+          return '<option value="' + e.id + '">' + e.id + titleStr + badgeStr + '</option>';
+        }).join('');
+      }
+
+      // Populate Experiment Cards Grid
+      const grid = document.getElementById('exp-grid-container');
+      if (grid) {
+        grid.innerHTML = EXPERIMENTS.map(e => {
+          const title = e.title || 'Ensayo de Oxigenación';
+          const roles = (e.roles || ['od_sensor', 'mixer', 'aerator', 'pump']).map(r => '<span class="role-badge">' + r + '</span>').join('');
+          
+          let badgesHeader = '';
+          if (e.native_csv) {
+            badgesHeader += '<span class="role-badge" style="background: rgba(168, 85, 247, 0.15); color: #c084fc; border-color: rgba(168, 85, 247, 0.4);">⚡ Nativo (Tesis)</span> ';
+          }
+          if (e.wide_csv) {
+            badgesHeader += '<span class="role-badge" style="background: rgba(56, 189, 248, 0.15); color: #38bdf8; border-color: rgba(56, 189, 248, 0.4);">⏱ 1 Hz</span>';
+          }
+
+          let actionButtons = '';
+          if (e.native_csv) {
+            actionButtons += '<a href="/' + e.native_csv + '" class="btn-action btn-highlight" style="flex: 1; justify-content: center;" download title="Descargar CSV nativo a alta frecuencia (5-20 Hz) para tesis"><span>⚡ CSV Nativo (Tesis)</span></a>';
+          }
+          if (e.wide_csv) {
+            actionButtons += '<a href="/' + e.wide_csv + '" class="btn-action" style="justify-content: center;" download title="Descargar CSV wide sincronizado a 1 Hz"><span>📄 CSV 1 Hz</span></a>';
+          }
+          if (e.native_bundle) {
+            actionButtons += '<a href="/' + e.native_bundle + '" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)"><span>📦 .tar.gz</span></a>';
+          } else if (e.wide_bundle) {
+            actionButtons += '<a href="/' + e.wide_bundle + '" class="btn-action" style="justify-content: center;" download title="Descargar paquete completo comprimido (.tar.gz)"><span>📦 .tar.gz</span></a>';
+          }
+
+          return '<div class="exp-card" data-id="' + e.id + '" data-title="' + title.toLowerCase() + '">' +
+            '<div>' +
+              '<div class="exp-card-header">' +
+                '<span class="exp-card-title">' + e.id + '</span>' +
+                '<div>' + badgesHeader + '</div>' +
+              '</div>' +
+              '<div class="exp-card-subtitle">' + title + '</div>' +
+              '<div class="role-badges">' + roles + '</div>' +
+            '</div>' +
+            '<div class="exp-card-actions">' +
+              "<button class=\"btn-action btn-primary\" onclick=\"selectAndGraph('" + e.id + "')\">" +
+                '<span>📈 Cargar en Visualizador</span>' +
+              '</button>' +
+              '<div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">' +
+                actionButtons +
+              '</div>' +
+            '</div>' +
+          '</div>';
+        }).join('');
+      }
+    }
+
     // Initialize application on DOM ready
     document.addEventListener('DOMContentLoaded', () => {
-      const defaultId = "EXP-2026-10-28-01";
+      renderExperimentUI();
+      const defaultId = (EXPERIMENTS && EXPERIMENTS.length > 0) ? EXPERIMENTS[0].id : null;
       if (defaultId) {
         currentExpId = defaultId;
+        const select = document.getElementById('exp-select');
+        if (select) select.value = defaultId;
         loadExperiment(defaultId, 'native');
       }
     });
