@@ -39,6 +39,42 @@ def least_squares_rate_per_min(points: Sequence[tuple[int, float]]) -> float | N
     return (covariance / spread) * 60_000.0
 
 
+def least_squares_quadratic_per_min(points: Sequence[tuple[int, float]]) -> tuple[float, float] | None:
+    """
+    Quadratic least-squares fit of ``(t_ms, value)``: ``(slope at the last point [units/min],
+    curvature d²v/dt² [units/min²])``, or ``None`` if it cannot be told (fewer than 4 points or a
+    degenerate span).
+
+    The curvature tells a rise that is still accelerating (sulfite running out) from one that is
+    decaying (the tail of a pulse seen through the sensor lag, with demand still present). With a
+    first-order sensor of time constant τ, the true rate is ``slope + τ·curvature``.
+    """
+    if len(points) < 4 or points[-1][0] - points[0][0] <= 0:
+        return None
+    t_end = points[-1][0]
+    xs = [(t - t_end) / 60_000.0 for t, _ in points]
+    ys = [v for _, v in points]
+    s = [sum(x ** k for x in xs) for k in range(5)]
+    b = [sum(y * x ** k for x, y in zip(xs, ys)) for k in range(3)]
+    m = [[s[0], s[1], s[2]], [s[1], s[2], s[3]], [s[2], s[3], s[4]]]
+
+    def det(a: list[list[float]]) -> float:
+        return (a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1])
+                - a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0])
+                + a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]))
+
+    d = det(m)
+    if abs(d) < 1e-12:
+        return None
+    coef = []
+    for col in range(3):
+        mc = [row[:] for row in m]
+        for r in range(3):
+            mc[r][col] = b[r]
+        coef.append(det(mc) / d)
+    return coef[1], 2.0 * coef[2]
+
+
 @dataclass(frozen=True, slots=True)
 class PhaseContext:
     """
@@ -249,6 +285,18 @@ def _sulfite_exhausted_post_hold(cond: Mapping[str, Any], ctx: PhaseContext) -> 
     min_slope = float(cond.get("min_slope_mg_l_per_min", -0.02))
     if rate is None or rate < min_slope:
         return False
+
+    # Curvature check: the rise must not be decaying. After a pulse, the sensor lag keeps the
+    # reading rising while the tank already slows; if sulfite is still there the slope keeps
+    # falling. A slope that holds or grows means the demand is running out.
+    if "min_curvature_mg_l_per_min2" in cond:
+        cw_ms = int(float(cond.get("curvature_window_s", 120)) * 1000)
+        recent2 = [p for p in ctx.do_history if p[0] >= ctx.do_history[-1][0] - cw_ms]
+        if len(recent2) < 4 or (recent2[-1][0] - recent2[0][0]) < (cw_ms * 0.85):
+            return False
+        q = least_squares_quadratic_per_min(recent2)
+        if q is None or q[1] < float(cond["min_curvature_mg_l_per_min2"]):
+            return False
 
     return True
 

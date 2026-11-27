@@ -911,6 +911,12 @@ BASE_TOL_MG_L = 0.10
 #: mezclador sube el OD ≈ 0.07–0.11 mg/L/min a 1 mg/L (k_s ≈ 0.65–1.24 h⁻¹); una meseta a OD bajo
 #: significa sulfito consumiendo lo que aporta el mezclador.
 BASE_MIN_SLOPE = 0.06
+#: Curvatura mínima (mg/L/min²) de la subida en 120 s: descarta una subida que se apaga (cola de
+#: un pulso vista a través del retardo de medición, con sulfito todavía presente). El ruido de la
+#: curvatura en reposo es ≈ ±0.01 (26-03), de ahí el margen.
+BASE_MIN_CURVATURE = -0.02
+#: Fin de la desoxigenación de la receta base: el piso real con dosis normal fue 0.32 (26-03).
+BASE_DEOX_FLOOR = 0.5
 
 
 def _abc_phase(phase_id: str) -> Phase:
@@ -930,7 +936,7 @@ _ABC_BASE_VERIFY = Phase(
     mode="auto",
     condition_text=(
         f"OD ≥ {BASE_DO_MG_L:.2f} mg/L subiendo a la tasa del mezclador (≥ {BASE_MIN_SLOPE} mg/L/min en 60 s), "
-        "aerador en reposo ≥ 90 s"
+        "subida que no se apaga (curvatura ≥ −0.02 mg/L/min² en 120 s), aerador en reposo ≥ 90 s"
     ),
     condition={
         "kind": "sulfite_exhausted_post_hold",
@@ -940,8 +946,10 @@ _ABC_BASE_VERIFY = Phase(
         "max_delta_mg_l": 0.30,
         "min_slope_mg_l_per_min": BASE_MIN_SLOPE,
         "rest_cooldown_s": 90.0,
+        "min_curvature_mg_l_per_min2": BASE_MIN_CURVATURE,
+        "curvature_window_s": 120,
     },
-    timeout_s=2400,
+    timeout_s=3000,
     on_timeout="pause",
     commands=(
         ("aerator", "stop", {}),
@@ -952,8 +960,16 @@ _ABC_BASE_VERIFY = Phase(
         "min_do_mg_l": BASE_DO_MG_L,
         "min_slope_mg_l_per_min": BASE_MIN_SLOPE,
         "max_delta_mg_l": 0.30,
-        "safety_timeout_s": 2400,
+        "safety_timeout_s": 3000,
         "rest_cooldown_s": 90.0,
+        "min_curvature_mg_l_per_min2": BASE_MIN_CURVATURE,
+        "curvature_window_s": 120,
+        # Diagnóstico de la condición inicial (no deciden): C' = y' + τ·y'' y demanda residual
+        # r = k_s·(C* − C) − C'. τ es el retardo aparente identificado (cota superior), k_s y C*
+        # la reaireación del mezclador medida en 11-17-01.
+        "sensor_tau_s": 18.0,
+        "mixer_ks_per_h": 1.24,
+        "c_star_mg_l": 6.5,
         "pulse_rpm": 110,
         "pulse_trigger_slope": 0.0,
         "pulse_trigger_do": round(BASE_DO_MG_L - 0.45, 2),
@@ -965,6 +981,17 @@ _ABC_BASE_VERIFY = Phase(
     },
 )
 
+_ABC_BASE_DEOX = replace(
+    _abc_phase("abc_deox"),
+    desc=(
+        f"Espera la caída libre de DO hasta una meseta bajo {BASE_DEOX_FLOOR} mg/L. El residual que quede "
+        "lo consume la verificación siguiente; no hace falta llegar al fondo."
+    ),
+    condition_text=f"DO ≤ {BASE_DEOX_FLOOR} mg/L Y estabilizado (ΔDO ≤ 0.04 mg/L en 60 s) durante ≥ 180 s",
+    condition={**_abc_phase("abc_deox").condition, "below_mg_l": BASE_DEOX_FLOOR},
+    params={**_abc_phase("abc_deox").params, "do_floor_mg_l": BASE_DEOX_FLOOR},
+)
+
 _AUTO_BENCHMARK_CONTROL_BASE = Recipe(
     recipe_id="auto_benchmark_control_base",
     title=f"Protocolo Automatizado: Benchmark PID 2-DOF con base certificada (C₀ = {BASE_DO_MG_L:.1f} mg/L)",
@@ -973,7 +1000,7 @@ _AUTO_BENCHMARK_CONTROL_BASE = Recipe(
     phases=(
         _abc_phase("abc_prep"),
         _abc_phase("abc_dose"),
-        _abc_phase("abc_deox"),
+        _ABC_BASE_DEOX,
         _ABC_BASE_VERIFY,
         replace(_abc_phase("abc_arm"), num="5"),
         replace(_abc_phase("abc_run"), num="6"),

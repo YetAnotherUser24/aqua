@@ -33,7 +33,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 from ..events.model import Event, EventType, Scope, Source
-from .conditions import PhaseContext, evaluate, least_squares_rate_per_min
+from .conditions import PhaseContext, evaluate, least_squares_quadratic_per_min, least_squares_rate_per_min
 from .kla_metrics import compute_kla_metrics
 from ..version import gateway_version, recipe_digest
 from .recipes import RECIPES, Phase
@@ -917,11 +917,30 @@ class Orchestrator:
             pts = [p for p in self._do_history if p[0] >= self._do_history[-1][0] - 60_000]
             if len(pts) >= 2:
                 rate = least_squares_rate_per_min(pts)
+        # Curvature (quadratic fit) and the diagnostics it enables: the true rate C' = y' + τ·y''
+        # (first-order measurement lag) and the residual demand r = k_s·(C* − C) − C'. They are
+        # recorded for every run; only the curvature takes part in the verdict.
+        min_curv = vp.get("min_curvature_mg_l_per_min2")
+        cw_ms = int(float(vp.get("curvature_window_s", 120)) * 1000)
+        quad = None
+        if self._do_history:
+            pts2 = [p for p in self._do_history if p[0] >= self._do_history[-1][0] - cw_ms]
+            if len(pts2) >= 4 and (pts2[-1][0] - pts2[0][0]) >= cw_ms * 0.85:
+                quad = least_squares_quadratic_per_min(pts2)
+        true_rate = demand = None
+        if quad is not None:
+            tau_min = float(vp.get("sensor_tau_s", 18.0)) / 60.0
+            true_rate = quad[0] + tau_min * quad[1]
+            if do_now is not None:
+                ks_min = float(vp.get("mixer_ks_per_h", 1.24)) / 60.0
+                demand = ks_min * (float(vp.get("c_star_mg_l", 6.5)) - do_now) - true_rate
         checks: dict[str, bool] = {}
         if base is not None and do_now is not None:
             checks["do_in_band"] = float(base) <= do_now <= float(base) + tol
         if min_slope is not None and rate is not None:
             checks["slope_ok"] = rate >= float(min_slope)
+        if min_curv is not None:
+            checks["curvature_ok"] = quad is not None and quad[1] >= float(min_curv)
         rpm = self._last_drv_rpm
         if rpm is not None:
             checks["aerator_at_rest"] = abs(rpm) <= 5.0
@@ -930,6 +949,11 @@ class Orchestrator:
             "phase_id": phase.phase_id,
             "do_mg_l": None if do_now is None else round(do_now, 3),
             "slope_mg_l_per_min": None if rate is None else round(rate, 4),
+            "slope_end_quad_mg_l_per_min": None if quad is None else round(quad[0], 4),
+            "curvature_mg_l_per_min2": None if quad is None else round(quad[1], 4),
+            "min_curvature_mg_l_per_min2": min_curv,
+            "true_rate_mg_l_per_min": None if true_rate is None else round(true_rate, 4),
+            "residual_demand_mg_l_per_min": None if demand is None else round(demand, 4),
             "temp_c": self._last_od_temp_c,
             "aerator_rpm": rpm,
             "base_do_mg_l": base,
@@ -1183,6 +1207,10 @@ class Orchestrator:
                 cond["min_slope_mg_l_per_min"] = float(effective["min_slope_mg_l_per_min"])
             if "rest_cooldown_s" in effective:
                 cond["rest_cooldown_s"] = float(effective["rest_cooldown_s"])
+            if "min_curvature_mg_l_per_min2" in effective:
+                cond["min_curvature_mg_l_per_min2"] = float(effective["min_curvature_mg_l_per_min2"])
+            if "curvature_window_s" in effective:
+                cond["curvature_window_s"] = float(effective["curvature_window_s"])
             # Pass orchestrator pulse state to condition
             if self._last_pulse_end_s is not None:
                 cond["last_pulse_end_s"] = self._last_pulse_end_s
