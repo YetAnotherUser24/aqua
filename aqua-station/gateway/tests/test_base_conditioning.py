@@ -176,3 +176,57 @@ def test_base_deox_ends_on_a_higher_floor_and_verify_has_room() -> None:
     # la receta original conserva su piso estricto
     orig = next(p for p in RECIPES["auto_benchmark_control"].phases if p.phase_id == "abc_deox")
     assert orig.condition["below_mg_l"] == 0.25
+
+
+# --- fin del lazo por estabilización ------------------------------------------------------------
+
+def _loop_ctx(pts: list[tuple[int, float]], elapsed_s: float) -> PhaseContext:
+    now_s = pts[-1][0] / 1000.0
+    return PhaseContext(
+        metrics={("od_sensor", "od_do_mg_l"): pts[-1][1]},
+        do_history=pts,
+        now_s=now_s,
+        phase_entered_s=now_s - elapsed_s,
+        run_started_s=now_s - 3600,
+    )
+
+
+@pytest.mark.parametrize("do_end,slope,elapsed,ok", [
+    (5.04, 0.01, 220, True),     # 26-03: plano cerca de SP
+    (5.25, 0.00, 220, True),     # 26-02: sobreimpulso que el aerador (u ≥ 0) no puede bajar
+    (5.04, 0.01, 150, False),    # antes del mínimo: la ventana fija de KPIs debe existir
+    (4.80, 0.30, 220, False),    # todavía subiendo
+    (5.10, -0.04, 260, False),   # cayendo: demanda residual, el lazo volverá a actuar
+    (4.50, 0.00, 300, False),    # plano pero lejos de SP
+])
+def test_loop_ends_when_settled(do_end, slope, elapsed, ok) -> None:
+    run = RECIPES["auto_benchmark_control_base"].phases[5]
+    assert run.phase_id == "abc_run" and run.condition["kind"] == "loop_settled"
+    pts = _history(do_end, slope, span_s=60)
+    assert evaluate(dict(run.condition), _loop_ctx(pts, elapsed)) is ok
+
+
+def test_loop_settle_respects_cap_and_original_recipe() -> None:
+    run = RECIPES["auto_benchmark_control_base"].phases[5]
+    assert run.timeout_s == 600 and run.on_timeout == "advance"
+    assert run.condition["min_elapsed_s"] == 180
+    orig = next(p for p in RECIPES["auto_benchmark_control"].phases if p.phase_id == "abc_run")
+    assert orig.condition == {"kind": "elapsed", "seconds": 600}
+
+
+# --- el timeout de la verificación no se puede acortar -----------------------------------------
+
+@pytest.mark.asyncio
+async def test_shortened_verify_timeout_is_rejected() -> None:
+    orch = Orchestrator(FakeGateway())
+    orch._recipe_id = "auto_benchmark_control_base"
+    await orch.set_phase_params("abc_verify", {"safety_timeout_s": 600, "min_do_mg_l": 1.0})
+    assert "safety_timeout_s" not in orch._param_overrides["abc_verify"]
+    assert orch._param_overrides["abc_verify"]["min_do_mg_l"] == 1.0
+    assert orch._rejected_overrides["abc_verify"] == {"safety_timeout_s": 600}
+    # alargarlo sí se permite
+    await orch.set_phase_params("abc_verify", {"safety_timeout_s": 3600})
+    assert orch._param_overrides["abc_verify"]["safety_timeout_s"] == 3600
+    # otras fases no se tocan
+    await orch.set_phase_params("abc_deox", {"safety_timeout_s": 600})
+    assert orch._param_overrides["abc_deox"]["safety_timeout_s"] == 600

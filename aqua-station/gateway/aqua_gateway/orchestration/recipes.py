@@ -992,6 +992,26 @@ _ABC_BASE_DEOX = replace(
     params={**_abc_phase("abc_deox").params, "do_floor_mg_l": BASE_DEOX_FLOOR},
 )
 
+#: Fin del lazo por estabilización: tras el pico el aerador satura en 0 rpm y lo que sigue es deriva
+#: de la planta. Mínimo 180 s (t₉₀ ≤ 130 s en todos los lazos registrados) para que la ventana fija de
+#: KPIs exista siempre; tope 600 s.
+LOOP_SETTLE = {"min_elapsed_s": 180, "band_mg_l": 0.30, "window_s": 60, "eps_mg_l_per_min": 0.02}
+
+_ABC_BASE_RUN = replace(
+    _abc_phase("abc_run"),
+    num="6",
+    desc=(
+        "Regulación autónoma en lazo cerrado hasta que el OD se estabiliza cerca de la consigna "
+        "(tope 600 s). Tras el pico el aerador satura en 0 rpm: seguir no aporta información del lazo."
+    ),
+    condition_text=(
+        f"t ≥ {LOOP_SETTLE['min_elapsed_s']} s, |OD − SP| ≤ {LOOP_SETTLE['band_mg_l']:.2f} mg/L y "
+        f"|pendiente| ≤ {LOOP_SETTLE['eps_mg_l_per_min']} mg/L/min en {LOOP_SETTLE['window_s']} s (tope 600 s)"
+    ),
+    condition={"kind": "loop_settled", "setpoint": 5.00, **LOOP_SETTLE},
+    params={**_abc_phase("abc_run").params, **{f"settle_{k}": v for k, v in LOOP_SETTLE.items()}},
+)
+
 _AUTO_BENCHMARK_CONTROL_BASE = Recipe(
     recipe_id="auto_benchmark_control_base",
     title=f"Protocolo Automatizado: Benchmark PID 2-DOF con base certificada (C₀ = {BASE_DO_MG_L:.1f} mg/L)",
@@ -1003,7 +1023,7 @@ _AUTO_BENCHMARK_CONTROL_BASE = Recipe(
         _ABC_BASE_DEOX,
         _ABC_BASE_VERIFY,
         replace(_abc_phase("abc_arm"), num="5"),
-        replace(_abc_phase("abc_run"), num="6"),
+        _ABC_BASE_RUN,
         replace(_abc_phase("abc_eval"), num="7"),
     ),
 )
@@ -1040,6 +1060,7 @@ _VALID_CONDITIONS = frozenset(
         "setpoint_reached",
         "sulfite_exhausted_post_hold",
         "do_above_and_stable",
+        "loop_settled",
     }
 )
 

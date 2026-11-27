@@ -301,6 +301,29 @@ def _sulfite_exhausted_post_hold(cond: Mapping[str, Any], ctx: PhaseContext) -> 
     return True
 
 
+def _loop_settled(cond: Mapping[str, Any], ctx: PhaseContext) -> bool:
+    """
+    The closed loop has nothing left to show: DO near the set point and flat.
+
+    After the rise and the peak the aerator saturates at 0 rpm (u >= 0) and what remains is the
+    plant drifting on its own (mixer reaeration up, residual demand down). Running on adds no
+    information about the loop, so the run ends once, after ``min_elapsed_s``, the DO is within
+    ``band_mg_l`` of ``setpoint`` and its least-squares slope over ``window_s`` is below
+    ``eps_mg_l_per_min`` in magnitude. The phase timeout caps a loop that never settles.
+    """
+    if ctx.now_s - ctx.phase_entered_s < float(cond.get("min_elapsed_s", 180)):
+        return False
+    do = ctx.value("od_sensor", "od_do_mg_l")
+    if do is None or abs(do - float(cond["setpoint"])) > float(cond.get("band_mg_l", 0.30)):
+        return False
+    window_ms = int(float(cond.get("window_s", 60)) * 1000)
+    recent = [p for p in ctx.do_history if p[0] >= ctx.do_history[-1][0] - window_ms] if ctx.do_history else []
+    if len(recent) < 2 or (recent[-1][0] - recent[0][0]) < (window_ms * 0.85):
+        return False
+    rate = least_squares_rate_per_min(recent)
+    return rate is not None and abs(rate) <= float(cond.get("eps_mg_l_per_min", 0.02))
+
+
 _HANDLERS = {
     "elapsed": _elapsed,
     "do_below": _do_below,
@@ -311,4 +334,5 @@ _HANDLERS = {
     "setpoint_reached": _setpoint_reached,
     "sulfite_exhausted_post_hold": _sulfite_exhausted_post_hold,
     "do_above_and_stable": _do_above_and_stable,
+    "loop_settled": _loop_settled,
 }

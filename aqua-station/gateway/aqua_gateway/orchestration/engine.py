@@ -43,6 +43,26 @@ if TYPE_CHECKING:  # pragma: no cover
 
 log = logging.getLogger("aqua.orchestration")
 
+
+def _guard_overrides(phase: Phase | None, params: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
+    """
+    Split operator overrides into ``(kept, rejected)``.
+
+    A phase that pauses on timeout (the certified-base verification) uses its timeout as the
+    time the chemistry is given to finish, not as a safety stop: shortening it only turns a
+    valid run into a paused one. An override below the recipe's timeout is therefore rejected
+    (and reported in the phase-entered event), whatever client sent it.
+    """
+    kept, rejected = dict(params), {}
+    if phase is not None and phase.on_timeout == "pause" and "safety_timeout_s" in kept:
+        try:
+            too_short = float(kept["safety_timeout_s"]) < float(phase.timeout_s or 0)
+        except (TypeError, ValueError):
+            too_short = True
+        if too_short:
+            rejected["safety_timeout_s"] = kept.pop("safety_timeout_s")
+    return kept, rejected
+
 #: The three global states, matching the ``system_state`` JSONB in ``001_core.sql``.
 STATE_IDLE = "IDLE"
 STATE_ACTIVE = "ACTIVE_EXPERIMENT"
@@ -75,6 +95,8 @@ class Orchestrator:
         self._mode_overrides: dict[str, str] = {}
         #: Per-phase operator parameter overrides (e.g. mixer_rpm, step_rpm), keyed by ``phase_id``.
         self._param_overrides: dict[str, dict[str, Any]] = {}
+        #: Overrides refused by ``_guard_overrides``, per phase, reported when the phase is entered.
+        self._rejected_overrides: dict[str, dict[str, Any]] = {}
         #: ``phase_id`` values already marked completed this run.
         self._completed: set[str] = set()
         #: ``phase_id`` awaiting an operator's visto bueno (HIBRIDO).
@@ -406,6 +428,13 @@ class Orchestrator:
 
     async def set_phase_params(self, phase_id: str, params: Mapping[str, Any]) -> None:
         """Override parameters for a phase (e.g. mixer_rpm, step_rpm, dose_ml)."""
+        recipe = RECIPES.get(self._recipe_id or "")
+        pool = recipe.phases if recipe else [p for r in RECIPES.values() for p in r.phases]
+        phase = next((p for p in pool if p.phase_id == phase_id), None)
+        params, rejected = _guard_overrides(phase, params)
+        if rejected:
+            log.warning("override rejected for %s: %s", phase_id, rejected)
+            self._rejected_overrides.setdefault(phase_id, {}).update(rejected)
         self._param_overrides.setdefault(phase_id, {}).update(params)
         if self._experiment_id and self.gateway.db.available:
             try:
@@ -580,6 +609,16 @@ class Orchestrator:
             # Preserve in-memory parameter overrides (e.g. set by set_phase_params before launch)
             for p_id, p_dict in existing_param_overrides.items():
                 self._param_overrides.setdefault(p_id, {}).update(p_dict)
+            existing_rejected = dict(self._rejected_overrides)
+            self._rejected_overrides = {}
+            for ph in RECIPES[recipe_id].phases:
+                if ph.phase_id in self._param_overrides:
+                    kept, rejected = _guard_overrides(ph, self._param_overrides[ph.phase_id])
+                    self._param_overrides[ph.phase_id] = kept
+                    rejected = {**existing_rejected.get(ph.phase_id, {}), **rejected}
+                    if rejected:
+                        log.warning("override rejected for %s: %s", ph.phase_id, rejected)
+                        self._rejected_overrides[ph.phase_id] = rejected
             # Seed the mode overrides from the persisted plan instead of clearing them. The
             # operator may have chosen each phase's mode *before* launching -- that choice lives
             # in ``experiment_phases.mode`` -- and the run must honour it. Only a mode that
@@ -843,6 +882,8 @@ class Orchestrator:
                 "condition": dict(phase.condition),
                 "timeout_s": phase.timeout_s,
                 "on_timeout": phase.on_timeout,
+                **({"overrides_rejected": self._rejected_overrides[phase.phase_id]}
+                   if phase.phase_id in self._rejected_overrides else {}),
             },
         )
         if phase.phase_id in ("abc_arm", "abk_step"):
@@ -1195,6 +1236,12 @@ class Orchestrator:
         elif kind == "elapsed":
             if "run_time_s" in effective and phase.phase_id in ("cl_run", "abc_run"):
                 cond["seconds"] = float(effective["run_time_s"])
+        elif kind == "loop_settled":
+            if "target_do" in effective:
+                cond["setpoint"] = float(effective["target_do"])
+            for key in ("min_elapsed_s", "band_mg_l", "window_s", "eps_mg_l_per_min"):
+                if f"settle_{key}" in effective:
+                    cond[key] = float(effective[f"settle_{key}"])
         elif kind == "sulfite_exhausted_post_hold":
             if "hold_time_s" in effective:
                 cond["hold_time_s"] = float(effective["hold_time_s"])

@@ -268,7 +268,8 @@ export const PHASE_FORMS: Record<string, ParamControl[]> = {
     { kind: 'section', label: 'Verificación Post-Corte (Cero Sulfito Residual)' },
     { kind: 'number', key: 'hold_time_s', label: 'Tiempo de reposo de verificación', unit: 's', min: 15, max: 300, step: 15 },
     { kind: 'number', key: 'min_do_mg_l', label: 'DO mínimo admisible en reposo', unit: 'mg/L', min: 0.4, max: 1.5, step: 0.05 },
-    { kind: 'number', key: 'safety_timeout_s', label: 'Timeout de verificación', unit: 's', min: 30, max: 600, step: 30 },
+    // El gateway rechaza un timeout menor al de la receta (fase que pausa): aquí solo se puede alargar.
+    { kind: 'number', key: 'safety_timeout_s', label: 'Timeout de verificación', unit: 's', min: 600, max: 3600, step: 60 },
   ],
   abc_arm: [
     { kind: 'section', label: 'Configuración del Lazo 2-DOF PI y Escalón' },
@@ -283,7 +284,8 @@ export const PHASE_FORMS: Record<string, ParamControl[]> = {
   abc_run: [
     { kind: 'section', label: 'Lazo Cerrado Activo: Escalón de Control' },
     { kind: 'number', key: 'target_do', label: 'Consigna Activa (SP)', unit: 'mg/L', min: 1.0, max: 6.5, step: 0.1 },
-    { kind: 'number', key: 'run_time_s', label: 'Duración del escalón de control', unit: 's', min: 60, max: 3600, step: 60 },
+    { kind: 'number', key: 'run_time_s', label: 'Duración máxima del escalón de control', unit: 's', min: 180, max: 3600, step: 60 },
+    { kind: 'static', label: 'Fin (receta base)', value: 'al estabilizarse: t ≥ 180 s, |OD − SP| ≤ 0.30, |pendiente| ≤ 0.02 mg/L/min' },
   ],
   abc_eval: [
     { kind: 'section', label: 'Reporte Automatizado de KPIs' },
