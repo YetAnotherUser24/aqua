@@ -73,3 +73,30 @@ async def test_legacy_recipe_has_no_base_verdict() -> None:
     orch._recipe_id = "auto_benchmark_control"
     await orch._record_initial_condition(RECIPES["auto_benchmark_control"].phases[5])
     assert orch._initial_condition["conforming"] is None
+
+
+@pytest.mark.asyncio
+async def test_pause_freezes_the_phase_clock_and_stops_a_pulse() -> None:
+    import time
+    orch = _armed(0.4, 0.0)
+    orch._phase_index = 3  # abc_verify
+    orch._phase_entered_s = time.time() - 700  # 100 s de fase antes de una pausa de 600 s
+    orch._pulse_active = True
+    await orch.pause(requested_by="operator:web")
+    assert ("aerator", "stop") in orch.gateway.commands.actions()
+    assert orch._pulse_active is False
+    orch._paused_at_s -= 600  # diez minutos en pausa
+    await orch.resume()
+    elapsed = time.time() - orch._phase_entered_s
+    assert 95 <= elapsed <= 110, elapsed  # la pausa no cuenta para la fase
+
+
+@pytest.mark.asyncio
+async def test_resume_after_timeout_pause_grants_a_fresh_window() -> None:
+    import time
+    orch = _armed(0.4, 0.0)
+    orch._phase_index = 3
+    orch._phase_entered_s = time.time() - 2500
+    await orch.pause(requested_by="orchestrator:timeout")
+    await orch.resume()
+    assert time.time() - orch._phase_entered_s < 5

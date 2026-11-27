@@ -458,6 +458,24 @@ class Orchestrator:
             return await self.current_state()
         self._paused = True
         self._paused_at_s = time.time()
+        self._pause_reason = requested_by
+        if self._pulse_active:
+            # A pause freezes phase logic, so the pulse brake would never run: stop the pulse
+            # now or the aerator keeps spinning for the whole pause.
+            self._pulse_active = False
+            self._pulse_start_s = None
+            self._last_pulse_end_s = self._paused_at_s
+            try:
+                await self.gateway.commands.issue(
+                    role="aerator",
+                    action="stop",
+                    target={},
+                    experiment_id=self._experiment_id,
+                    requested_by="orchestrator:pause_stops_pulse",
+                    deadline_s=30,
+                )
+            except Exception:
+                log.warning("failed to stop aerator pulse on pause", exc_info=True)
         await self._mark_experiment(self._experiment_id, status="paused")
         await self._emit(
             EventType.EXPERIMENT_PAUSED,
@@ -471,7 +489,19 @@ class Orchestrator:
         if self._experiment_id is None or not self._paused:
             return await self.current_state()
         if self._paused_at_s is not None:
-            self._paused_accum_s += time.time() - self._paused_at_s
+            span = time.time() - self._paused_at_s
+            self._paused_accum_s += span
+            # The phase clock stops while paused: a pause must not eat into a phase's duration
+            # or its timeout (abc_run would otherwise end the moment it resumes).
+            if hasattr(self, "_phase_entered_s"):
+                self._phase_entered_s += span
+            if self._last_pulse_end_s is not None:
+                self._last_pulse_end_s += span
+            if getattr(self, "_pause_reason", "") == "orchestrator:timeout":
+                # Paused because the phase ran out of time: resuming grants a fresh window
+                # instead of timing out again on the next tick.
+                self._phase_entered_s = time.time()
+        self._pause_reason = None
         self._paused = False
         self._paused_at_s = None
         await self._mark_experiment(self._experiment_id, status="active")
