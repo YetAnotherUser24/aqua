@@ -981,6 +981,11 @@ _ABC_BASE_VERIFY = Phase(
     },
 )
 
+#: En la receta base todo es automático: la dosis no espera confirmación (en modo híbrido sin
+#: timeout la corrida se quedaba esperando si nadie cambiaba los modos al lanzar). La bomba entrega
+#: 80 mL en ≈ 170 s; si en 600 s no reporta el volumen, la corrida se aborta (no tiene sentido seguir).
+_ABC_BASE_DOSE = replace(_abc_phase("abc_dose"), mode="auto", timeout_s=600, on_timeout="abort")
+
 _ABC_BASE_DEOX = replace(
     _abc_phase("abc_deox"),
     desc=(
@@ -989,7 +994,25 @@ _ABC_BASE_DEOX = replace(
     ),
     condition_text=f"DO ≤ {BASE_DEOX_FLOOR} mg/L Y estabilizado (ΔDO ≤ 0.04 mg/L en 60 s) durante ≥ 180 s",
     condition={**_abc_phase("abc_deox").condition, "below_mg_l": BASE_DEOX_FLOOR},
-    params={**_abc_phase("abc_deox").params, "do_floor_mg_l": BASE_DEOX_FLOOR},
+    params={
+        **_abc_phase("abc_deox").params,
+        "do_floor_mg_l": BASE_DEOX_FLOOR,
+        # Dosis complementaria si la caída se estanca sobre 0.7 mg/L (dosis corta, como 26-02):
+        # tras ≥ 360 s en la fase y pendiente de 120 s ≥ −0.04 mg/L/min. Volumen por balance de O₂:
+        # 80 mL ≙ 11.6 mg/L nominal; con el rendimiento bajo observado (0.65) son 10.6 mL por mg/L.
+        "redose_enable": True,
+        "redose_after_s": 360,
+        "redose_min_do_mg_l": 0.7,
+        "redose_window_s": 120,
+        "redose_stall_slope": -0.04,
+        "redose_margin_mg_l": 0.8,
+        "redose_ml_per_mg_l": 10.6,
+        "redose_min_ml": 10,
+        "redose_max_ml": 40,
+        "redose_max_count": 2,
+        "stock_conc_gpl": 100,
+        "density_g_per_ml": 1.10,
+    },
 )
 
 #: Fin del lazo por estabilización: tras el pico el aerador satura en 0 rpm y lo que sigue es deriva
@@ -1019,7 +1042,7 @@ _AUTO_BENCHMARK_CONTROL_BASE = Recipe(
     roles=_AUTO_BENCHMARK_CONTROL.roles,
     phases=(
         _abc_phase("abc_prep"),
-        _abc_phase("abc_dose"),
+        _ABC_BASE_DOSE,
         _ABC_BASE_DEOX,
         _ABC_BASE_VERIFY,
         replace(_abc_phase("abc_arm"), num="5"),

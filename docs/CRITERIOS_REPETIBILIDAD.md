@@ -1,8 +1,9 @@
 # Criterios de repetibilidad — serie con base certificada (fijados el 2026-11-27, antes de la serie)
 
 Este archivo se versiona **antes** de las corridas de la serie para que los criterios no puedan
-ajustarse a posteriori. Código de la serie: receta `auto_benchmark_control_base`, tag `tesis-2026-11-27b`
-(revisión del mismo día, antes de la primera corrida: fin del lazo por estabilización y ventana de KPIs de 180 s).
+ajustarse a posteriori. Código de la serie: receta `auto_benchmark_control_base`, tag `tesis-2026-11-27c`
+(revisiones del mismo día, antes de la primera corrida: fin del lazo por estabilización, ventana de KPIs de 180 s,
+receta 100 % automática y dosis complementaria si la desoxigenación se estanca sobre 0.7 mg/L).
 
 ## Condiciones de repetibilidad (VIM 2.20)
 Mismo procedimiento (receta y huella `recipe_sha256_16` iguales), mismo banco (87.5 L, 25 cm, mezclador a
@@ -40,3 +41,10 @@ descartan: se informan con su motivo y forman el grupo de contraste (C₀ libre)
 Corrida con el código `tesis-2026-11-26c` y un lote anterior de solución. Se incluye si cumple los criterios
 de N2 al reevaluarla offline con los datos guardados (al armar: OD 1.003, y′ 0.085, y″ +0.021 → cumple).
 Se informa por separado de la serie del lote fresco.
+
+## Validación previa con el gemelo digital (`aqua-station/gateway/tests/sim_bench.py`)
+Planta calibrada con 26-02 y 26-03 completas (η = 0.65 / 0.79, igual que el balance de O₂; misma cinética).
+Barrido de 288 corridas (η 0.55–1.15, cinética ×0.7–1.4, orden 0–0.3, OD inicial 5.0–6.5, ruido):
+todas terminan sin intervención; con la cinética observada o más rápida, 191/192 conformes,
+mediana 40 min por corrida. Límite conocido: con una reacción ≥ 30 % más lenta que la medida, el OD cruza
+la banda antes de certificar (C₀ 1.13–1.31) y la corrida queda marcada no conforme.

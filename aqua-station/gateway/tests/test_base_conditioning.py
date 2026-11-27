@@ -230,3 +230,15 @@ async def test_shortened_verify_timeout_is_rejected() -> None:
     # otras fases no se tocan
     await orch.set_phase_params("abc_deox", {"safety_timeout_s": 600})
     assert orch._param_overrides["abc_deox"]["safety_timeout_s"] == 600
+
+
+def test_base_recipe_runs_unattended() -> None:
+    r = RECIPES["auto_benchmark_control_base"]
+    assert all(p.mode == "auto" for p in r.phases), [(p.phase_id, p.mode) for p in r.phases]
+    dose = r.phases[1]
+    assert dose.timeout_s == 600 and dose.on_timeout == "abort"   # bomba que no entrega: abortar
+    deox = r.phases[2]
+    assert deox.params["redose_enable"] is True and deox.params["redose_max_count"] == 2
+    # la receta original conserva la dosis supervisada
+    orig = next(p for p in RECIPES["auto_benchmark_control"].phases if p.phase_id == "abc_dose")
+    assert orig.mode == "hibrido"

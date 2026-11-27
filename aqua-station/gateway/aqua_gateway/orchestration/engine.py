@@ -915,6 +915,16 @@ class Orchestrator:
                 experiment_id=self._experiment_id,
                 detail={"phase_id": phase.phase_id, "event": "kla_computed", "kla": self._last_kla_metrics},
             )
+        elif phase.phase_id == "abc_dose":
+            # OD before the dose: with the volume dosed, it gives this run's own mL per mg/L.
+            self._c_pre_dose = self._do_history[-1][1] if self._do_history else None
+        elif phase.phase_id == "abc_deox":
+            self._redose_count = 0
+            self._last_redose_s = None
+            prev = next((p for p in (RECIPES.get(self._recipe_id or "").phases if self._recipe_id else ())
+                         if p.phase_id == "abc_dose"), None)
+            self._dosed_total_ml = float({**(prev.params if prev else {}),
+                                          **self._param_overrides.get("abc_dose", {})}.get("dose_ml", 80.0))
         elif phase.phase_id in ("abk_verify", "abc_verify"):
             self._pulse_active = False
             self._pulse_start_s = None
@@ -1314,6 +1324,12 @@ class Orchestrator:
                 await self.pause(requested_by="orchestrator:timeout")
                 return
 
+        # Complementary dose (base recipe): the deoxygenation stalled above the floor, so the dose
+        # was short (effective yield 58-87 %). Waiting out the timeout only wastes the run; dose the
+        # missing oxygen equivalent instead. The volume comes from the O2 balance, with a margin.
+        if phase.phase_id == "abc_deox" and effective.get("redose_enable") and not cond_met:
+            await self._maybe_redose(phase, effective, ctx)
+
         # Adaptive pulse control in residual sulfite verification phases (abk_verify, abc_verify)
         if phase.phase_id in ("abk_verify", "abc_verify") and not cond_met:
             pulse_rpm = float(effective.get("pulse_rpm", 100))
@@ -1452,6 +1468,67 @@ class Orchestrator:
             requested_by="orchestrator",
             reason="timeout" if timed_out else "condition_met",
         )
+
+    async def _maybe_redose(self, phase: Phase, effective: Mapping[str, Any], ctx: PhaseContext) -> None:
+        count = getattr(self, "_redose_count", 0)
+        if count >= int(effective.get("redose_max_count", 2)):
+            return
+        elapsed = ctx.now_s - ctx.phase_entered_s
+        last = getattr(self, "_last_redose_s", None)
+        wait_s = float(effective.get("redose_after_s", 360))
+        if elapsed < wait_s or (last is not None and ctx.now_s - last < wait_s):
+            return
+        do = ctx.value("od_sensor", "od_do_mg_l")
+        if do is None or do < float(effective.get("redose_min_do_mg_l", 0.7)):
+            return
+        win_ms = int(float(effective.get("redose_window_s", 120)) * 1000)
+        pts = [p for p in ctx.do_history if p[0] >= ctx.do_history[-1][0] - win_ms] if ctx.do_history else []
+        if len(pts) < 4 or (pts[-1][0] - pts[0][0]) < win_ms * 0.85:
+            return
+        rate = least_squares_rate_per_min(pts)
+        if rate is None or rate < float(effective.get("redose_stall_slope", -0.04)):
+            return  # still falling: the dose is still working
+        floor = float(effective.get("do_floor_mg_l", 0.5))
+        need = do - floor + float(effective.get("redose_margin_mg_l", 0.8))
+        # mL per mg/L: the larger of the recipe's (low observed yield) and this run's own
+        # (volume dosed so far over the drop it produced; ignoring reaeration makes it conservative).
+        ml_per = float(effective.get("redose_ml_per_mg_l", 10.6))
+        c_pre = getattr(self, "_c_pre_dose", None)
+        dosed = getattr(self, "_dosed_total_ml", None)
+        if c_pre is not None and dosed and c_pre - do > 0.5:
+            ml_per = max(ml_per, dosed / (c_pre - do))
+        ml = need * ml_per
+        ml = round(min(max(ml, float(effective.get("redose_min_ml", 10))), float(effective.get("redose_max_ml", 40))), 1)
+        self._redose_count = count + 1
+        self._last_redose_s = ctx.now_s
+        self._dosed_total_ml = (dosed or 0.0) + ml
+        log.info("phase %s: deoxygenation stalled at %.2f mg/L (%.3f mg/L/min): complementary dose %.1f mL",
+                 phase.phase_id, do, rate, ml)
+        await self._issue_dose(ml, effective, requested_by="orchestrator:redose")
+        await self._emit(
+            EventType.EXPERIMENT_PHASE_CHANGE,
+            experiment_id=self._experiment_id,
+            detail={"phase_id": phase.phase_id, "event": "complementary_dose", "n": self._redose_count,
+                    "do_mg_l": round(do, 3), "slope_mg_l_per_min": round(rate, 4), "dose_ml": ml,
+                    "ml_per_mg_l": round(ml_per, 2), "c_pre_dose_mg_l": None if c_pre is None else round(c_pre, 3),
+                    "elapsed_s": round(elapsed, 1)},
+        )
+
+    async def _issue_dose(self, ml: float, effective: Mapping[str, Any], *, requested_by: str) -> None:
+        conc = float(effective.get("stock_conc_gpl", 100.0))
+        dens = float(effective.get("density_g_per_ml", 1.10))
+        try:
+            await self.gateway.commands.issue(
+                role="pump",
+                action="dose",
+                target={"dose_ml": ml, "target_ml": ml, "sulfite_g": round(ml * conc / 1000.0, 2),
+                        "target_g": round(ml * dens, 2)},
+                experiment_id=self._experiment_id,
+                requested_by=requested_by,
+                deadline_s=300,
+            )
+        except Exception as e:  # pragma: no cover - logged, the run goes on
+            log.warning("failed to issue dose (%s): %s", requested_by, e)
 
     def _context(self) -> PhaseContext:
         live = self.gateway.live.snapshot()
