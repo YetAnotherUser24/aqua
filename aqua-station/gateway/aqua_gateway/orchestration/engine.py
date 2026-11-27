@@ -1249,7 +1249,7 @@ class Orchestrator:
         elif kind == "loop_settled":
             if "target_do" in effective:
                 cond["setpoint"] = float(effective["target_do"])
-            for key in ("min_elapsed_s", "band_mg_l", "window_s", "eps_mg_l_per_min"):
+            for key in ("min_elapsed_s", "band_mg_l", "band_below_mg_l", "window_s", "eps_mg_l_per_min"):
                 if f"settle_{key}" in effective:
                     cond[key] = float(effective[f"settle_{key}"])
         elif kind == "sulfite_exhausted_post_hold":

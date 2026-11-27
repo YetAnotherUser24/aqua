@@ -192,17 +192,19 @@ def _loop_ctx(pts: list[tuple[int, float]], elapsed_s: float) -> PhaseContext:
 
 
 @pytest.mark.parametrize("do_end,slope,elapsed,ok", [
-    (5.04, 0.01, 220, True),     # 26-03: plano cerca de SP
-    (5.25, 0.00, 220, True),     # 26-02: sobreimpulso que el aerador (u ≥ 0) no puede bajar
+    (5.04, 0.01, 280, True),     # 26-03: plano cerca de SP
+    (5.25, 0.00, 280, True),     # 26-02: sobreimpulso que el aerador (u ≥ 0) no puede bajar
+    (4.93, 0.00, 280, True),     # error permanente pequeño bajo SP (< 2 %)
     (5.04, 0.01, 150, False),    # antes del mínimo: la ventana fija de KPIs debe existir
-    (4.80, 0.30, 220, False),    # todavía subiendo
-    (5.10, -0.04, 260, False),   # cayendo: demanda residual, el lazo volverá a actuar
+    (4.80, 0.30, 280, False),    # todavía subiendo
+    (5.10, -0.04, 280, False),   # cayendo: demanda residual, el lazo volverá a actuar
+    (4.85, 0.00, 300, False),    # plano bajo SP fuera del 2 %: el controlador aún debe actuar
     (4.50, 0.00, 300, False),    # plano pero lejos de SP
 ])
 def test_loop_ends_when_settled(do_end, slope, elapsed, ok) -> None:
     run = RECIPES["auto_benchmark_control_base"].phases[5]
     assert run.phase_id == "abc_run" and run.condition["kind"] == "loop_settled"
-    pts = _history(do_end, slope, span_s=60)
+    pts = _history(do_end, slope, span_s=120)
     assert evaluate(dict(run.condition), _loop_ctx(pts, elapsed)) is ok
 
 
@@ -242,3 +244,13 @@ def test_base_recipe_runs_unattended() -> None:
     # la receta original conserva la dosis supervisada
     orig = next(p for p in RECIPES["auto_benchmark_control"].phases if p.phase_id == "abc_dose")
     assert orig.mode == "hibrido"
+
+
+
+def test_base_prep_preaerates_and_dose_stops_the_aerator() -> None:
+    r = RECIPES["auto_benchmark_control_base"]
+    prep, dose = r.phases[0], r.phases[1]
+    assert ("aerator", "set_speed", {}) in prep.commands and prep.params["step_rpm"] == 360
+    assert prep.condition["kind"] == "do_above_and_stable" and prep.on_timeout == "advance"
+    assert dose.commands[0] == ("aerator", "stop", {})
+    assert any(role == "pump" and action == "dose" for role, action, _ in dose.commands)

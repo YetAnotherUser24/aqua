@@ -48,3 +48,12 @@ Barrido de 288 corridas (η 0.55–1.15, cinética ×0.7–1.4, orden 0–0.3, O
 todas terminan sin intervención; con la cinética observada o más rápida, 191/192 conformes,
 mediana 40 min por corrida. Límite conocido: con una reacción ≥ 30 % más lenta que la medida, el OD cruza
 la banda antes de certificar (C₀ 1.13–1.31) y la corrida queda marcada no conforme.
+
+## Enmienda (2026-11-27, 18:30, entre la corrida 2 y la 3; tag `tesis-2026-11-27d`)
+No cambia ningún criterio N2/N4 ni la ventana de KPIs (180 s). Cambia el procedimiento:
+- **Pre-aireación automática** en la preparación: aerador a 360 rpm hasta OD ≥ 6.2 mg/L sostenido 60 s
+  (tope 420 s); la dosis detiene el aerador antes de dosificar. Fija el OD de partida (las corridas 1 y 2
+  partieron de 6.7 y 5.1) y con él el sulfito sobrante.
+- **Fin del lazo más exigente:** banda asimétrica (SP − 0.10 / SP + 0.30: bajo SP el controlador aún
+  debe actuar; sobre SP el aerador no puede bajar un sobreimpulso) y estabilidad sostenida 120 s (antes 60 s).
+  Los lazos terminan a ≈ 4.5 min (antes ≈ 3.4).

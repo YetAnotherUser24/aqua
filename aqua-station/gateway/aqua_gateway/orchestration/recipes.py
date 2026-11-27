@@ -984,7 +984,31 @@ _ABC_BASE_VERIFY = Phase(
 #: En la receta base todo es automático: la dosis no espera confirmación (en modo híbrido sin
 #: timeout la corrida se quedaba esperando si nadie cambiaba los modos al lanzar). La bomba entrega
 #: 80 mL en ≈ 170 s; si en 600 s no reporta el volumen, la corrida se aborta (no tiene sentido seguir).
-_ABC_BASE_DOSE = replace(_abc_phase("abc_dose"), mode="auto", timeout_s=600, on_timeout="abort")
+_ABC_BASE_DOSE = replace(
+    _abc_phase("abc_dose"), mode="auto", timeout_s=600, on_timeout="abort",
+    # el aerador viene de la pre-aireación: se detiene antes de dosificar
+    commands=(("aerator", "stop", {}),) + _abc_phase("abc_dose").commands,
+)
+
+#: Pre-aireación: cada corrida parte cerca de la saturación (OD ≥ 6.2 mg/L sostenido 60 s), sea cual sea
+#: el estado en que la dejó la anterior (el lazo termina en ≈ 5). Fija el O₂ que la dosis debe remover y,
+#: con él, el sulfito sobrante que la verificación debe quemar. A 360 rpm (KLa ≈ 53 h⁻¹) tarda ≈ 3 min
+#: desde 5 mg/L. Si el agua satura por debajo de 6.2 (temperatura), el timeout (420 s) avanza igual.
+PREAIR_RPM, PREAIR_DO = 360, 6.2
+_ABC_BASE_PREP = replace(
+    _abc_phase("abc_prep"),
+    title="Homogenización y pre-aireación a saturación",
+    desc=f"Mezclador a 1000 rpm y aerador a {PREAIR_RPM} rpm hasta OD ≥ {PREAIR_DO} mg/L sostenido 60 s.",
+    condition_text=f"OD ≥ {PREAIR_DO} mg/L sostenido 60 s (tope 420 s)",
+    condition={"kind": "do_above_and_stable", "above_mg_l": PREAIR_DO, "window_s": 60, "min_elapsed_s": 60},
+    timeout_s=420,
+    commands=(
+        ("mixer", "start_mixer", {"target_rpm": 1000}),
+        ("aerator", "set_mode", {"mode": "manual"}),
+        ("aerator", "set_speed", {}),
+    ),
+    params={"mixer_rpm": 1000, "step_rpm": PREAIR_RPM, "preair_do_mg_l": PREAIR_DO},
+)
 
 _ABC_BASE_DEOX = replace(
     _abc_phase("abc_deox"),
@@ -1018,7 +1042,8 @@ _ABC_BASE_DEOX = replace(
 #: Fin del lazo por estabilización: tras el pico el aerador satura en 0 rpm y lo que sigue es deriva
 #: de la planta. Mínimo 180 s (t₉₀ ≤ 130 s en todos los lazos registrados) para que la ventana fija de
 #: KPIs exista siempre; tope 600 s.
-LOOP_SETTLE = {"min_elapsed_s": 180, "band_mg_l": 0.30, "window_s": 60, "eps_mg_l_per_min": 0.02}
+LOOP_SETTLE = {"min_elapsed_s": 180, "band_mg_l": 0.30, "band_below_mg_l": 0.10, "window_s": 120,
+               "eps_mg_l_per_min": 0.02}
 
 _ABC_BASE_RUN = replace(
     _abc_phase("abc_run"),
@@ -1028,8 +1053,9 @@ _ABC_BASE_RUN = replace(
         "(tope 600 s). Tras el pico el aerador satura en 0 rpm: seguir no aporta información del lazo."
     ),
     condition_text=(
-        f"t ≥ {LOOP_SETTLE['min_elapsed_s']} s, |OD − SP| ≤ {LOOP_SETTLE['band_mg_l']:.2f} mg/L y "
-        f"|pendiente| ≤ {LOOP_SETTLE['eps_mg_l_per_min']} mg/L/min en {LOOP_SETTLE['window_s']} s (tope 600 s)"
+        f"t ≥ {LOOP_SETTLE['min_elapsed_s']} s, OD en [SP − {LOOP_SETTLE['band_below_mg_l']:.2f}, "
+        f"SP + {LOOP_SETTLE['band_mg_l']:.2f}] mg/L y |pendiente| ≤ {LOOP_SETTLE['eps_mg_l_per_min']} mg/L/min "
+        f"sostenida {LOOP_SETTLE['window_s']} s (tope 600 s)"
     ),
     condition={"kind": "loop_settled", "setpoint": 5.00, **LOOP_SETTLE},
     params={**_abc_phase("abc_run").params, **{f"settle_{k}": v for k, v in LOOP_SETTLE.items()}},
@@ -1041,7 +1067,7 @@ _AUTO_BENCHMARK_CONTROL_BASE = Recipe(
     filename="EXP_PID_BASE.CSV",
     roles=_AUTO_BENCHMARK_CONTROL.roles,
     phases=(
-        _abc_phase("abc_prep"),
+        _ABC_BASE_PREP,
         _ABC_BASE_DOSE,
         _ABC_BASE_DEOX,
         _ABC_BASE_VERIFY,

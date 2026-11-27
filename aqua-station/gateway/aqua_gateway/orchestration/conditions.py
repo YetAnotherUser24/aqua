@@ -314,7 +314,14 @@ def _loop_settled(cond: Mapping[str, Any], ctx: PhaseContext) -> bool:
     if ctx.now_s - ctx.phase_entered_s < float(cond.get("min_elapsed_s", 180)):
         return False
     do = ctx.value("od_sensor", "od_do_mg_l")
-    if do is None or abs(do - float(cond["setpoint"])) > float(cond.get("band_mg_l", 0.30)):
+    if do is None:
+        return False
+    sp = float(cond["setpoint"])
+    # Asymmetric band: above SP the aerator cannot remove an overshoot (u >= 0), so a flat DO
+    # there is the end state; below SP the controller still has work to do, so only a small
+    # steady-state error (2 % of SP by default) counts as settled.
+    band = float(cond.get("band_mg_l", 0.30)) if do >= sp else float(cond.get("band_below_mg_l", cond.get("band_mg_l", 0.30)))
+    if abs(do - sp) > band:
         return False
     window_ms = int(float(cond.get("window_s", 60)) * 1000)
     recent = [p for p in ctx.do_history if p[0] >= ctx.do_history[-1][0] - window_ms] if ctx.do_history else []
