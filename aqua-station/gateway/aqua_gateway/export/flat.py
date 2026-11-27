@@ -36,6 +36,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+from ..version import gateway_version
 from ..archive.manifest import Manifest
 from ..db.engine import Database
 from ..schema.registry import SchemaRegistry
@@ -457,6 +458,7 @@ def write_manifest(
         "status": experiment.get("status"),
         "generated_at": datetime.now(tz=UTC).isoformat(),
         "gateway_schema_version": registry.version,
+        "gateway_version": gateway_version(),
         "time_range": {"start": started.isoformat(), "end": ended.isoformat()},
         "t0_ms": t0_ms,
         "rows": report.rows,

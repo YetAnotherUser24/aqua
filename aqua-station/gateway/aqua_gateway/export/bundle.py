@@ -48,6 +48,7 @@ from pathlib import Path
 from typing import Any, Iterable, Iterator, Mapping, Sequence
 from zoneinfo import ZoneInfo
 
+from ..version import gateway_version
 from ..archive.manifest import Manifest
 from ..config import Settings
 from ..db.engine import Database, DatabaseUnavailable
@@ -427,6 +428,7 @@ async def build_bundle(
         "status": experiment.get("status"),
         "generated_at": datetime.now(tz=timezone.utc).isoformat(),
         "gateway_schema_version": registry.version,
+        "gateway_version": gateway_version(),
         "grid_seconds": grid_seconds,
         "max_hold_s": max_hold_s,
         # Recorded because a dose cannot be reconstructed without it, and because a

@@ -35,6 +35,7 @@ from typing import TYPE_CHECKING, Any
 from ..events.model import Event, EventType, Scope, Source
 from .conditions import PhaseContext, evaluate, least_squares_rate_per_min
 from .kla_metrics import compute_kla_metrics
+from ..version import gateway_version, recipe_digest
 from .recipes import RECIPES, Phase
 
 if TYPE_CHECKING:  # pragma: no cover
@@ -102,6 +103,13 @@ class Orchestrator:
         self._pulse_start_s: float | None = None
         self._last_pulse_end_s: float | None = None
         self._pulse_trigger_was_low_do: bool = False
+        self._pulse_count: int = 0
+        #: Last aerator speed and water temperature seen, for the initial-condition record.
+        self._last_drv_rpm: float | None = None
+        self._last_od_temp_c: float | None = None
+        #: Initial condition captured when the loop/step is armed (abc_arm, abk_step), with its
+        #: conformity verdict against the declared base and tolerance.
+        self._initial_condition: dict[str, Any] | None = None
 
         #: True while the run is paused. Pause holds the timer and stops phase advancement;
         #: it deliberately does NOT disarm the actuators. Whether a paused run should also
@@ -149,6 +157,7 @@ class Orchestrator:
         self._abc_samples = []
         self._last_drv_power_w = 0.0
         self._last_control_kpis = None
+        self._initial_condition = None
         self._kla_samples = []
         self._kla_temps = []
         self._last_kla_metrics = None
@@ -211,6 +220,9 @@ class Orchestrator:
             p = row.get("drv_power_w")
             if p is not None:
                 self._last_drv_power_w = float(p)
+            rpm = row.get("drv_rpm")
+            if rpm is not None:
+                self._last_drv_rpm = float(rpm)
             return
 
         if role != "od_sensor":
@@ -219,6 +231,9 @@ class Orchestrator:
         if value is None:
             return
         do_f = float(value)
+        temp = row.get("od_temp_c")
+        if temp is not None:
+            self._last_od_temp_c = float(temp)
         self._do_history.append((t_dev_ms, do_f))
         if len(self._do_history) > _DO_HISTORY_MAX:
             del self._do_history[: len(self._do_history) - _DO_HISTORY_MAX]
@@ -273,6 +288,7 @@ class Orchestrator:
             "phases": self._phase_views(),
             "control_kpis": self._last_control_kpis,
             "kla_metrics": self._last_kla_metrics,
+            "initial_condition": self._initial_condition,
         }
 
     @property
@@ -512,6 +528,7 @@ class Orchestrator:
             self._action_pending = None
             self._abc_samples = []
             self._last_control_kpis = None
+            self._initial_condition = None
             self._kla_samples = []
             self._kla_temps = []
             self._last_kla_metrics = None
@@ -570,7 +587,12 @@ class Orchestrator:
             await self._emit(
                 EventType.EXPERIMENT_STARTED,
                 experiment_id=experiment_id,
-                detail={"recipe_id": recipe_id, "requested_by": requested_by},
+                detail={
+                    "recipe_id": recipe_id,
+                    "requested_by": requested_by,
+                    "gateway_version": gateway_version(),
+                    "recipe_sha256_16": recipe_digest(RECIPES[recipe_id]),
+                },
             )
             # Ensure the OD sensor starts active sampling for the experiment with a unique SD filename.
             try:
@@ -781,8 +803,20 @@ class Orchestrator:
         await self._emit(
             EventType.EXPERIMENT_PHASE_CHANGE,
             experiment_id=self._experiment_id,
-            detail={"phase_id": phase.phase_id, "num": phase.num, "title": phase.title, "event": "entered"},
+            detail={
+                "phase_id": phase.phase_id,
+                "num": phase.num,
+                "title": phase.title,
+                "event": "entered",
+                "mode": self._mode_overrides.get(phase.phase_id, phase.mode),
+                "params": {**phase.params, **self._param_overrides.get(phase.phase_id, {})},
+                "condition": dict(phase.condition),
+                "timeout_s": phase.timeout_s,
+                "on_timeout": phase.on_timeout,
+            },
         )
+        if phase.phase_id in ("abc_arm", "abk_step"):
+            await self._record_initial_condition(phase)
         if phase.phase_id == "abc_run":
             self._abc_samples = []
         elif phase.phase_id == "abc_eval":
@@ -790,6 +824,8 @@ class Orchestrator:
             effective = {**phase.params, **self._param_overrides.get(phase.phase_id, {})}
             target_sp = float(effective.get("target_do", 5.00))
             self._last_control_kpis = compute_control_kpis(self._abc_samples, target_sp=target_sp)
+            if self._initial_condition is not None:
+                self._last_control_kpis = {**self._last_control_kpis, "initial_condition": self._initial_condition}
             await self._emit(
                 EventType.EXPERIMENT_PHASE_CHANGE,
                 experiment_id=self._experiment_id,
@@ -812,6 +848,8 @@ class Orchestrator:
             self._pulse_active = False
             self._pulse_start_s = None
             self._last_pulse_end_s = None
+            self._pulse_count = 0
+            self._verify_entered_s = time.time()
         # MANUAL means "control directo": the operator fires each actuator. Issuing the phase's
         # commands on entry is exactly the automatic action the mode forbids, so they are held
         # until the operator asks for them (``trigger_phase_action``). AUTO and HIBRIDO issue
@@ -826,6 +864,57 @@ class Orchestrator:
             )
             return
         await self._issue_phase_commands(phase, requested_by=requested_by)
+
+    async def _record_initial_condition(self, phase: Phase) -> None:
+        """
+        Capture the state the loop (abc_arm) or the step (abk_step) starts from, and judge it.
+
+        Conforming means: measured DO in [base, base + tol] and rising at least at the certified
+        free-reaeration slope (no residual sulfite). Base, tolerance and slope come from the
+        preceding verification phase, so the verdict uses exactly what the run was told to reach.
+        Non-conforming runs still complete -- their data are kept -- but are flagged so they stay
+        out of comparisons.
+        """
+        recipe = RECIPES.get(self._recipe_id or "")
+        verify = next((p for p in recipe.phases if p.phase_id in ("abc_verify", "abk_verify")), None) if recipe else None
+        vp = {**verify.params, **self._param_overrides.get(verify.phase_id, {})} if verify else {}
+        base = vp.get("base_do_mg_l")
+        tol = float(vp.get("base_tol_mg_l", 0.10))
+        min_slope = vp.get("min_slope_mg_l_per_min", (verify.condition if verify else {}).get("min_slope_mg_l_per_min"))
+        do_now = self._do_history[-1][1] if self._do_history else None
+        rate = None
+        if self._do_history:
+            pts = [p for p in self._do_history if p[0] >= self._do_history[-1][0] - 60_000]
+            if len(pts) >= 2:
+                rate = least_squares_rate_per_min(pts)
+        checks: dict[str, bool] = {}
+        if base is not None and do_now is not None:
+            checks["do_in_band"] = float(base) <= do_now <= float(base) + tol
+        if min_slope is not None and rate is not None:
+            checks["slope_ok"] = rate >= float(min_slope)
+        rpm = self._last_drv_rpm
+        if rpm is not None:
+            checks["aerator_at_rest"] = abs(rpm) <= 5.0
+        verify_s = time.time() - getattr(self, "_verify_entered_s", time.time())
+        self._initial_condition = {
+            "phase_id": phase.phase_id,
+            "do_mg_l": None if do_now is None else round(do_now, 3),
+            "slope_mg_l_per_min": None if rate is None else round(rate, 4),
+            "temp_c": self._last_od_temp_c,
+            "aerator_rpm": rpm,
+            "base_do_mg_l": base,
+            "base_tol_mg_l": tol if base is not None else None,
+            "min_slope_mg_l_per_min": min_slope,
+            "pulses_in_verify": self._pulse_count,
+            "verify_duration_s": round(verify_s, 1),
+            "checks": checks,
+            "conforming": bool(checks) and all(checks.values()) if base is not None else None,
+        }
+        await self._emit(
+            EventType.EXPERIMENT_PHASE_CHANGE,
+            experiment_id=self._experiment_id,
+            detail={"phase_id": phase.phase_id, "event": "initial_condition", **self._initial_condition},
+        )
 
     async def _issue_phase_commands(
         self,
@@ -1192,7 +1281,8 @@ class Orchestrator:
                 falling_chemically = recent_rate is not None and recent_rate < pulse_trigger_slope
                 below_trigger = current_do is not None and current_do < pulse_trigger_do
 
-                if cooldown_ok and (falling_chemically or below_trigger):
+                below_brake = current_do is None or current_do < pulse_brake_do
+                if cooldown_ok and below_brake and (falling_chemically or below_trigger):
                     log.info(
                         "phase %s: triggering gentle adaptive pulse at %d RPM (rate=%.4f mg/L/min, DO=%.2f mg/L)",
                         phase.phase_id,
@@ -1202,6 +1292,7 @@ class Orchestrator:
                     )
                     self._pulse_active = True
                     self._pulse_start_s = now_s
+                    self._pulse_count += 1
                     self._pulse_trigger_was_low_do = bool(below_trigger)
                     try:
                         await self.gateway.commands.issue(
