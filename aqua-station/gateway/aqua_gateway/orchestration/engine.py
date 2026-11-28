@@ -1047,6 +1047,13 @@ class Orchestrator:
                     for key in ("target_do", "setpoint_mg_l", "kp", "ki", "kd", "beta", "tt", "tau_lag", "mode"):
                         if key in effective_params:
                             cmd_target[key] = effective_params[key]
+                    # The firmware applies target_do and then setpoint_mg_l (cloud_worker.cpp), so the
+                    # two must never disagree: a set point overridden under one key would otherwise be
+                    # silently undone by the recipe's literal under the other (SP = 6 ran at 5).
+                    sp_override = effective_params.get("target_do", effective_params.get("setpoint_mg_l"))
+                    if sp_override is not None and ("target_do" in cmd_target or "setpoint_mg_l" in cmd_target):
+                        cmd_target["target_do"] = sp_override
+                        cmd_target["setpoint_mg_l"] = sp_override
                     if "ctrl_type" in effective_params:
                         cmd_target["mode"] = effective_params["ctrl_type"]
                     if "setpoint_mg_l" in cmd_target and "target_do" not in cmd_target:

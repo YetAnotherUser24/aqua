@@ -57,3 +57,8 @@ No cambia ningún criterio N2/N4 ni la ventana de KPIs (180 s). Cambia el proced
 - **Fin del lazo más exigente:** banda asimétrica (SP − 0.10 / SP + 0.30: bajo SP el controlador aún
   debe actuar; sobre SP el aerador no puede bajar un sobreimpulso) y estabilidad sostenida 120 s (antes 60 s).
   Los lazos terminan a ≈ 4.5 min (antes ≈ 3.4).
+
+## Corrección (2026-11-27, 21:00; tag `tesis-2026-11-27e`)
+EXP-2026-11-27-06 (SP = 6) corrió en realidad con SP = 5: el gateway enviaba `target_do` = 6 pero dejaba el literal
+`setpoint_mg_l` = 5 de la receta, y el firmware aplica ambas claves (gana la última). Corregido: ambas claves llevan
+siempre el mismo SP. No afecta a la serie a SP = 5 (01–05). La corrida 06 se descarta como prueba de rango y se repite.

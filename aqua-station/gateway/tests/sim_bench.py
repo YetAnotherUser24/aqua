@@ -147,8 +147,11 @@ class Bench:
                           ("tau_lag", "tau_lag"), ("max_rpm", "max_rpm")):
             if key in target:
                 setattr(self.pi, attr, float(target[key]))
+        # como el firmware (cloud_worker.cpp): target_do y después setpoint_mg_l; gana el último
         if "target_do" in target:
             self.pi.sp = float(target["target_do"])
+        if "setpoint_mg_l" in target:
+            self.pi.sp = float(target["setpoint_mg_l"])
 
     # -- plant ----------------------------------------------------------------
     def step(self) -> bool:

@@ -53,3 +53,15 @@ async def test_late_acceleration_is_capped_by_the_loop_timeout(monkeypatch) -> N
     assert res.finished
     assert res.reasons()["abc_run"] in ("condition_met", "timeout")
     assert next(d for d in res.details("initial_condition"))["conforming"] is True
+
+
+
+@pytest.mark.asyncio
+async def test_setpoint_override_reaches_the_controller(monkeypatch) -> None:
+    # SP = 6 enviado como target_do: antes el literal setpoint_mg_l = 5 de la receta lo pisaba
+    ov = {p: {"target_do": 6.0} for p in ("abc_arm", "abc_run", "abc_eval")}
+    res = await run_recipe(monkeypatch, Bench(eta=0.9, c0=6.2), overrides=ov)
+    assert res.finished
+    k = kpis(res)
+    assert k["max_do_mg_l"] > 5.8, k
+    assert res.bench.pi.sp == 6.0
