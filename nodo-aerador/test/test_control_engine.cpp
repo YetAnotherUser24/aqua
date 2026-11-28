@@ -217,8 +217,42 @@ int main() {
   assert(lowSpCutoff == 0.0f);
   printf("  -> Test 11d (Predictive Braking at 0.70 mg/L): PASSED (Exact 0 RPM brake before overshoot)\n");
 
+  // -------------------------------------------------------------
+  // Test 12: Sample-timing race must not fire the predictive brake (EXP-2026-11-27-04)
+  // The 5 s fallback update fires just before the sensor sample (period ~5 s with jitter); the sample
+  // then arrives 0.1 s later. The derivative must use the time between SENSOR samples (~5 s), not the
+  // 0.1 s since the fallback update; otherwise dC/dt = 0.03/0.1 and C_pred = 1.07 + 30*0.3 > SP.
+  // -------------------------------------------------------------
+  {
+    ControlEngine e2;
+    ControlConfig c2 = cfg;
+    c2.target_do_mg_l = 5.0f;
+    c2.mode = MODE_PID;
+    c2.manual_throttle_pct = 0.0f;
+    e2.configure(c2);
+    e2.setArmed(true);
+    unsigned long &t = g_fakeMillis;        // updateProcessVariable stamps packets with millis()
+    t += 100000UL;
+    float doVal = 1.00f, u = 0.0f;
+    for (int i = 0; i < 4; i++) {          // regular rise, one sample every 5.00 s
+      t += 5000UL; doVal += 0.006f;
+      e2.updateProcessVariable(doVal, 24.0f);
+      u = e2.computeOutputRpm(t);
+    }
+    assert(u > 50.0f);
+    t += 5000UL;                            // fallback update: 5 s elapsed, no new sample yet
+    float uFallback = e2.computeOutputRpm(t);
+    t += 100UL; doVal += 0.027f;            // the sample arrives 0.1 s later
+    e2.updateProcessVariable(doVal, 24.0f);
+    float uRace = e2.computeOutputRpm(t);
+    printf("  -> Race: u before = %.1f, fallback = %.1f, after late sample = %.1f RPM (DO = %.3f)\n", u, uFallback, uRace, doVal);
+    assert(uFallback > 50.0f);
+    assert(uRace > 50.0f);
+    printf("  -> Test 12 (No spurious brake on sample-timing race): PASSED\n");
+  }
+
   printf("=================================================================\n");
-  printf("[TEST] ALL 11 UNIT & INVARIANT TESTS PASSED PERFECTLY!\n");
+  printf("[TEST] ALL 12 UNIT & INVARIANT TESTS PASSED PERFECTLY!\n");
   printf("=================================================================\n");
   return 0;
 }

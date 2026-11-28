@@ -76,10 +76,12 @@ private:
   float _prevDoSample = 0.0f;
   float _lastCommandedRpm = 0.0f;
   unsigned long _lastComputeMs = 0;
-  unsigned long _lastSampleMs = 0;
+  unsigned long _lastSampleMs = 0;      // last control update (sample or 5 s fallback): integrator dt
+  unsigned long _lastNewSampleMs = 0;   // last SENSOR sample: derivative dt (see computeOutputRpm)
+  float _lastDcDt = 0.0f;               // derivative held between sensor samples
   bool _newSampleAvailable = false;
   bool _inPurgeMode = false;
 
-  float runPid(float measuredDo, float dt, const ControlConfig& cfg);
+  float runPid(float measuredDo, float dt, float dC_dt, const ControlConfig& cfg);
   float runFuzzy(float error, float dError, const ControlConfig& cfg);
 };

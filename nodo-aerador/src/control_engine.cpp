@@ -210,10 +210,12 @@ float ControlEngine::computeOutputRpm(unsigned long nowMs) {
   // 6. Timing and discrete calculation
   if (_lastSampleMs == 0) {
     _lastSampleMs = nowMs;
+    _lastNewSampleMs = nowMs;
+    _lastDcDt = 0.0f;
     _prevDoSample = measuredDo;
     _prevError = cfg.target_do_mg_l - measuredDo;
     if (cfg.mode == MODE_PID) {
-      _lastCommandedRpm = runPid(measuredDo, 5.0f, cfg);
+      _lastCommandedRpm = runPid(measuredDo, 5.0f, 0.0f, cfg);
     } else if (cfg.mode == MODE_FUZZY) {
       _lastCommandedRpm = runFuzzy(_prevError, 0.0f, cfg);
     }
@@ -228,15 +230,30 @@ float ControlEngine::computeOutputRpm(unsigned long nowMs) {
       dt = 5.0f;
     }
 
+    // The derivative used by the predictive brake is taken between SENSOR samples only. The 5 s fallback
+    // update and the sensor (also ~5 s, with jitter) can land a fraction of a second apart; measuring
+    // dC/dt over the time since the last *update* then divides a normal ~0.03 mg/L step by ~0.1 s and
+    // C_pred = C + tau_lag*dC/dt jumps above SP: a spurious brake to 0 rpm that also drains the
+    // integrator (EXP-2026-11-27-04, rotor stopped ~5 s at C = 1.07 mg/L). Between samples the last
+    // derivative is held (zero-order hold, like the measurement itself).
+    if (isNewSample) {
+      float dts = (nowMs - _lastNewSampleMs) / 1000.0f;
+      if (dts < 1.0f || dts > 15.0f) {
+        dts = 5.0f;   // sensor period; guards duplicates/bursts and long gaps
+      }
+      _lastDcDt = (measuredDo - _prevDoSample) / dts;
+      _prevDoSample = measuredDo;
+      _lastNewSampleMs = nowMs;
+    }
+
     if (cfg.mode == MODE_PID) {
-      _lastCommandedRpm = runPid(measuredDo, dt, cfg);
+      _lastCommandedRpm = runPid(measuredDo, dt, _lastDcDt, cfg);
     } else if (cfg.mode == MODE_FUZZY) {
       float error = cfg.target_do_mg_l - measuredDo;
       float dError = (error - _prevError) / dt;
       _lastCommandedRpm = runFuzzy(error, dError, cfg);
     }
 
-    _prevDoSample = measuredDo;
     _prevError = cfg.target_do_mg_l - measuredDo;
   }
 
@@ -260,8 +277,7 @@ float ControlEngine::computeOutputRpm(unsigned long nowMs) {
  *  5. Integración con Back-Calculation:
  *     I(k) = I(k-1) + Ki * e * dt + (dt / Tt) * (u_sat - u_unsat)
  */
-float ControlEngine::runPid(float measuredDo, float dt, const ControlConfig& cfg) {
-  float dC_dt = (dt > 0.001f) ? ((measuredDo - _prevDoSample) / dt) : 0.0f;
+float ControlEngine::runPid(float measuredDo, float dt, float dC_dt, const ControlConfig& cfg) {
   float cPred = measuredDo + cfg.tau_lag * dC_dt;
 
   // 1. Zona de Purga Química de Sulfito (Deadband Químico: DO < 0.15 mg/L con consigna baja)
