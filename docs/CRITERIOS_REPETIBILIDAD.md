@@ -62,3 +62,18 @@ No cambia ningún criterio N2/N4 ni la ventana de KPIs (180 s). Cambia el proced
 EXP-2026-11-27-06 (SP = 6) corrió en realidad con SP = 5: el gateway enviaba `target_do` = 6 pero dejaba el literal
 `setpoint_mg_l` = 5 de la receta, y el firmware aplica ambas claves (gana la última). Corregido: ambas claves llevan
 siempre el mismo SP. No afecta a la serie a SP = 5 (01–05). La corrida 06 se descarta como prueba de rango y se repite.
+
+## Exclusión a posteriori (2026-11-28): EXP-2026-11-27-04
+Decisión del autor tras analizar las caídas del esfuerzo de control. EXP-2026-11-27-04 cumplió N2 (C₀ = 1.016 mg/L), pero
+sufrió una **falla del instrumento**: el firmware del aerador calculó la derivada del freno predictivo con dt ≈ 0.05 s
+(carrera entre el temporizador de 5 s y la muestra del sensor), predijo C ≈ 17 mg/L con C = 1.07 y detuvo el rotor
+5.1 s en plena subida. Corregido en `nodo-aerador` (commit 92b7bc3, test de host 12; no flasheado durante la serie).
+Se excluye porque el ensayo de lazo no corrió con el controlador previsto. Se informan ambos resultados:
+
+| | n | CV t₁₀₋₉₀ | CV IAE/salto | CV E/salto | DE pico |
+|---|---|---|---|---|---|
+| Serie sin 27-04 (principal) | 4 | 3.3 % | 1.7 % | 3.8 % | 0.062 mg/L |
+| Con 27-04 | 5 | 2.9 % | 2.4 % | 5.3 % | 0.055 mg/L |
+
+N4 se acepta en ambos casos: la conclusión no depende de la exclusión. Los frenos espurios de 0.2 s de 27-03 y 27-07
+(el rotor no los siguió) no afectan a los datos; solo se omiten en la figura de esfuerzo (filtro `despike` del script 26).
