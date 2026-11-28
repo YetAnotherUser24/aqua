@@ -251,8 +251,43 @@ int main() {
     printf("  -> Test 12 (No spurious brake on sample-timing race): PASSED\n");
   }
 
+  // -------------------------------------------------------------
+  // Test 13: a duplicated ESP-NOW frame (broadcast sends each frame twice, 3 ms apart) must not erase the
+  // real slope: approaching SP fast, the legitimate predictive brake must still hold after the copy.
+  // -------------------------------------------------------------
+  {
+    ControlEngine e3;
+    ControlConfig c3 = cfg;
+    c3.target_do_mg_l = 5.0f;
+    c3.mode = MODE_PID;
+    c3.manual_throttle_pct = 0.0f;
+    e3.configure(c3);
+    e3.setArmed(true);
+    unsigned long &t = g_fakeMillis;
+    t += 100000UL;
+    float doVal = 3.40f, u = 0.0f;
+    for (int i = 0; i < 4; i++) {          // fast rise: 0.27 mg/L per 5 s -> C_pred = C + 30*0.054 crosses SP
+      t += 5000UL; doVal += 0.27f;
+      e3.updateProcessVariable(doVal, 24.0f);
+      u = e3.computeOutputRpm(t);
+    }
+    float uBrake = u;
+    float dBefore = e3.getDoDerivative();
+    t += 3UL;                               // the same frame again, 3 ms later
+    e3.updateProcessVariable(doVal, 24.0f);
+    float uDup = e3.computeOutputRpm(t);
+    float dAfter = e3.getDoDerivative();
+    printf("  -> Duplicate frame: DO = %.2f, dC/dt before = %.4f, after copy = %.4f mg/L/s, u = %.1f -> %.1f RPM\n",
+           doVal, dBefore, dAfter, uBrake, uDup);
+    assert(uBrake == 0.0f);                 // legitimate brake (C_pred >= SP)
+    assert(fabsf(dBefore - 0.054f) < 0.002f);
+    assert(fabsf(dAfter - dBefore) < 1e-6f); // the copy must not erase the real slope
+    assert(uDup == 0.0f);
+    printf("  -> Test 13 (Duplicate frames keep the real derivative): PASSED\n");
+  }
+
   printf("=================================================================\n");
-  printf("[TEST] ALL 12 UNIT & INVARIANT TESTS PASSED PERFECTLY!\n");
+  printf("[TEST] ALL 13 UNIT & INVARIANT TESTS PASSED PERFECTLY!\n");
   printf("=================================================================\n");
   return 0;
 }

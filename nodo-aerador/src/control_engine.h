@@ -45,6 +45,8 @@ public:
 
   bool isFailsafeActive();
   float getLastMeasuredDo();
+  // Derivative of DO used by the predictive brake [mg/L/s], taken between sensor samples (diagnostics).
+  float getDoDerivative() const { return _lastDcDt; }
   float getLastWaterTemp();
   unsigned long getLastPacketAgeMs(unsigned long nowMs);
 

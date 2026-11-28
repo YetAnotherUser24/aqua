@@ -236,14 +236,20 @@ float ControlEngine::computeOutputRpm(unsigned long nowMs) {
     // C_pred = C + tau_lag*dC/dt jumps above SP: a spurious brake to 0 rpm that also drains the
     // integrator (EXP-2026-11-27-04, rotor stopped ~5 s at C = 1.07 mg/L). Between samples the last
     // derivative is held (zero-order hold, like the measurement itself).
+    // Each measurement can arrive twice: broadcast sends every frame twice 3 ms apart and unicast retries
+    // after 2-7 ms without ACK. A copy (< 1 s after the previous packet; the sensor period is >= 1 s) is
+    // not a new measurement: it must not reset the derivative to 0, or the predictive brake would miss
+    // the real slope right when approaching SP.
     if (isNewSample) {
       float dts = (nowMs - _lastNewSampleMs) / 1000.0f;
-      if (dts < 1.0f || dts > 15.0f) {
-        dts = 5.0f;   // sensor period; guards duplicates/bursts and long gaps
+      if (dts >= 1.0f) {
+        if (dts > 15.0f) {
+          dts = 5.0f;   // long gap (lost packets): assume one sensor period
+        }
+        _lastDcDt = (measuredDo - _prevDoSample) / dts;
+        _prevDoSample = measuredDo;
+        _lastNewSampleMs = nowMs;
       }
-      _lastDcDt = (measuredDo - _prevDoSample) / dts;
-      _prevDoSample = measuredDo;
-      _lastNewSampleMs = nowMs;
     }
 
     if (cfg.mode == MODE_PID) {
